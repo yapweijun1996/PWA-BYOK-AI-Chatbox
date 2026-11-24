@@ -6,10 +6,29 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
+    <script>
+      (() => {
+        const viewport = document.querySelector('meta[name="viewport"]');
+        const mobile = matchMedia("(hover: none) and (pointer: coarse)");
+        const defaults = viewport.content;
+        function updateViewport() {
+          viewport.content = mobile.matches
+            ? defaults + ", maximum-scale=1, user-scalable=no"
+            : defaults;
+        }
+        updateViewport();
+        mobile.addEventListener("change", updateViewport);
+      })();
+    </script>
     <meta name="theme-color" content="#f7f7f5" />
     <meta name="description" content="A local-first AI chat workspace." />
     <title>Luma Chat</title>
     <style>
+      @media (hover: none) and (pointer: coarse) {
+        :root {
+          touch-action: pan-x pan-y;
+        }
+      }
       :root {
         color-scheme: light;
         --startup-bg: #f7f7f5;

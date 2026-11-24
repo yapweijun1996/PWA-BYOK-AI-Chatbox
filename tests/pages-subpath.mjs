@@ -63,16 +63,26 @@ try {
   const manifestResponse = await page.request.get(manifestUrl);
   assert.ok(manifestResponse.ok());
   const manifest = await manifestResponse.json();
+  assert.equal(manifest.display, "standalone");
+  assert.equal(new URL(manifest.start_url, manifestUrl).href, url);
+  assert.equal(new URL(manifest.scope, manifestUrl).href, url);
   const icon = manifest.icons.find(
     ({ type, sizes }) => type === "image/svg+xml" && sizes === "any",
   );
   assert.ok(icon);
   assert.equal(new URL(icon.src, manifestUrl).href, faviconUrl);
   const pngIcons = manifest.icons.filter(({ type }) => type === "image/png");
-  assert.deepEqual(pngIcons.map(({ sizes }) => sizes).sort(), [
-    "192x192",
+  assert.deepEqual(
+    pngIcons
+      .filter(({ purpose }) => !purpose)
+      .map(({ sizes }) => sizes)
+      .sort(),
+    ["192x192", "512x512"],
+  );
+  assert.equal(
+    pngIcons.find(({ purpose }) => purpose === "maskable")?.sizes,
     "512x512",
-  ]);
+  );
   const scope = await page.evaluate(
     async () => (await navigator.serviceWorker.ready).scope,
   );

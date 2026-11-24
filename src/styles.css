@@ -869,8 +869,11 @@ select:focus-visible {
   .composer-wrap {
     padding-inline: var(--space-base);
   }
-  .composer textarea {
-    font-size: var(--font-body);
+  .composer textarea,
+  input,
+  select,
+  textarea {
+    font-size: max(16px, var(--font-body));
   }
   .composer-attach,
   .composer-reasoning,

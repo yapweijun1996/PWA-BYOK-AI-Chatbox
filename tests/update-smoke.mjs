@@ -241,13 +241,15 @@ try {
 
   await context.setOffline(true);
   await Promise.all([page.close(), keeper.close()]);
-  await sibling.waitForFunction(async (url) => {
-    const reg = await navigator.serviceWorker.getRegistration(url);
-    return (
-      reg?.scope === url && !reg.waiting && reg.active?.state === "activated"
-    );
-  }, url);
-  assert.notEqual(await onlyShellCache(sibling, url), old);
+  const activationDeadline = Date.now() + 10_000;
+  let installed;
+  do {
+    installed = await shellCaches(sibling, url);
+    if (installed.length === 1 && installed[0] !== old) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < activationDeadline);
+  assert.equal(installed.length, 1, "Expected old build cache to be removed");
+  assert.notEqual(installed[0], old);
   assert.equal(await onlyShellCache(sibling, other), siblingCache);
   assert.equal(
     await sibling.evaluate((name) => caches.has(name), legacy),

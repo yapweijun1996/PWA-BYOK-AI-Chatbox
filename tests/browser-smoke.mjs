@@ -387,6 +387,14 @@ try {
   });
   const mobilePage = await mobile.newPage();
   await mobilePage.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
+  assert.match(
+    await mobilePage.locator('meta[name="viewport"]').getAttribute("content"),
+    /maximum-scale=1, user-scalable=no/,
+  );
+  assert.doesNotMatch(
+    await page.locator('meta[name="viewport"]').getAttribute("content"),
+    /maximum-scale|user-scalable/,
+  );
   await mobilePage.getByRole("button", { name: "Open menu" }).click();
   await mobilePage
     .getByRole("button", { name: "Settings", exact: true })
