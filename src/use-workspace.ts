@@ -47,6 +47,11 @@ import { runToolTurn } from "./tool-turn";
 import type { ToolExecution } from "./javascript-tool";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { listModelOptions, streamChat } from "./providers";
+import {
+  credentialDestination,
+  credentialFor,
+  type SessionCredential,
+} from "./credential-destination";
 import { defaultSettings, id, providerIds as providers } from "./types";
 import type {
   Attachment,
@@ -63,7 +68,7 @@ export const settingsSections = [
   ["data", "Local data"],
 ] as const;
 type View = "chat" | (typeof settingsSections)[number][0];
-type Secrets = Partial<Record<ProviderId, string>>;
+type Secrets = Partial<Record<ProviderId, SessionCredential>>;
 const emptyChat = (): Conversation => ({
   id: id(),
   title: "New chat",
@@ -131,7 +136,7 @@ export function useWorkspace({
     Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
   >({});
   const [password, setPassword] = useState("");
-  const [keyInput, setKeyInput] = useState("");
+  const [credentialInput, setCredentialInput] = useState<SessionCredential & { provider: ProviderId }>();
   const [saveKey, setSaveKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
@@ -289,6 +294,13 @@ export function useWorkspace({
       ...previous,
       ...(typeof change === "function" ? change(previous) : change),
     };
+    if (
+      credentialDestination(previous.providers.lmstudio) !==
+      credentialDestination(next.providers.lmstudio)
+    ) {
+      setSecrets((current) => ({ ...current, lmstudio: undefined }));
+      resetProviderForm();
+    }
     session.update({ settings: next });
     const saved = await queuePreferenceWrite(async () => {
       await storage.saveSettings(next);
@@ -317,6 +329,11 @@ export function useWorkspace({
     view === "providers"
       ? settings.providers[settings.provider]
       : effective.config;
+  const keyInput = credentialInput?.provider === config.id ? credentialFor(config, credentialInput) : "";
+  const setKeyInput = (value: string) => {
+    const destination = credentialDestination(config);
+    setCredentialInput(value && destination ? { destination, value, provider: config.id } : undefined);
+  };
   const modelGroups = useMemo(
     () =>
       providers.map((provider) => {
@@ -395,7 +412,8 @@ export function useWorkspace({
     return () => document.removeEventListener("copy", copy);
   }, [session]);
   const configured = (target: ResolvedConfig["config"]) =>
-    !!target.model.trim() && (target.id === "lmstudio" || !!secrets[target.id]);
+    !!target.model.trim() &&
+    (target.id === "lmstudio" || !!credentialFor(target, secrets[target.id]));
   const isConfigured = configured(effective.config);
   const desktopInput = desktop && matchMedia("(pointer: fine)").matches;
   const hasDraft = Boolean(chat?.draft.trim() || files.length);
@@ -558,7 +576,7 @@ export function useWorkspace({
     const target = settings.providers[provider];
     const options = await listModelOptions(
       target,
-      keyOverride || secrets[provider] || "",
+      keyOverride || credentialFor(target, secrets[provider]),
     );
     setCatalogs((current) => ({
       ...current,
@@ -644,7 +662,7 @@ export function useWorkspace({
       telemetry,
       target,
       pricing,
-      secret: secrets[target.id] || "",
+      secret: credentialFor(target, secrets[target.id]),
     };
   };
   const runReply = async (
@@ -899,15 +917,24 @@ export function useWorkspace({
       return;
     }
     try {
+      const destination = credentialDestination(config);
+      if (!destination)
+        throw new Error(
+          "Enter a valid server address before using a credential.",
+        );
       if (saveKey) {
         if (!password) throw new Error("Enter an unlock password.");
         const cipher = await encryptSecret(keyInput, password);
+        if (config.id === "lmstudio") cipher.destination = destination;
         const saved = await saveSettings((current) => ({
           vaults: { ...current.vaults, [config.id]: cipher },
         }));
         if (!saved) return;
       }
-      setSecrets((previous) => ({ ...previous, [config.id]: keyInput }));
+      setSecrets((previous) => ({
+        ...previous,
+        [config.id]: { destination, value: keyInput },
+      }));
       setKeyInput("");
       setPassword("");
       setNotice(
@@ -923,8 +950,40 @@ export function useWorkspace({
     const vault = settings.vaults[config.id];
     if (!vault) return;
     try {
+      const destination = credentialDestination(config);
+      if (!destination)
+        throw new Error(
+          "Enter a valid server address before using a credential.",
+        );
+      if (
+        config.id === "lmstudio" &&
+        vault.destination !== undefined &&
+        vault.destination !== destination
+      )
+        throw new Error(
+          "This token belongs to another server. Restore its address or enter a new token.",
+        );
+      const bindLegacy =
+        config.id === "lmstudio" && vault.destination === undefined;
+      if (
+        bindLegacy &&
+        !confirm(
+          `${t("Authorize this previously saved token for this server?")}\n${destination}`,
+        )
+      )
+        return;
       const secret = await decryptSecret(vault, password);
-      setSecrets((previous) => ({ ...previous, [config.id]: secret }));
+      if (
+        bindLegacy &&
+        !(await saveSettings((current) => ({
+          vaults: { ...current.vaults, [config.id]: { ...vault, destination } },
+        })))
+      )
+        return;
+      setSecrets((previous) => ({
+        ...previous,
+        [config.id]: { destination, value: secret },
+      }));
       setPassword("");
       setNotice("Key unlocked for this session.");
     } catch (e) {
@@ -948,17 +1007,24 @@ export function useWorkspace({
       ? `${formatSize(originStorage.usage)} used${originStorage.quota === undefined ? "" : ` of approximately ${formatSize(originStorage.quota)}`}`
       : "Unavailable";
   const credentialState:
-    "Available for session" | "Saved and locked" | "Not set" = secrets[
-    effective.config.id
-  ]
+    "Available for session" | "Saved and locked" | "Not set" = credentialFor(
+    effective.config,
+    secrets[effective.config.id],
+  )
     ? "Available for session"
     : settings.vaults[effective.config.id]
       ? "Saved and locked"
       : "Not set";
-  const hasSessionCredential = Boolean(secrets[config.id]);
+  const hasSessionCredential = Boolean(
+    credentialFor(config, secrets[config.id]),
+  );
   const hasVault = Boolean(settings.vaults[config.id]);
   const redact = (value?: string) =>
-    safeDiagnosticLabel(value, [...Object.values(secrets), keyInput, password]);
+    safeDiagnosticLabel(value, [
+      ...Object.values(secrets).map((credential) => credential?.value ?? ""),
+      credentialInput?.value ?? "",
+      password,
+    ]);
   const exportData = () => {
     const { vaults: _vaults, projects, ...safeSettings } = settings;
     void _vaults;
@@ -1230,6 +1296,17 @@ export function useWorkspace({
     importFile,
     importPreview,
     finishImport,
+    importDestination:
+      importPreview?.settings &&
+      (() => {
+        const next = mergeSettings({ ...settings, ...importPreview.settings })
+          .providers.lmstudio;
+        const destination = credentialDestination(next);
+        return destination !==
+          credentialDestination(settings.providers.lmstudio)
+          ? (destination ?? t("Invalid server address"))
+          : undefined;
+      })(),
     discardImport: () => setImportPreview(null),
     clearData,
     preferences,

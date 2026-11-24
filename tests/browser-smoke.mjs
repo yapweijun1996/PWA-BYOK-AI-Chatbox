@@ -105,7 +105,18 @@ try {
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio" }).click();
   await page.getByLabel("Model ID").fill("local-test");
-  await page.getByRole("button", { name: "Test connection" }).click();
+  await page.getByPlaceholder("Enter key for this session").fill("dummy-for-first-base");
+  await page.getByRole("button", { name: "Use key", exact: true }).click();
+  const checkCatalogAuth = async (base, expected) => {
+    const seen = page.waitForRequest(r => r.method() === "GET" && r.url() === `${base}/models`);
+    await page.getByRole("button", { name: "Test connection" }).click();
+    assert.equal(await (await seen).headerValue("authorization"), expected);
+  };
+  await checkCatalogAuth("http://localhost:1234/v1", "Bearer dummy-for-first-base");
+  await page.getByLabel("Server base URL").fill("http://localhost:1234/v1/other");
+  await checkCatalogAuth("http://localhost:1234/v1/other", null);
+  await page.getByLabel("Server base URL").fill("http://localhost:1234/v1");
+  await checkCatalogAuth("http://localhost:1234/v1", null);
   await page
     .getByRole("status")
     .getByText("Model list loaded", { exact: false })

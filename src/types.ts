@@ -51,6 +51,7 @@ export type ProviderConfig = {
   requestThoughts?: boolean;
 };
 export type Cipher = {
+  destination?: string; // LM Studio only; older vaults require explicit binding on unlock.
   version: 1;
   salt: string;
   iv: string;

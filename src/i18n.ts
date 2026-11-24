@@ -363,6 +363,11 @@ const zh: Record<string, string> = {
     "删除此对话及其保存的附件？",
   "Conversation name": "对话名称",
   "Start a new chat first.": "请先开始新对话。",
+  "Importing preferences will change the LM Studio server:": "导入偏好设置将把 LM Studio 服务器更改为：",
+  "Invalid server address": "服务器地址无效",
+  "Authorize this previously saved token for this server?": "是否授权此服务器使用以前保存的令牌？",
+  "This token belongs to another server. Restore its address or enter a new token.": "此令牌属于另一台服务器。请恢复原地址，或输入新令牌。",
+  "Enter a valid server address before using a credential.": "请先输入有效的服务器地址，再使用凭据。",
   "Choose a model and enter your key in Providers. LM Studio does not require a key unless authentication is enabled.":
     "请在服务商设置中选择模型并输入 Key。LM Studio 未启用认证时无需 Key。",
   "Enable image support for this model in Providers before sending images.":

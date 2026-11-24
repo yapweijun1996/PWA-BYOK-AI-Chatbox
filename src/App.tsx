@@ -163,6 +163,7 @@ function App({
     exportData,
     importFile,
     importPreview,
+    importDestination,
     finishImport,
     discardImport,
     clearData,
@@ -867,6 +868,14 @@ function App({
                 {importPreview && (
                   <div className="card">
                     <h2>{t("Import preview")}</h2>
+                    {importDestination && (
+                      <p>
+                        {t(
+                          "Importing preferences will change the LM Studio server:",
+                        )}{" "}
+                        <code>{importDestination}</code>
+                      </p>
+                    )}
                     <p>
                       {importPreview.conversations.length}
                       {t(" conversations;")}{" "}
