@@ -1,4 +1,6 @@
 import { defaultSettings, providerIds } from "./types";
+import { attachmentByteLimit } from "./attachments";
+import { checkedLmStudioAddress } from "./credential-destination";
 import type {
   Attachment,
   Conversation,
@@ -30,7 +32,10 @@ export function recoverMessage(message: Message): Message {
   };
 }
 
-export function mergeSettings(input: Partial<Settings> | undefined): Settings {
+export function mergeSettings(
+  input: Partial<Settings> | undefined,
+  retainedLmStudioEndpoint?: string,
+): Settings {
   const provider =
     input?.provider && providerIds.includes(input.provider)
       ? input.provider
@@ -39,6 +44,15 @@ export function mergeSettings(input: Partial<Settings> | undefined): Settings {
     input?.theme && ["light", "dark", "system"].includes(input.theme)
       ? input.theme
       : defaultSettings.theme;
+  const supplied = input?.providers?.lmstudio?.endpoint;
+  // Import keeps the current destination; restore must not silently redirect an invalid legacy URL.
+  const fallback =
+    retainedLmStudioEndpoint !== undefined
+      ? (checkedLmStudioAddress(retainedLmStudioEndpoint) ?? "")
+      : supplied === undefined
+        ? defaultSettings.providers.lmstudio.endpoint
+        : "";
+  const lmStudioEndpoint = checkedLmStudioAddress(supplied) ?? fallback;
   const configs = { ...defaultSettings.providers };
   for (const providerId of providerIds) {
     const saved = input?.providers?.[providerId];
@@ -49,8 +63,8 @@ export function mergeSettings(input: Partial<Settings> | undefined): Settings {
       reasoningSupported: saved?.reasoningSupported === true,
       requestThoughts: saved?.requestThoughts === true,
       endpoint:
-        providerId === "lmstudio" && typeof saved?.endpoint === "string"
-          ? saved.endpoint
+        providerId === "lmstudio"
+          ? lmStudioEndpoint
           : defaultSettings.providers[providerId].endpoint,
     };
   }
@@ -72,36 +86,120 @@ export function mergeSettings(input: Partial<Settings> | undefined): Settings {
       input?.vaults && typeof input.vaults === "object" ? input.vaults : {},
   };
 }
+// A v1 backup is portable preferences, not a copy of the settings store.
+export function backupPreferences(settings: Settings) {
+  const localAddress = checkedLmStudioAddress(
+    settings.providers.lmstudio.endpoint,
+  );
+  const providers = Object.fromEntries(
+    providerIds.map((id) => {
+      const { model, vision, reasoningSupported, requestThoughts } =
+        settings.providers[id];
+      const endpoint =
+        id === "lmstudio"
+          ? localAddress
+          : defaultSettings.providers[id].endpoint;
+      return [
+        id,
+        {
+          id,
+          model,
+          vision,
+          reasoningSupported,
+          requestThoughts,
+          ...(endpoint !== undefined ? { endpoint } : {}),
+        },
+      ] as const;
+    }),
+  );
+  return {
+    preferences: {
+      provider: settings.provider,
+      theme: settings.theme,
+      language: settings.language,
+      sidebarWidth: settings.sidebarWidth,
+      sidebarCollapsed: settings.sidebarCollapsed,
+      providers,
+    },
+    omittedServerAddress: localAddress === undefined,
+  };
+}
+
+function uniqueIds(items: { id: string }[]): boolean {
+  const seen = new Set<string>();
+  return items.every((item) => {
+    if (
+      !item ||
+      typeof item.id !== "string" ||
+      !item.id.trim() ||
+      seen.has(item.id)
+    )
+      return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 function validAttachment(a: Attachment): boolean {
+  if (
+    !a ||
+    typeof a.name !== "string" ||
+    typeof a.mime !== "string" ||
+    typeof a.data !== "string" ||
+    !Number.isSafeInteger(a.size) ||
+    a.size < 0 ||
+    a.size > attachmentByteLimit
+  )
+    return false;
+  // Text size describes the original File, before BOM removal or decoding replacements.
+  if (/^text\/[^\s/;]+(?:\s*;[^\r\n]*)?$/i.test(a.mime)) {
+    if (a.data.length > a.size) return false;
+    const utf8Bytes = new Blob([a.data]).size;
+    return a.size === utf8Bytes || a.size === utf8Bytes + 3 ||
+      (a.data.includes("\uFFFD") && a.size <= utf8Bytes + 3);
+  }
+  if (!/^image\/(png|jpeg|gif|webp)$/i.test(a.mime)) return false;
+  const prefix = `data:${a.mime.toLowerCase()};base64,`;
+  if (a.data.slice(0, prefix.length).toLowerCase() !== prefix) return false;
+  const payload = a.data.slice(prefix.length);
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
   return (
-    !!a &&
-    typeof a.id === "string" &&
-    typeof a.name === "string" &&
-    typeof a.mime === "string" &&
-    typeof a.data === "string" &&
-    Number.isFinite(a.size) &&
-    (a.mime.startsWith("text/") ||
-      (a.mime.startsWith("image/") &&
-        /^data:image\/(png|jpeg|gif|webp);base64,/i.test(a.data)))
+    a.size > 0 &&
+    payload.length === 4 * Math.ceil(a.size / 3) &&
+    a.size === 3 * (payload.length / 4) - padding &&
+    !/[^A-Za-z0-9+/]/.test(payload.slice(0, payload.length - padding))
   );
 }
-export function validBackup(value: unknown): value is {
-  version: number;
+
+const validAttachments = (items: Attachment[]) =>
+  Array.isArray(items) && uniqueIds(items) && items.every(validAttachment);
+
+export type BackupV1 = {
+  version: 1;
   conversations: Conversation[];
   projects?: WorkspaceProject[];
   settings?: Partial<Settings>;
-} {
+};
+export function validBackup(value: unknown): value is BackupV1 {
   if (!value || typeof value !== "object") return false;
   const data = value as {
     version?: unknown;
     conversations?: unknown;
     projects?: unknown;
+    settings?: unknown;
   };
   if (
     data.version !== 1 ||
     !Array.isArray(data.conversations) ||
+    !uniqueIds(data.conversations) ||
+    (data.settings !== undefined &&
+      (!data.settings ||
+        typeof data.settings !== "object" ||
+        Array.isArray(data.settings))) ||
     (data.projects !== undefined &&
-      (!Array.isArray(data.projects) || !data.projects.every(validProject)))
+      (!Array.isArray(data.projects) ||
+        !uniqueIds(data.projects) ||
+        !data.projects.every(validProject)))
   )
     return false;
   return data.conversations.every(
@@ -118,16 +216,20 @@ export function validBackup(value: unknown): value is {
           c.projectId.length > 0 &&
           c.projectId.length <= 160)) &&
       (c.draftAttachments === undefined ||
-        (Array.isArray(c.draftAttachments) &&
-          c.draftAttachments.every(validAttachment))) &&
+        validAttachments(c.draftAttachments)) &&
       Number.isFinite(c.updatedAt) &&
       Array.isArray(c.messages) &&
+      uniqueIds(c.messages) &&
       c.messages.every((m: Message) => {
         if (
           !m ||
           typeof m.id !== "string" ||
           !["user", "assistant"].includes(m.role) ||
           typeof m.content !== "string" ||
+          (m.status !== undefined &&
+            !["complete", "interrupted", "streaming", "error"].includes(
+              m.status,
+            )) ||
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
           (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
           (m.toolExecutions !== undefined &&
@@ -138,10 +240,7 @@ export function validBackup(value: unknown): value is {
           !Number.isFinite(m.createdAt)
         )
           return false;
-        return (
-          !m.attachments ||
-          (Array.isArray(m.attachments) && m.attachments.every(validAttachment))
-        );
+        return m.attachments === undefined || validAttachments(m.attachments);
       }),
   );
 }

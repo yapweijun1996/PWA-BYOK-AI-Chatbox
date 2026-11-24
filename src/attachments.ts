@@ -1,6 +1,7 @@
 import { id } from "./types";
 import type { Attachment } from "./types";
 
+export const attachmentByteLimit = 5 * 1024 * 1024;
 const imageTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 async function readImage(file: File, mime: string): Promise<string> {
@@ -42,7 +43,7 @@ export async function readAttachment(file: File): Promise<Attachment> {
   const isText = mime.startsWith("text/");
   if (!isText && !imageTypes.includes(mime))
     throw new Error(`${file.name}: use an image or plain text file.`);
-  if (file.size > 5 * 1024 * 1024)
+  if (file.size > attachmentByteLimit)
     throw new Error(`${file.name}: files must be 5 MB or smaller.`);
   const data = isText ? await file.text() : await readImage(file, mime);
   return { id: id(), name: file.name, mime, size: file.size, data };

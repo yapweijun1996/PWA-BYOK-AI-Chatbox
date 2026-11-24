@@ -40,6 +40,8 @@ export type Conversation = {
   archived?: boolean;
   projectId?: string;
   configOverride?: RequestOverrides;
+  // Device-local consent for replaying this chat; never portable via backups.
+  cloudHistoryRecipient?: Exclude<ProviderId, "lmstudio">;
 };
 export type WorkspaceProject = { id: string; name: string };
 export type ProviderConfig = {

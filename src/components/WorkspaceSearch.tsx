@@ -13,7 +13,8 @@ type Props = {
   projects: WorkspaceProject[];
   onClose: () => void;
   onChoose: (id: string) => void;
-  onRestore: (id: string) => void;
+  restoreDisabled: boolean;
+  onRestore: (id: string) => Promise<boolean>;
 };
 
 export function WorkspaceSearch({
@@ -23,6 +24,7 @@ export function WorkspaceSearch({
   projects,
   onClose,
   onChoose,
+  restoreDisabled,
   onRestore,
 }: Props) {
   const t = (text: string) => translate(locale, text);
@@ -31,12 +33,16 @@ export function WorkspaceSearch({
   const field = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState(initialMode);
   const [query, setQuery] = useState("");
+  const [restoreState, setRestoreState] = useState<
+    "idle" | "pending" | "failed"
+  >("idle");
   const results = useMemo(
     () => searchConversations(chats, query, mode === "archived", projects),
     [chats, query, mode, projects],
   );
   const close = () => dialog.current?.close();
   const choose = (chatId: string) => {
+    if (restoreState === "pending") return;
     close();
     onChoose(chatId);
   };
@@ -137,6 +143,7 @@ export function WorkspaceSearch({
               <li className="search-result" key={chat.id}>
                 <button
                   className="search-result-open"
+                  disabled={restoreState === "pending"}
                   onClick={() => choose(chat.id)}
                 >
                   <MessageSquare size={16} aria-hidden="true" />
@@ -149,9 +156,13 @@ export function WorkspaceSearch({
                   <button
                     className="icon"
                     aria-label={interpolate(t("Restore {name}"), title)}
-                    onClick={() => {
-                      onRestore(chat.id);
+                    disabled={restoreDisabled || restoreState === "pending"}
+                    onClick={async () => {
+                      setRestoreState("pending");
                       field.current?.focus();
+                      setRestoreState(
+                        (await onRestore(chat.id)) ? "idle" : "failed",
+                      );
                     }}
                   >
                     <ArchiveRestore size={18} aria-hidden="true" />
@@ -161,6 +172,15 @@ export function WorkspaceSearch({
             );
           })}
         </ul>
+        {restoreState !== "idle" && (
+          <p className="hint" role="status">
+            {t(
+              restoreState === "pending"
+                ? "Restoring conversation…"
+                : "Restore was not saved. Try again.",
+            )}
+          </p>
+        )}
         {!results.length && (
           <p className="muted workspace-empty">
             {t(

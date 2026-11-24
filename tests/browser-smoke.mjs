@@ -1,6 +1,9 @@
 import { chromePath } from "./browser-launch.mjs";
+import { applyServerAddress } from "./provider-settings.mjs";
+import { holdConversationWrite } from "./browser-storage.mjs";
 import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
+import { exerciseAtomicImport } from "./backup-import.mjs";
 const browser = await chromium.launch({
   executablePath: chromePath(),
   headless: true,
@@ -14,7 +17,8 @@ try {
   const page = await context.newPage();
   const errors = [];
   let failedOnce = false;
-  let routerRequests = 0;
+  const routerBodies = [];
+  let routerRejectedOnce = false;
   let localChatRequests = 0;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("http://localhost:1234/v1/**", async (route) => {
@@ -76,15 +80,16 @@ try {
           ],
         }),
       });
-    assert.equal(
-      JSON.parse(request.postData()).model,
-      "thinkingmachines/inkling-2-mini",
-    );
-    if (++routerRequests === 1) {
+    const body = JSON.parse(request.postData());
+    routerBodies.push(body);
+    assert.equal(body.model, "thinkingmachines/inkling-2-mini");
+    const prompt = body.messages.at(-1).content;
+    if (prompt === "Router test" && !routerRejectedOnce) {
+      routerRejectedOnce = true;
       return route.fulfill({ status: 401, headers, body: "{}" });
     }
-    const reportsCost = routerRequests === 2;
-    const content = reportsCost
+    const reportsCost = prompt === "Router test";
+    const content = prompt === "Fresh cloud message" ? "Fresh cloud reply" : reportsCost
       ? 'OpenRouter answer\n\n<img src=x onerror="window.testXss=1">'
       : "Answer with catalog estimate";
     const usage = {
@@ -105,6 +110,7 @@ try {
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio" }).click();
   await page.getByLabel("Model ID").fill("local-test");
+  await page.getByRole("button", { name: "Set as default provider" }).click();
   await page.getByPlaceholder("Enter key for this session").fill("dummy-for-first-base");
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   const checkCatalogAuth = async (base, expected) => {
@@ -113,9 +119,29 @@ try {
     assert.equal(await (await seen).headerValue("authorization"), expected);
   };
   await checkCatalogAuth("http://localhost:1234/v1", "Bearer dummy-for-first-base");
-  await page.getByLabel("Server base URL").fill("http://localhost:1234/v1/other");
+  await page.getByRole("button", { name: "Edit server address" }).click();
+  const editor = page.getByRole("dialog", { name: "Edit server address" });
+  await editor.getByLabel("Server base URL").fill("http://localhost:1234/v1?token=dummy-only");
+  await editor.getByRole("button", { name: "Apply address" }).click();
+  await editor.getByRole("alert").waitFor();
+  const storedAddress = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open("luma-chat");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction("settings");
+      const read = tx.objectStore("settings").get("settings");
+      tx.oncomplete = () => { db.close(); resolve(read.result?.providers?.lmstudio?.endpoint); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }));
+  assert.equal(storedAddress, "http://localhost:1234/v1");
+  await editor.getByLabel("Server base URL").fill("http://localhost:1234/v1/other");
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await checkCatalogAuth("http://localhost:1234/v1", "Bearer dummy-for-first-base");
+  await applyServerAddress(page, "http://localhost:1234/v1/other");
   await checkCatalogAuth("http://localhost:1234/v1/other", null);
-  await page.getByLabel("Server base URL").fill("http://localhost:1234/v1");
+  await applyServerAddress(page, "http://localhost:1234/v1");
   await checkCatalogAuth("http://localhost:1234/v1", null);
   await page
     .getByRole("status")
@@ -151,8 +177,22 @@ try {
   await page
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("Hello there");
+  const finalMatch = { title: "Hello there", status: "complete" };
+  const finalWrite = await holdConversationWrite(page, finalMatch);
   await page.getByRole("button", { name: "Send message" }).click();
-  await page.getByText("Hello from local model").waitFor();
+  const firstReply = page.locator(".message.assistant").first();
+  await finalWrite.held();
+  await firstReply.getByText("Hello from local model").waitFor();
+  await firstReply.getByText("Saving reply locally…").waitFor();
+  assert.equal(await firstReply.getByText("Saved locally", { exact: true }).count(), 0);
+  await finalWrite.release("abort");
+  await firstReply.getByText("Reply not saved locally.").waitFor();
+  const localRetry = await holdConversationWrite(page, finalMatch);
+  await firstReply.getByRole("button", { name: "Retry local save" }).click();
+  await localRetry.held();
+  await firstReply.getByText("Saving reply locally…").waitFor();
+  await localRetry.release("commit");
+  await firstReply.getByText("Saved locally", { exact: true }).waitFor();
   assert.equal(localChatRequests, 1);
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
@@ -188,8 +228,12 @@ try {
   await page
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("Retry this");
+  const errorWrite = await holdConversationWrite(page, { title: "Hello there", status: "error" });
   await page.getByRole("button", { name: "Send message" }).click();
+  await errorWrite.held();
   await page.getByText("Response failed").waitFor();
+  assert.equal(await page.getByRole("button", { name: "Retry", exact: true }).count(), 0);
+  await errorWrite.release("commit");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByText("Hello from local model").nth(1).waitFor();
@@ -207,13 +251,47 @@ try {
     .fill("mock-router-key");
   await page.getByRole("button", { name: "Use key" }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
-  await page
-    .getByRole("textbox", { name: "Message", exact: true })
-    .fill("Router test");
-  await page.getByRole("button", { name: "Send message" }).click();
+  const input = page.getByRole("textbox", { name: "Message", exact: true });
+  const send = page.getByRole("button", { name: "Send message" });
+  const beforeBrowseSend = localChatRequests;
+  await input.fill("Still using LM Studio");
+  await send.click();
+  await page.getByText("Hello from local model", { exact: true }).nth(2).waitFor();
+  assert.equal(localChatRequests, beforeBrowseSend + 1);
+  assert.equal(routerBodies.length, 0);
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "OpenRouter", exact: true }).click();
+  await page.getByRole("button", { name: "Set as default provider" }).click();
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await input.fill("Router test");
+  const share = page.getByRole("dialog", { name: "Share chat history?" });
+  await send.click();
+  await share.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(await input.inputValue(), "Router test");
+  assert.equal(routerBodies.length, 0);
+
+  await send.click();
+  await share.getByRole("button", { name: "Start an empty chat" }).click();
+  await page.getByText("How can I help you today?").waitFor();
+  assert.equal(await input.inputValue(), "");
+  assert.equal(routerBodies.length, 0);
+  await input.fill("Fresh cloud message");
+  await send.click();
+  await page.getByText("Fresh cloud reply", { exact: true }).waitFor();
+  assert.deepEqual(routerBodies[0].messages, [{ role: "user", content: "Fresh cloud message" }]);
+
+  const original = page.locator(".history").getByRole("button", { name: "Hello there", exact: true });
+  await original.click();
+  await original.and(page.locator('[aria-current="page"]')).waitFor();
+  assert.equal(await input.inputValue(), "Router test");
+  await send.click();
+  await share.getByRole("button", { name: "Send with history" }).click();
   await page
     .getByText("Authentication failed (HTTP 401).", { exact: false })
     .waitFor();
+  assert.equal(routerBodies.length, 2);
+  assert.ok(routerBodies[1].messages.some(({ content }) => content.includes("attachment contents")));
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByText("OpenRouter answer").waitFor();
@@ -277,6 +355,8 @@ try {
   const exportedReply = JSON.parse(json).conversations.flatMap((chat) => chat.messages).find((message) => message.telemetry?.cost?.source === "reported");
   assert.deepEqual(exportedReply?.telemetry.cost, { usd: 0.0012, source: "reported" });
   assert.ok(!json.includes("vaults"));
+  assert.ok(!json.includes("cloudHistoryRecipient"));
+  assert.ok(!json.includes("localRevision"));
   assert.ok(!json.includes("mock-test-key"));
   await page.locator('input[accept="application/json,.json"]').setInputFiles({
     name: "backup.json",
@@ -284,9 +364,10 @@ try {
     buffer: Buffer.from(json),
   });
   await page.getByRole("heading", { name: "Import preview" }).waitFor();
-  page.once("dialog", (dialog) => dialog.dismiss());
+  assert.equal(await page.getByLabel("Also import appearance and provider settings").isChecked(), false);
   await page.getByRole("button", { name: "Import and skip conflicts" }).click();
   await page.getByText("Imported 0 conversations.").waitFor();
+  await exerciseAtomicImport(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await context.setOffline(true);

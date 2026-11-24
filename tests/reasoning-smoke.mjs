@@ -1,4 +1,5 @@
 import { chromePath } from "./browser-launch.mjs";
+import { applyServerAddress } from "./provider-settings.mjs";
 import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import assert from "node:assert/strict";
@@ -85,10 +86,9 @@ try {
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio" }).click();
-  await page
-    .getByLabel("Server base URL")
-    .fill(`http://127.0.0.1:${server.address().port}/v1`);
+  await applyServerAddress(page, `http://127.0.0.1:${server.address().port}/v1`);
   await page.getByLabel("Model ID").fill("reasoning-model");
+  await page.getByRole("button", { name: "Set as default provider" }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
   await page
     .getByRole("textbox", { name: "Message", exact: true })

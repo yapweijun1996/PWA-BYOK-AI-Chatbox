@@ -73,6 +73,17 @@ const zh: Record<string, string> = {
   "Request snapshot": "请求快照",
   "Captured at": "捕获时间",
   "Use global model settings": "使用全局模型设置",
+  "Default provider": "默认服务商",
+  "Set as default provider": "设为默认服务商",
+  "Share chat history?": "发送聊天历史？",
+  "Sending to {name} will include earlier messages and their attachments.":
+    "发送给 {name} 时，此前的消息和附件也会一并发送。",
+  "Starting an empty chat sends nothing. Your draft and files stay in the original chat.":
+    "新建空白聊天不会发送任何内容。草稿和文件将保留在原聊天中。",
+  "Start an empty chat": "新建空白聊天",
+  "Send with history": "连同历史一起发送",
+  "The chat or its settings changed. Please send again.":
+    "聊天或设置已更改，请重新发送。",
   "Use this model for the current chat": "在当前对话使用此模型",
   "Retry with original model": "使用原模型重试",
   "Usage request mode": "用量回传请求方式",
@@ -250,6 +261,34 @@ const zh: Record<string, string> = {
   "Image attachment": "图片",
   "Text attachment": "文本",
   "Saving message…": "正在保存消息…",
+  "From this tab’s version": "来自本标签页保留的版本",
+  "Conversation conflicts": "对话保存冲突",
+  "Another tab changed or deleted this conversation. Save this tab’s version as a separate chat to keep its messages, draft and files.":
+    "其他标签页已修改或删除此对话。要保留本页的消息、草稿和附件，请另存为新对话。",
+  "Recovered copy:": "恢复的副本：",
+  "Save a separate copy": "另存为新对话",
+  "Separate copy saved locally. The original was not changed.":
+    "副本已保存到本机，原对话未改变。",
+  "Save a separate copy before sending from this tab.":
+    "请先另存为新对话，再从本页发送。",
+  "Conversation changed in another tab. This tab did not overwrite it.":
+    "其他标签页已更改此对话，本页未覆盖原数据。",
+  "These settings changed in another tab. Review the saved settings before trying again.":
+    "这些设置已在其他标签页更改。请检查已保存的设置后重试。",
+  "Saving reply locally…": "正在将回复保存到本机…",
+  "Reply not saved locally.": "回复尚未保存到本机。",
+  "Saved locally": "已保存到本机",
+  "Retry local save": "重试本地保存",
+  "Save the reply locally before sending again.":
+    "请先将回复保存到本机，再发送下一条消息。",
+  "Archiving conversation…": "正在归档聊天…",
+  "Restoring conversation…": "正在恢复聊天…",
+  "Conversation archived.": "聊天已归档。",
+  "Conversation restored.": "聊天已恢复。",
+  "Archive change was not saved. Try again or export before reloading.":
+    "归档更改未保存。请重试，或在重新加载前导出备份。",
+  "Restore was not saved. Try again.": "恢复更改未保存，请重试。",
+  finalizing: "正在保存回复",
   "Stopping…": "正在停止…",
   "This model does not support images in the draft or conversation. Choose an image-capable model or remove draft images.":
     "当前模型无法处理草稿或对话中的图片。请选择支持图片的模型，或移除草稿中的图片。",
@@ -274,6 +313,14 @@ const zh: Record<string, string> = {
   "Use your own API key and choose a model.":
     "使用您自己的 API Key 并选择模型。",
   "Server base URL": "服务地址",
+  "Current server address": "当前服务地址",
+  "Edit server address": "编辑服务地址",
+  "Apply address": "应用地址",
+  "Could not save the server address. Try again.": "无法保存服务地址，请重试。",
+  "Backup excludes an invalid LM Studio server address. Set a valid address in AI providers.":
+    "备份已排除无效的 LM Studio 服务地址。请在 AI 服务商设置中填写有效地址。",
+  "Invalid LM Studio address in backup. Import will keep the current server address.":
+    "备份中的 LM Studio 服务地址无效，导入时将保留当前服务地址。",
   "Enable CORS in LM Studio. On a phone, use the computer’s network address; localhost refers to the phone. Browser local-network permission, HTTPS restrictions and firewall settings can affect access. Enable authentication when exposing the server.":
     "请在 LM Studio 中启用 CORS。手机上的 localhost 指手机本身，请填写电脑的网络地址。浏览器本地网络权限、HTTPS 限制和防火墙可能影响连接；开放服务时请启用认证。",
   "Model ID": "模型 ID",
@@ -324,6 +371,28 @@ const zh: Record<string, string> = {
     "导出对话、附件和设置，不包含 API Key。",
   "Export backup": "导出备份",
   "Import backup": "导入备份",
+  "The workspace does not fit in one 100 MiB backup.":
+    "整个工作区超过单个备份文件的 100 MiB 上限。",
+  "Download each group and import the files one at a time. Each file includes projects and preferences.":
+    "请分别下载每组文件，恢复时逐个导入。每个文件均包含项目和偏好设置。",
+  "Download group": "下载分组",
+  conversations: "个对话",
+  "Not backed up: each conversation below exceeds the limit on its own. Its local data has not been changed.":
+    "以下对话单独导出也超过上限，未包含在任何备份文件中。本地数据未改变。",
+  "Cannot create a restorable backup: invalid workspace records. No data was changed.":
+    "工作区中有无效记录，无法创建可恢复的备份。数据未改变。",
+  "Backup metadata alone exceeds the file limit. No data was changed.":
+    "仅项目和偏好设置就已超过备份文件上限。数据未改变。",
+  "Importing backup…": "正在导入备份…",
+  "Save the local reply before replacing its conversation, or skip conflicts.":
+    "请先在本机保存回复再替换该对话，或选择跳过冲突。",
+  "Also import appearance and provider settings": "同时导入外观和服务商设置",
+  "A local edit is still saving. Try the import again after it is saved.":
+    "本地编辑仍在保存，请在保存后重试导入。",
+  "Local data changed since preview. Nothing was imported. Save your work, reload and preview again.":
+    "本地数据与预览时不一致，未导入任何内容。请保存当前工作，重新加载并再次预览。",
+  "Import failed. Nothing was imported; your existing data and saved keys are unchanged.":
+    "导入失败，未写入备份中的任何内容。原有数据和已保存的密钥未改变。",
   "Browser storage can be cleared or evicted. Keep a backup of conversations you need. Data does not automatically sync between devices.":
     "浏览器存储可能被清除，请备份重要对话；数据不会自动跨设备同步。",
   "Import preview": "导入预览",
@@ -363,11 +432,15 @@ const zh: Record<string, string> = {
     "删除此对话及其保存的附件？",
   "Conversation name": "对话名称",
   "Start a new chat first.": "请先开始新对话。",
-  "Importing preferences will change the LM Studio server:": "导入偏好设置将把 LM Studio 服务器更改为：",
+  "Importing preferences will change the LM Studio server:":
+    "导入偏好设置将把 LM Studio 服务器更改为：",
   "Invalid server address": "服务器地址无效",
-  "Authorize this previously saved token for this server?": "是否授权此服务器使用以前保存的令牌？",
-  "This token belongs to another server. Restore its address or enter a new token.": "此令牌属于另一台服务器。请恢复原地址，或输入新令牌。",
-  "Enter a valid server address before using a credential.": "请先输入有效的服务器地址，再使用凭据。",
+  "Authorize this previously saved token for this server?":
+    "是否授权此服务器使用以前保存的令牌？",
+  "This token belongs to another server. Restore its address or enter a new token.":
+    "此令牌属于另一台服务器。请恢复原地址，或输入新令牌。",
+  "Enter a valid server address before using a credential.":
+    "请先输入有效的服务器地址，再使用凭据。",
   "Choose a model and enter your key in Providers. LM Studio does not require a key unless authentication is enabled.":
     "请在服务商设置中选择模型并输入 Key。LM Studio 未启用认证时无需 Key。",
   "Enable image support for this model in Providers before sending images.":
@@ -393,7 +466,7 @@ const zh: Record<string, string> = {
   "Saved key removed and session locked.": "已删除保存的 Key 并锁定会话。",
   "Could not unlock key. Check your password.": "无法解锁 Key，请检查密码。",
   "Unsupported encrypted key format.": "不支持此加密 Key 格式。",
-  "Backup exceeds the 100 MB import limit.": "备份超过 100 MB 导入上限。",
+  "Backup exceeds the 100 MiB file limit.": "备份超过 100 MiB 的文件上限。",
   "Invalid or unsupported backup file.": "备份文件无效或格式不受支持。",
   "Import appearance and provider settings? Saved keys will remain on this device.":
     "导入外观和服务商设置？设备上保存的 Key 将保留。",

@@ -33,7 +33,8 @@ import type {
 } from "./request-config";
 import { useWorkspaceSession, selectActiveChat } from "./workspace-state";
 import { resolveLanguage, translate } from "./i18n";
-import { storage } from "./storage";
+import { ConversationConflictError, ImportConflictError, storage } from "./storage";
+import { SettingsConflictError } from "./settings-edit";
 import type { InitialAppState } from "./startup";
 import {
   applyTheme,
@@ -42,12 +43,20 @@ import {
   resolveTheme,
   subscribeSystemDark,
 } from "./theme";
-import { mergeSettings, recoverMessage, validBackup } from "./data-contracts";
+import { mergeSettings, recoverMessage, type BackupV1 } from "./data-contracts";
+import { downloadBackup, planBackupExport, readBackupFile, type ExportPlan } from "./backup";
 import { runToolTurn } from "./tool-turn";
+import {
+  cloudRecipient,
+  needsHistoryChoice,
+  portableConversation,
+  type HistoryChoice,
+} from "./history-sharing";
 import type { ToolExecution } from "./javascript-tool";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { listModelOptions, streamChat } from "./providers";
 import {
+  checkedLmStudioAddress,
   credentialDestination,
   credentialFor,
   type SessionCredential,
@@ -59,7 +68,6 @@ import type {
   Message,
   ProviderId,
   Settings as AppSettings,
-  WorkspaceProject,
 } from "./types";
 
 export const settingsSections = [
@@ -107,6 +115,16 @@ export function useWorkspace({
   const t = (text: string) => translate(locale, text);
   const [secrets, setSecrets] = useState<Secrets>({});
   const [view, setView] = useState<View>("chat");
+  const [editingProvider, setEditingProvider] = useState(settings.provider);
+  const [historyTarget, setHistoryTarget] = useState<ProviderId>();
+  const historyDecision = useRef<((choice: HistoryChoice) => void) | null>(null);
+  const finishHistoryChoice = (choice: HistoryChoice) => {
+    const decide = historyDecision.current;
+    historyDecision.current = null;
+    setHistoryTarget(undefined);
+    decide?.(choice);
+  };
+  useEffect(() => () => historyDecision.current?.("cancel"), []);
   const [drawer, setDrawer] = useState(false);
   const [desktop, setDesktop] = useState(
     () => matchMedia("(min-width: 768px)").matches,
@@ -142,38 +160,88 @@ export function useWorkspace({
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
     view === "data" || inspecting,
   );
-  const [importPreview, setImportPreview] = useState<{
-    conversations: Conversation[];
-    settings?: Partial<AppSettings>;
-    projects?: WorkspaceProject[];
-  } | null>(null);
+  const [exportPlan, setExportPlan] = useState<ExportPlan | null>(null);
+  // Keep the chosen snapshot downloadable even if a reply is still streaming.
+  useEffect(() => setExportPlan(null), [view]);
+  const [importPreview, setImportPreview] = useState<(BackupV1 & {
+    existing: Map<string, Conversation>; previousSettings: AppSettings;
+  }) | null>(null);
+  const [importPreferences, setImportPreferences] = useState(false);
+  const importing = useRef(false);
+  const fileSelection = useRef(0);
   const draftTimers = useRef(new Map<string, number>());
-  const writes = useRef<Partial<Record<string, Promise<boolean>>>>({});
+  const writes = useRef<Partial<Record<string, Promise<boolean>>>>(Object.create(null));
   const messagesContent = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
   const lastScrollTop = useRef(0);
   const followReply = useRef(true);
   const importInput = useRef<HTMLInputElement>(null);
   const report = useCallback(
-    (error: unknown) =>
-      setNotice(
-        `Storage error: ${errorText(error)} Your visible work is retained; export it before reloading.`,
-      ),
-    [],
+    (error: unknown) => {
+      if (error instanceof ConversationConflictError) {
+        const current = session.get();
+        if (!current.conflicts.has(error.chatId))
+          session.update({
+            conflicts: new Set(current.conflicts).add(error.chatId),
+          });
+        if (
+          current.reply?.conversationId === error.chatId &&
+          current.reply.phase === "streaming"
+        )
+          current.reply.controller.abort();
+        setNotice(
+          "Conversation changed in another tab. This tab did not overwrite it.",
+        );
+      } else if (error instanceof SettingsConflictError) {
+        setNotice(
+          "These settings changed in another tab. Review the saved settings before trying again.",
+        );
+      } else
+        setNotice(
+          `Storage error: ${errorText(error)} Your visible work is retained; export it before reloading.`,
+        );
+    },
+    [session],
   );
   const queueSave = useCallback(
-    (chat: Conversation) => {
+    (chat: Conversation, nextActive?: string) => {
       const timer = draftTimers.current.get(chat.id);
       if (timer !== undefined) {
         window.clearTimeout(timer);
         draftTimers.current.delete(chat.id);
       }
+      const tracked = session.get().replySaves.get(chat.id)?.message;
+      // An older streaming checkpoint cannot acknowledge the terminal message.
+      const final =
+        tracked && chat.messages.includes(tracked) ? tracked : undefined;
+      if (final)
+        session.setReplySave(chat.id, { message: final, status: "pending" });
       const previous = writes.current[chat.id] || Promise.resolve();
-      const write = previous
-        .then(() => storage.saveConversation(chat))
+      const write: Promise<boolean> = previous
+        .then(() => {
+          if (session.get().conflicts.has(chat.id))
+            throw new ConversationConflictError(chat.id);
+          return storage.saveConversation(chat, nextActive);
+        })
         .then(
-          () => true,
+          () => {
+            if (
+              final &&
+              session.get().replySaves.get(chat.id)?.message === final
+            )
+              session.setReplySave(chat.id);
+            return true;
+          },
           (error) => {
+            if (
+              final &&
+              writes.current[chat.id] === write &&
+              session.get().replySaves.get(chat.id)?.message === final
+            )
+              session.setReplySave(chat.id, {
+                message: final,
+                status: "failed",
+              });
             report(error);
             return false;
           },
@@ -181,8 +249,21 @@ export function useWorkspace({
       writes.current[chat.id] = write;
       return write;
     },
-    [report],
+    [report, session],
   );
+  const retryLocalSave = async (message: Message) => {
+    const current = session.get();
+    const target = selectActiveChat(current);
+    if (!target || current.navigating || current.reply) return;
+    if (current.conflicts.has(target.id)) return;
+    const failed = current.replySaves.get(target.id);
+    if (failed?.status !== "failed" || failed.message !== message) return;
+    // Includes the latest draft; never invokes the provider.
+    if (await queueSave(target))
+      setNotice((previous) =>
+        previous === notice && previous.startsWith("Storage error:") ? "" : previous,
+      );
+  };
   const updateChat = useCallback(
     (chatId: string, fn: (c: Conversation) => Conversation, persist = true) => {
       let changed: Conversation | undefined;
@@ -192,7 +273,7 @@ export function useWorkspace({
         return changed;
       });
       if (changed) session.update({ threads: next });
-      return changed && persist ? queueSave(changed) : Promise.resolve(true);
+      return changed && persist ? queueSave(changed) : Promise.resolve(Boolean(changed));
     },
     [queueSave, session],
   );
@@ -226,6 +307,7 @@ export function useWorkspace({
   const effectiveTheme = resolveTheme(settings.theme, systemDark);
   useLayoutEffect(() => applyTheme(effectiveTheme), [effectiveTheme]);
   const settingsWrite = useRef<Promise<void>>(Promise.resolve());
+  const committedSettings = useRef(initial.settings);
   useEffect(() => {
     const update = () => setSystemLanguage(navigator.language);
     window.addEventListener("languagechange", update);
@@ -273,10 +355,6 @@ export function useWorkspace({
       drawerToggle.current?.focus({ preventScroll: true }),
     );
   };
-  const openSettings = () => {
-    setDrawer(false);
-    setView("providers");
-  };
   const queuePreferenceWrite = (save: () => Promise<void>) => {
     const write = settingsWrite.current.then(save);
     settingsWrite.current = write.catch(report);
@@ -289,6 +367,7 @@ export function useWorkspace({
     change:
       Partial<AppSettings> | ((current: AppSettings) => Partial<AppSettings>),
   ) => {
+    if (importing.current) return false;
     const previous = session.get().settings;
     const next = {
       ...previous,
@@ -303,16 +382,30 @@ export function useWorkspace({
     }
     session.update({ settings: next });
     const saved = await queuePreferenceWrite(async () => {
-      await storage.saveSettings(next);
-      rememberTheme(next.theme);
+      try {
+        committedSettings.current = await storage.saveSettings(previous, next);
+        rememberTheme(committedSettings.current.theme);
+      } catch (error) {
+        if (error instanceof SettingsConflictError)
+          committedSettings.current = error.current;
+        throw error;
+      }
     });
-    if (!saved && session.get().settings === next)
-      session.update({ settings: previous });
+    // A newer optimistic edit may already be queued. Its commit will reconcile
+    // the projection, including unrelated fields learned from the other tab.
+    if (session.get().settings === next) {
+      const committed = committedSettings.current;
+      if (
+        credentialDestination(next.providers.lmstudio) !==
+        credentialDestination(committed.providers.lmstudio)
+      ) {
+        setSecrets((current) => ({ ...current, lmstudio: undefined }));
+        resetProviderForm();
+      }
+      if (JSON.stringify(committed) !== JSON.stringify(next))
+        session.update({ settings: committed });
+    }
     return saved;
-  };
-  const selectActive = (chatId: string) => {
-    session.update({ active: chatId });
-    void queuePreferenceWrite(() => storage.saveActiveConversation(chatId));
   };
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -327,7 +420,7 @@ export function useWorkspace({
   const effective = resolveConfig(settings, chat?.configOverride);
   const config =
     view === "providers"
-      ? settings.providers[settings.provider]
+      ? settings.providers[editingProvider]
       : effective.config;
   const keyInput = credentialInput?.provider === config.id ? credentialFor(config, credentialInput) : "";
   const setKeyInput = (value: string) => {
@@ -413,16 +506,22 @@ export function useWorkspace({
   }, [session]);
   const configured = (target: ResolvedConfig["config"]) =>
     !!target.model.trim() &&
-    (target.id === "lmstudio" || !!credentialFor(target, secrets[target.id]));
+    (target.id === "lmstudio"
+      ? Boolean(credentialDestination(target))
+      : Boolean(credentialFor(target, secrets[target.id])));
   const isConfigured = configured(effective.config);
   const desktopInput = desktop && matchMedia("(pointer: fine)").matches;
   const hasDraft = Boolean(chat?.draft.trim() || files.length);
-  const composerBlocked =
-    sendBlocked || (hasDraft && !isConfigured ? setupNotice : undefined);
+  const replySave = state.replySaves.get(active);
+  const localSaveNotice = replySave?.status === "failed"
+    ? "Save the reply locally before sending again."
+    : replySave ? "Saving reply locally…" : undefined;
+  const composerBlocked = (state.conflicts.has(active) && "Save a separate copy before sending from this tab.") || localSaveNotice || sendBlocked || (hasDraft && !isConfigured ? setupNotice : undefined);
   const editDraft = (draft: string) => {
     if (!chat || phase === "saving" || session.get().navigating) return;
     const chatId = chat.id;
     void updateChat(chatId, (current) => ({ ...current, draft }), false);
+    if (session.get().conflicts.has(chatId)) return;
     const pending = draftTimers.current.get(chatId);
     if (pending !== undefined) window.clearTimeout(pending);
     draftTimers.current.set(
@@ -430,7 +529,7 @@ export function useWorkspace({
       window.setTimeout(() => flushDraft(chatId), 350),
     );
   };
-  const navigateChat = async (destination?: string) => {
+  const navigateChat = async (destination?: string, newProfile?: RequestOverrides) => {
     const current = session.get();
     if (current.navigating) return;
     session.update({ navigating: true });
@@ -447,7 +546,9 @@ export function useWorkspace({
         )
           return;
       }
-      const created = destination === undefined ? emptyChat() : undefined;
+      const created = destination === undefined
+        ? { ...emptyChat(), ...(newProfile ? { configOverride: newProfile } : {}) }
+        : undefined;
       const target =
         created ?? session.get().threads.find(({ id }) => id === destination);
       if (!target) return;
@@ -478,24 +579,108 @@ export function useWorkspace({
       !confirm(t("Delete this conversation and its saved attachments?"))
     )
       return;
-    flushDraft(chatId);
-    await writes.current[chatId]?.catch(() => {});
+    session.update({ navigating: true });
     try {
-      await storage.removeConversation(chatId);
+      flushDraft(chatId);
+      await writes.current[chatId];
+      if (session.get().conflicts.has(chatId)) return;
       const next = session.get().threads.filter((c) => c.id !== chatId);
-      session.update({ threads: next });
-      if (session.get().active === chatId)
-        selectActive(mostRecentVisible(next));
+      const active = session.get().active === chatId ? mostRecentVisible(next) : session.get().active;
+      await storage.removeConversation(chatId, active);
+      session.setReplySave(chatId);
+      session.update({ threads: next, active });
     } catch (e) {
       report(e);
+    } finally {
+      session.update({ navigating: false });
     }
   };
-  const organizeChat = (chatId: string, patch: ChatOrganization) => {
-    if (session.get().navigating) return;
-    void updateChat(chatId, (current) => ({ ...current, ...patch }));
-    if (patch.archived && active === chatId) {
-      followReply.current = true;
-      selectActive(mostRecentVisible(session.get().threads, chatId));
+  const organizeChat = async (chatId: string, patch: ChatOrganization) => {
+    const current = session.get();
+    if (current.navigating || current.conflicts.has(chatId)) return false;
+    const { archived } = patch;
+    if (archived === undefined)
+      return updateChat(chatId, (c) => ({ ...c, ...patch }));
+    if (current.reply || current.processingFiles) return false;
+    const source = current.threads.find((c) => c.id === chatId);
+    if (!source) return false;
+    const nextActive = archived && current.active === chatId
+      ? mostRecentVisible(current.threads, chatId) : undefined;
+    session.update({ navigating: true });
+    setNotice(archived ? "Archiving conversation…" : "Restoring conversation…");
+    try {
+      flushDraft(chatId);
+      if (nextActive !== undefined) await settingsWrite.current;
+      const saved = await queueSave({ ...source, ...patch }, nextActive);
+      if (!saved) {
+        setNotice("Archive change was not saved. Try again or export before reloading.");
+        return false;
+      }
+      if (nextActive !== undefined) followReply.current = true;
+      session.update((latest) => ({
+        threads: latest.threads.map((c) => c.id === chatId ? { ...c, ...patch } : c),
+        ...(nextActive !== undefined ? { active: nextActive } : {}),
+      }));
+      setNotice(archived ? "Conversation archived." : "Conversation restored.");
+      return true;
+    } finally {
+      session.update({ navigating: false });
+    }
+  };
+  const keepConflictCopy = async (chatId: string) => {
+    const current = session.get();
+    if (
+      !current.conflicts.has(chatId) ||
+      current.reply ||
+      current.navigating ||
+      current.processingFiles
+    )
+      return;
+    session.update({ navigating: true });
+    try {
+      const timer = draftTimers.current.get(chatId);
+      if (timer !== undefined) window.clearTimeout(timer);
+      draftTimers.current.delete(chatId);
+      await Promise.all([writes.current[chatId], settingsWrite.current]);
+      const source = session.get().threads.find((c) => c.id === chatId);
+      if (!source) return;
+      const copy: Conversation = {
+        ...portableConversation(source),
+        id: id(),
+        title: `${t("Recovered copy:")} ${source.title}`.slice(0, 160),
+        updatedAt: Date.now(),
+        archived: false,
+        pinned: false,
+        messages: source.messages.map(recoverMessage),
+      };
+      const activate = session.get().active === chatId;
+      const original = await storage.recoverConversation(
+        chatId,
+        copy,
+        activate,
+      );
+      delete writes.current[chatId];
+      session.update((latest) => {
+        const conflicts = new Set(latest.conflicts);
+        conflicts.delete(chatId);
+        const replySaves = new Map(latest.replySaves);
+        replySaves.delete(chatId);
+        return {
+          conflicts,
+          replySaves,
+          ...(activate ? { active: copy.id } : {}),
+          threads: [
+            copy,
+            ...(original ? [original] : []),
+            ...latest.threads.filter((c) => c.id !== chatId),
+          ],
+        };
+      });
+      setNotice("Separate copy saved locally. The original was not changed.");
+    } catch (error) {
+      report(error);
+    } finally {
+      session.update({ navigating: false });
     }
   };
   const saveProject = async (
@@ -529,10 +714,16 @@ export function useWorkspace({
     setSaveKey(false);
     setShowKey(false);
   };
-  const setProvider = (provider: ProviderId) => {
-    resetProviderForm();
-    void saveSettings({ provider });
+  const browseProvider = (provider: ProviderId) => {
+    if (editingProvider !== provider) resetProviderForm();
+    setEditingProvider(provider);
   };
+  const openProvider = (provider: ProviderId) => {
+    browseProvider(provider);
+    setDrawer(false);
+    setView("providers");
+  };
+  const openSettings = () => openProvider(effective.config.id);
   const updateConfig = (patch: Partial<typeof config>) =>
     saveSettings((current) => ({
       providers: {
@@ -541,7 +732,7 @@ export function useWorkspace({
       },
     }));
   const setConversationConfig = (override?: RequestOverrides) => {
-    if (chat)
+    if (chat && !session.get().navigating)
       void updateChat(chat.id, (current) => ({
         ...current,
         configOverride: override,
@@ -563,9 +754,9 @@ export function useWorkspace({
       );
       return;
     }
-    if (provider !== settings.provider) resetProviderForm();
+    if (view === "chat" && provider !== settings.provider) resetProviderForm();
     void saveSettings((current) => ({
-      provider,
+      ...(view === "chat" ? { provider } : {}),
       providers: {
         ...current.providers,
         [provider]: configureModel(current.providers[provider], option),
@@ -686,24 +877,23 @@ export function useWorkspace({
       persist: boolean,
     ) => {
       if (!isCurrentReply(abort)) return;
-      const telemetry = roundTelemetry ?? tracker.snapshot();
-      void updateChat(
+      if (status === "streaming" && session.get().reply?.phase === "finalizing") return;
+      const message: Message = {
+        ...prepared.message,
+        content,
+        reasoning,
+        status,
+        telemetry: roundTelemetry ?? tracker.snapshot(),
+        ...(executions.length ? { toolExecutions: executions } : {}),
+      };
+      if (status !== "streaming")
+        session.setReplySave(chatId, { message, status: "pending" });
+      return updateChat(
         chatId,
         (c) => ({
           ...c,
           ...(status === "complete" ? { updatedAt: Date.now() } : {}),
-          messages: c.messages.map((m) =>
-            m.id === prepared.message.id
-              ? {
-                  ...m,
-                  content,
-                  reasoning,
-                  status,
-                  telemetry,
-                  ...(executions.length ? { toolExecutions: executions } : {}),
-                }
-              : m,
-          ),
+          messages: c.messages.map((m) => m.id === message.id ? message : m),
         }),
         persist,
       );
@@ -717,6 +907,7 @@ export function useWorkspace({
     const timer = window.setInterval(() => {
       if (!abort.signal.aborted) publish("streaming", false);
     }, 500);
+    let terminal: "complete" | "interrupted" | "error";
     try {
       await runToolTurn(
         async (tool) => {
@@ -769,20 +960,56 @@ export function useWorkspace({
           publish("streaming", true);
         },
       );
-      publish(abort.signal.aborted ? "interrupted" : "complete", true);
+      terminal = abort.signal.aborted ? "interrupted" : "complete";
     } catch (e) {
-      if (!isCurrentReply(abort)) return;
-      const stopped = abort.signal.aborted;
-      publish(stopped ? "interrupted" : "error", true);
-      if (!stopped) setNotice(errorText(e));
+      terminal = abort.signal.aborted ? "interrupted" : "error";
+      if (isCurrentReply(abort) && terminal === "error") setNotice(errorText(e));
     } finally {
+      // Stop the streaming heartbeat before waiting on disk, including on Stop/error.
       window.clearInterval(timer);
+    }
+    const finishing = session.get().reply;
+    if (finishing?.controller !== abort) return;
+    session.update({ reply: { ...finishing, phase: "finalizing" } });
+    try {
+      await publish(terminal, true);
+    } finally {
       finishReply(abort);
     }
   };
-  const send = async () => {
+  const canStartReply = (source: Conversation | undefined) => {
     const current = session.get();
-    if (current.reply || current.processingFiles || current.navigating) return;
+    return !current.reply && !current.navigating && !current.processingFiles &&
+      !(source && (current.replySaves.has(source.id) || current.conflicts.has(source.id))) &&
+      !historyDecision.current && current.settings === settings &&
+      selectActiveChat(current) === source;
+  };
+  const askToShareHistory = async (
+    source: Conversation,
+    target: ResolvedConfig["config"],
+  ) => {
+    if (historyDecision.current) return false;
+    const choice = await new Promise<HistoryChoice>((resolve) => {
+      historyDecision.current = resolve;
+      setHistoryTarget(target.id);
+    });
+    if (choice === "cancel") return false;
+    if (!canStartReply(source)) {
+      setNotice("The chat or its settings changed. Please send again.");
+      return false;
+    }
+    if (choice === "fresh") {
+      await navigateChat(undefined, profileOverride(target));
+      return false;
+    }
+    if (!navigator.onLine) {
+      setNotice(offlineNotice);
+      return false;
+    }
+    return true;
+  };
+  const send = async () => {
+    if (!canStartReply(chat)) return;
     if (!chat) {
       setNotice("Start a new chat first.");
       return;
@@ -792,13 +1019,15 @@ export function useWorkspace({
       setNotice(
         "Choose a model and enter your key in Providers. LM Studio does not require a key unless authentication is enabled.",
       );
-      setView("providers");
+      openProvider(effective.config.id);
       return;
     }
     if (sendBlocked) {
       setNotice(sendBlocked);
       return;
     }
+    if (needsHistoryChoice(chat, effective.config.id) &&
+      !(await askToShareHistory(chat, effective.config))) return;
     followReply.current = true;
     const user: Message = {
       id: id(),
@@ -820,6 +1049,7 @@ export function useWorkspace({
     const saved = await updateChat(chatId, (c) => ({
       ...c,
       title: nextTitle,
+      cloudHistoryRecipient: cloudRecipient(prepared.target.id),
       draft: "",
       draftAttachments: [],
       updatedAt: Date.now(),
@@ -829,6 +1059,7 @@ export function useWorkspace({
       updateChat(chatId, (c) => ({
         ...c,
         title: c.title === nextTitle ? chat.title : c.title,
+        cloudHistoryRecipient: chat.cloudHistoryRecipient,
         draft: c.draft ? `${user.content}\n${c.draft}` : user.content,
         draftAttachments: [
           ...(user.attachments || []),
@@ -839,6 +1070,7 @@ export function useWorkspace({
         ),
       }));
       finishReply(abort);
+      if (session.get().conflicts.has(chatId)) return;
       setNotice(
         "Message was not sent because local storage failed. Your draft and attachments are still visible.",
       );
@@ -848,9 +1080,7 @@ export function useWorkspace({
     await runReply(chatId, history, prepared, abort);
   };
   const retry = async (original?: RequestSnapshot) => {
-    const current = session.get();
-    if (!chat || current.reply || current.processingFiles || current.navigating)
-      return;
+    if (!chat || !canStartReply(chat)) return;
     const resolved = original
       ? resolveConfig(
           settings,
@@ -865,9 +1095,11 @@ export function useWorkspace({
     }
     if (!configured(resolved.config)) {
       setNotice("Choose a model and unlock its key in Providers.");
-      setView("providers");
+      openProvider(resolved.config.id);
       return;
     }
+    if (needsHistoryChoice(chat, resolved.config.id) &&
+      !(await askToShareHistory(chat, resolved.config))) return;
     if (
       !confirm(
         t(
@@ -882,14 +1114,17 @@ export function useWorkspace({
     const saved = await updateChat(chat.id, (c) => ({
       ...c,
       messages: [...c.messages, reply],
+      cloudHistoryRecipient: cloudRecipient(prepared.target.id),
       updatedAt: Date.now(),
     }));
     if (!saved) {
       updateChat(chat.id, (c) => ({
         ...c,
         messages: c.messages.filter((m) => m.id !== reply.id),
+        cloudHistoryRecipient: chat.cloudHistoryRecipient,
       }));
       finishReply(abort);
+      if (session.get().conflicts.has(chat.id)) return;
       setNotice(
         "Retry was not sent because local storage failed. The conversation remains visible.",
       );
@@ -1026,44 +1261,48 @@ export function useWorkspace({
       password,
     ]);
   const exportData = () => {
-    const { vaults: _vaults, projects, ...safeSettings } = settings;
-    void _vaults;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            version: 1,
-            exportedAt: new Date().toISOString(),
-            conversations: session.get().threads,
-            projects,
-            settings: safeSettings,
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "luma-chat-backup.json";
-    link.click();
-    URL.revokeObjectURL(url);
+    setExportPlan(null);
+    try {
+      const current = session.get();
+      const plan = planBackupExport(current.threads, current.settings);
+      if (plan.groups.length === 1 && !plan.tooLarge.length)
+        downloadBackup(plan.groups[0].blob, "luma-chat-backup.json");
+      else setExportPlan(plan);
+      if (plan.omittedServerAddress)
+        setNotice(
+          "Backup excludes an invalid LM Studio server address. Set a valid address in AI providers.",
+        );
+    } catch (error) {
+      setNotice(errorText(error));
+    }
   };
   const importFile = async (file?: File) => {
-    if (!file) return;
-    try {
-      if (file.size > 100 * 1024 * 1024)
-        throw new Error("Backup exceeds the 100 MB import limit.");
-      const value: unknown = JSON.parse(await file.text());
-      if (!validBackup(value))
-        throw new Error("Invalid or unsupported backup file.");
-      setImportPreview(value);
-    } catch (e) {
-      setNotice(errorText(e));
-    }
+    if (!file || importing.current) return;
+    const selection = ++fileSelection.current;
+    setImportPreview(null);
+    setImportPreferences(false);
     if (importInput.current) importInput.current.value = "";
+    try {
+      const value = await readBackupFile(file);
+      if (selection !== fileSelection.current) return;
+      const address = value.settings?.providers?.lmstudio?.endpoint;
+      if (address !== undefined && !checkedLmStudioAddress(address))
+        setNotice(
+          "Invalid LM Studio address in backup. Import will keep the current server address.",
+        );
+      const ids = new Set(value.conversations.map(({ id }) => id));
+      const current = session.get();
+      const existing = new Map(
+        current.threads.filter((c) => ids.has(c.id)).map((c) => [c.id, c]),
+      );
+      setImportPreview({
+        ...value,
+        existing,
+        previousSettings: current.settings,
+      });
+    } catch (e) {
+      if (selection === fileSelection.current) setNotice(errorText(e));
+    }
   };
   const finishImport = async (overwrite: boolean) => {
     const current = session.get();
@@ -1074,53 +1313,110 @@ export function useWorkspace({
       current.navigating
     )
       return;
-    const {
-      settings: importSettings,
-      projects: importProjects = [],
-      conversations: importData,
-    } = importPreview;
-    let imported = 0;
+    const preview = importPreview;
+    setNotice("Importing backup…");
+    importing.current = true;
+    session.update({ navigating: true });
     try {
-      const existing = new Set(session.get().threads.map((c) => c.id));
-      for (const c of importData) {
-        if (existing.has(c.id) && !overwrite) continue;
-        const clean = {
-          ...c,
-          messages: c.messages.map(recoverMessage),
-        };
-        flushDraft(c.id);
-        await writes.current[c.id]?.catch(() => {});
-        await storage.saveConversation(clean);
-        session.update((current) => ({
-          threads: [clean, ...current.threads.filter((x) => x.id !== clean.id)],
-        }));
-        existing.add(c.id);
-        imported++;
-      }
-      if (!session.get().active)
-        selectActive(mostRecentVisible(session.get().threads));
-      const latest = session.get().settings;
-      const projects = mergeProjects(latest.projects, importProjects);
-      const importPreferences =
-        importSettings &&
-        confirm(
-          t(
-            "Import appearance and provider settings? Saved keys will remain on this device.",
-          ),
+      const selected = preview.conversations.filter(
+        (chat) => overwrite || !preview.existing.has(chat.id),
+      );
+      // Do not manufacture writes to flush an import. A buffered/failed draft
+      // is still the user's work, not a durable record we can safely replace.
+      if (selected.some(({ id }) => draftTimers.current.has(id))) {
+        setNotice(
+          "A local edit is still saving. Try the import again after it is saved.",
         );
-      if (importPreferences || projects.length !== latest.projects.length) {
-        const merged = mergeSettings({
-          ...latest,
-          ...(importPreferences ? importSettings : {}),
-          projects,
-          vaults: latest.vaults,
-        });
-        if (!(await saveSettings(merged))) return;
+        return;
       }
-      setNotice(`Imported ${imported} conversations.`);
+      await Promise.all([
+        settingsWrite.current,
+        ...selected.map(({ id }) => writes.current[id]),
+      ]);
+      const latest = session.get();
+      if (selected.some(({ id }) => latest.replySaves.has(id))) {
+        setNotice(
+          "Save the local reply before replacing its conversation, or skip conflicts.",
+        );
+        return;
+      }
+      const byId = new Map(latest.threads.map((c) => [c.id, c]));
+      const records = selected.map((chat) => {
+        const previous = preview.existing.get(chat.id);
+        if (byId.get(chat.id) !== previous || latest.conflicts.has(chat.id)) throw new ImportConflictError();
+        return {
+          previous,
+          next: {
+            ...portableConversation(chat),
+            messages: chat.messages.map(recoverMessage),
+          },
+        };
+      });
+      const previous = latest.settings;
+      const projects = mergeProjects(previous.projects, preview.projects ?? []);
+      const applyPreferences =
+        importPreferences && preview.settings !== undefined;
+      const changeSettings =
+        applyPreferences || projects.length !== previous.projects.length;
+      if (changeSettings && preview.previousSettings !== previous)
+        throw new ImportConflictError();
+      const nextSettings = applyPreferences
+        ? mergeSettings(
+            {
+              ...previous,
+              ...preview.settings,
+              projects,
+              vaults: previous.vaults,
+            },
+            previous.providers.lmstudio.endpoint,
+          )
+        : changeSettings
+          ? { ...previous, projects }
+          : previous;
+      const ids = new Set(records.map(({ next }) => next.id));
+      const nextThreads = [
+        ...records.map(({ next }) => next),
+        ...latest.threads.filter((c) => !ids.has(c.id)),
+      ];
+      const nextActive =
+        !latest.active ||
+        records.some(({ next }) => next.id === latest.active && next.archived)
+          ? mostRecentVisible(nextThreads)
+          : latest.active;
+      await storage.importBackup({
+        records,
+        settings: changeSettings ? { previous, next: nextSettings } : undefined,
+        active:
+          nextActive !== latest.active
+            ? { previous: latest.active, next: nextActive }
+            : undefined,
+      });
+      if (
+        credentialDestination(previous.providers.lmstudio) !==
+        credentialDestination(nextSettings.providers.lmstudio)
+      ) {
+        setSecrets((current) => ({ ...current, lmstudio: undefined }));
+        resetProviderForm();
+      }
+      session.update({
+        threads: nextThreads,
+        active: nextActive,
+        settings: nextSettings,
+      });
+      committedSettings.current = nextSettings;
+      if (changeSettings) rememberTheme(nextSettings.theme);
       setImportPreview(null);
-    } catch (e) {
-      report(e);
+      setExportPlan(null);
+      setNotice(`Imported ${records.length} conversations.`);
+    } catch (error) {
+      setNotice(
+        error instanceof ImportConflictError
+          ? "Local data changed since preview. Nothing was imported. Save your work, reload and preview again."
+          : "Import failed. Nothing was imported; your existing data and saved keys are unchanged.",
+      );
+    } finally {
+      importing.current = false;
+      session.update({ navigating: false });
     }
   };
   const clearData = async () => {
@@ -1136,6 +1432,7 @@ export function useWorkspace({
       )
     )
       return;
+    session.update({ navigating: true });
     try {
       flushDrafts();
       await Promise.all([
@@ -1143,13 +1440,17 @@ export function useWorkspace({
         settingsWrite.current,
       ]);
       await storage.clear();
-      session.update({ threads: [], active: "", settings: defaultSettings });
+      setExportPlan(null);
+      committedSettings.current = defaultSettings;
+      session.update({ threads: [], active: "", settings: defaultSettings, replySaves: new Map(), conflicts: new Set() });
       setCatalogs({});
       rememberTheme(defaultSettings.theme);
       setSecrets({});
       setNotice("Local data cleared.");
     } catch (e) {
       report(e);
+    } finally {
+      session.update({ navigating: false });
     }
   };
   const toggleSidebar = () =>
@@ -1166,7 +1467,7 @@ export function useWorkspace({
     lastScrollTop.current = el.scrollTop;
   };
   const removeDraftFile = (fileId: string) => {
-    if (chat)
+    if (chat && !session.get().navigating)
       void updateChat(chat.id, (current) => ({
         ...current,
         draftAttachments: current.draftAttachments?.filter(
@@ -1234,6 +1535,10 @@ export function useWorkspace({
     openSettings,
     saveSettings,
     organizeChat,
+    conflicts: state.conflicts,
+    keepConflictCopy,
+    replySave,
+    retryLocalSave,
     remove,
     saveProject,
     deleteProject,
@@ -1271,7 +1576,9 @@ export function useWorkspace({
     send,
     stopReply,
     showingSettings,
-    setProvider,
+    browseProvider,
+    historyTarget,
+    finishHistoryChoice,
     toggleConversationConfig,
     updateConfig,
     models,
@@ -1293,14 +1600,19 @@ export function useWorkspace({
     usage,
     requestPersistence,
     exportData,
+    exportPlan,
     importFile,
+    importPreferences,
+    setImportPreferences,
     importPreview,
     finishImport,
     importDestination:
       importPreview?.settings &&
       (() => {
-        const next = mergeSettings({ ...settings, ...importPreview.settings })
-          .providers.lmstudio;
+        const next = mergeSettings(
+          { ...settings, ...importPreview.settings },
+          settings.providers.lmstudio.endpoint,
+        ).providers.lmstudio;
         const destination = credentialDestination(next);
         return destination !==
           credentialDestination(settings.providers.lmstudio)

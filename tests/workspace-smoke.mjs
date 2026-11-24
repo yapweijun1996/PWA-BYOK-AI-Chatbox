@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
+import { exerciseCrossTabEditing } from "./cross-tab-workspace.mjs";
 import {
+  holdConversationWrite,
   waitForSavedConversation,
   waitForSavedSettings,
 } from "./browser-storage.mjs";
@@ -139,12 +141,29 @@ try {
   await activeReleaseNotes.waitFor();
   assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
 
+  const archiveWrite = await holdConversationWrite(page, {
+    title: "Release notes",
+    archived: true,
+  });
   await actions("Release notes").click();
   await menu.getByRole("button", { name: "Archive conversation" }).click();
-  assert.equal(
-    await folder.getByRole("button", { name: "Release notes" }).count(),
-    0,
-  );
+  await archiveWrite.held();
+  assert.ok(await activeReleaseNotes.isVisible());
+  assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
+  await archiveWrite.release("abort");
+  await page
+    .getByText(
+      "Archive change was not saved. Try again or export before reloading.",
+    )
+    .waitFor();
+  await page.reload();
+  await activeReleaseNotes.waitFor();
+  assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
+  await actions("Release notes").click();
+  await menu.getByRole("button", { name: "Archive conversation" }).click();
+  await folder
+    .getByRole("button", { name: "Release notes" })
+    .waitFor({ state: "hidden" });
   assert.equal(await draft.inputValue(), "Second draft stays isolated");
   await waitForSavedConversation(page, {
     title: "Release notes",
@@ -152,6 +171,11 @@ try {
     draft: "Do not lose this workspace draft",
   });
   await page.reload();
+  await recent
+    .getByRole("button", { name: "New chat", exact: true })
+    .and(page.locator('[aria-current="page"]'))
+    .waitFor();
+  assert.equal(await draft.inputValue(), "Second draft stays isolated");
   await sidebar.getByRole("button", { name: "Archived", exact: true }).click();
   assert.equal(
     await search
@@ -159,7 +183,19 @@ try {
       .getAttribute("aria-pressed"),
     "true",
   );
-  await search.getByRole("button", { name: "Restore Release notes" }).click();
+  const restoreWrite = await holdConversationWrite(page, {
+    title: "Release notes",
+    archived: false,
+  });
+  const restoreButton = search.getByRole("button", {
+    name: "Restore Release notes",
+  });
+  await restoreButton.click();
+  await restoreWrite.held();
+  assert.ok(await restoreButton.isVisible());
+  await restoreWrite.release("abort");
+  await search.getByText("Restore was not saved. Try again.").waitFor();
+  await restoreButton.click();
   await search.getByText("No archived conversations.").waitFor();
   await waitForSavedConversation(page, {
     title: "Release notes",
@@ -302,7 +338,7 @@ try {
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(backup)),
   });
-  restored.once("dialog", (request) => request.dismiss());
+  assert.equal(await restored.getByLabel("Also import appearance and provider settings").isChecked(), false);
   await restored
     .getByRole("button", { name: "Import and skip conflicts" })
     .click();
@@ -331,6 +367,7 @@ try {
     264,
   );
   await restored.close();
+  await exerciseCrossTabEditing(browser, url);
 
   console.log(
     "PASS: workspace search, keyboard actions, pinning, projects, archive/restore, verified backup, desktop resize/collapse, and mobile drawer/delete",

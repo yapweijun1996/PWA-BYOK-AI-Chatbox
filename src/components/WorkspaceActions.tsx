@@ -198,6 +198,7 @@ export function WorkspaceActions({
                   {t("Move to project")}
                 </button>
                 <button
+                  disabled={working}
                   onClick={() =>
                     run(() => onChat(chat.id, { archived: !chat.archived }))
                   }

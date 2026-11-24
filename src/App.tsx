@@ -23,8 +23,11 @@ import { WorkspaceSearch } from "./components/WorkspaceSearch";
 import { WorkspaceInspector } from "./components/WorkspaceInspector";
 import { Composer } from "./components/Composer";
 import { ModelSelector } from "./components/ModelSelector";
+import { LmStudioAddressEditor } from "./components/LmStudioAddressEditor";
+import { HistorySharingDialog } from "./components/HistorySharingDialog";
 import { canRequestReasoning, compactModelName } from "./model-options";
 import { formatSize } from "./format-size";
+import { downloadBackup } from "./backup";
 import { PreferenceFields } from "./components/Preferences";
 import { Toast } from "./components/Toast";
 import { ResponseInspector } from "./components/ResponseInspector";
@@ -102,6 +105,10 @@ function App({
     openSettings,
     saveSettings,
     organizeChat,
+    conflicts,
+    keepConflictCopy,
+    replySave,
+    retryLocalSave,
     remove,
     saveProject,
     deleteProject,
@@ -139,7 +146,9 @@ function App({
     send,
     stopReply,
     showingSettings,
-    setProvider,
+    browseProvider,
+    historyTarget,
+    finishHistoryChoice,
     toggleConversationConfig,
     updateConfig,
     models,
@@ -161,7 +170,10 @@ function App({
     usage,
     requestPersistence,
     exportData,
+    exportPlan,
     importFile,
+    importPreferences,
+    setImportPreferences,
     importPreview,
     importDestination,
     finishImport,
@@ -249,7 +261,7 @@ function App({
               <button
                 className="model-pill"
                 title={config.model || undefined}
-                onClick={() => setView("providers")}
+                onClick={openSettings}
               >
                 <Sparkles size={17} />
                 <span>
@@ -328,6 +340,40 @@ function App({
             onDismiss={() => setNotice("")}
           />
         </header>
+        {conflicts.size > 0 && (
+          <aside
+            className="conflict-notice"
+            aria-label={t("Conversation conflicts")}
+          >
+            <p role="status">
+              {t(
+                "Another tab changed or deleted this conversation. Save this tab’s version as a separate chat to keep its messages, draft and files.",
+              )}
+            </p>
+            {threads
+              .filter(({ id }) => conflicts.has(id))
+              .map((c) => (
+                <div
+                  className="button-row"
+                  key={c.id}
+                  role="group"
+                  aria-label={c.title}
+                >
+                  <strong>
+                    {c.title === "New chat" ? t("New chat") : c.title}
+                  </strong>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={working || navigating || processingFiles}
+                    onClick={() => void keepConflictCopy(c.id)}
+                  >
+                    {t("Save a separate copy")}
+                  </button>
+                </div>
+              ))}
+          </aside>
+        )}
         {view === "chat" && (
           <>
             <section
@@ -348,10 +394,7 @@ function App({
                       "Your conversations stay on this device. Choose a provider and model to get started.",
                     )}
                   </p>
-                  <button
-                    className="secondary"
-                    onClick={() => setView("providers")}
-                  >
+                  <button className="secondary" onClick={openSettings}>
                     {t("Configure a provider")}
                   </button>
                   {!chat && (
@@ -428,13 +471,50 @@ function App({
                             {t("Response failed")}
                           </div>
                         )}
+                        {m.role === "assistant" &&
+                          m.status &&
+                          m.status !== "streaming" && (
+                            <div
+                              className="status-label"
+                              role={
+                                replySave?.message === m ? "status" : undefined
+                              }
+                            >
+                              {replySave?.message !== m ? (
+                                t(
+                                  conflicts.has(chat.id)
+                                    ? "From this tab’s version"
+                                    : "Saved locally",
+                                )
+                              ) : replySave.status === "pending" ? (
+                                t("Saving reply locally…")
+                              ) : (
+                                <>
+                                  <span>{t("Reply not saved locally.")}</span>
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={
+                                      working ||
+                                      navigating ||
+                                      conflicts.has(chat.id)
+                                    }
+                                    onClick={() => retryLocalSave(m)}
+                                  >
+                                    {t("Retry local save")}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         {(m.status === "error" || m.status === "interrupted") &&
+                          replySave?.message !== m &&
                           m.id ===
                             chat.messages[chat.messages.length - 1]?.id && (
                             <div className="button-row">
                               <button
                                 className="secondary retry"
-                                disabled={working}
+                                disabled={working || conflicts.has(chat.id)}
                                 onClick={() => void retry()}
                               >
                                 {t("Retry")}
@@ -442,7 +522,7 @@ function App({
                               {m.request && (
                                 <button
                                   className="secondary retry"
-                                  disabled={working}
+                                  disabled={working || conflicts.has(chat.id)}
                                   onClick={() => void retry(m.request)}
                                 >
                                   {t("Retry with original model")}
@@ -487,7 +567,7 @@ function App({
                     groups={modelGroups}
                     onLoad={loadCatalog}
                     onSelect={selectModel}
-                    onSettings={() => setView("providers")}
+                    onSettings={openSettings}
                   />
                   <button
                     className="icon composer-reasoning"
@@ -566,8 +646,9 @@ function App({
                   {providers.map((p) => (
                     <button
                       key={p}
-                      className={`tab ${settings.provider === p ? "active" : ""}`}
-                      onClick={() => setProvider(p)}
+                      className={`tab ${config.id === p ? "active" : ""}`}
+                      aria-pressed={config.id === p}
+                      onClick={() => browseProvider(p)}
                     >
                       {labels[p]}
                     </button>
@@ -591,8 +672,20 @@ function App({
                       </p>
                     </div>
                   </div>
-                  {chat && (
-                    <div className="button-row">
+                  <div className="button-row">
+                    <button
+                      className="secondary"
+                      type="button"
+                      disabled={settings.provider === config.id}
+                      onClick={() => void saveSettings({ provider: config.id })}
+                    >
+                      {t(
+                        settings.provider === config.id
+                          ? "Default provider"
+                          : "Set as default provider",
+                      )}
+                    </button>
+                    {chat && (
                       <button
                         className="secondary"
                         type="button"
@@ -604,23 +697,17 @@ function App({
                             : "Use this model for the current chat",
                         )}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                   {config.id === "lmstudio" && (
                     <>
-                      <label className="field">
-                        {t("Server base URL")}
-                        <input
-                          value={config.endpoint}
-                          onChange={(e) =>
-                            updateConfig({
-                              endpoint: e.target.value,
-                              vision: false,
-                            })
-                          }
-                          placeholder="http://localhost:1234/v1"
-                        />
-                      </label>
+                      <LmStudioAddressEditor
+                        locale={locale}
+                        endpoint={config.endpoint}
+                        onApply={(endpoint) =>
+                          updateConfig({ endpoint, vision: false })
+                        }
+                      />
                       <p className="hint">
                         {t(
                           "Enable CORS in LM Studio. On a phone, use the computer’s network address; localhost refers to the phone. Browser local-network permission, HTTPS restrictions and firewall settings can affect access. Enable authentication when exposing the server.",
@@ -845,7 +932,7 @@ function App({
                       <button
                         className="secondary"
                         onClick={() => importInput.current?.click()}
-                        disabled={working}
+                        disabled={working || navigating || processingFiles}
                       >
                         <Upload size={16} />
                         {t(" Import backup")}
@@ -858,6 +945,59 @@ function App({
                         onChange={(e) => void importFile(e.target.files?.[0])}
                       />
                     </div>
+                    {exportPlan && (
+                      <div aria-live="polite">
+                        <p>
+                          {t(
+                            "The workspace does not fit in one 100 MiB backup.",
+                          )}
+                        </p>
+                        {exportPlan.groups.length > 0 && (
+                          <>
+                            <p>
+                              {t(
+                                "Download each group and import the files one at a time. Each file includes projects and preferences.",
+                              )}
+                            </p>
+                            <div className="button-row">
+                              {exportPlan.groups.map(
+                                ({ blob, count }, index) => (
+                                  <button
+                                    key={index}
+                                    className="secondary"
+                                    onClick={() =>
+                                      downloadBackup(
+                                        blob,
+                                        `luma-chat-backup-${index + 1}-of-${exportPlan.groups.length}.json`,
+                                      )
+                                    }
+                                  >
+                                    {t("Download group")} {index + 1}/
+                                    {exportPlan.groups.length} · {count}{" "}
+                                    {t("conversations")} ·{" "}
+                                    {formatSize(blob.size)}
+                                  </button>
+                                ),
+                              )}
+                            </div>
+                          </>
+                        )}
+                        {exportPlan.tooLarge.length > 0 && (
+                          <>
+                            <p>
+                              {t(
+                                "Not backed up: each conversation below exceeds the limit on its own. Its local data has not been changed.",
+                              )}
+                            </p>
+                            <ul>
+                              {exportPlan.tooLarge.map((title, i) => (
+                                <li key={i}>{title}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="info">
@@ -878,23 +1018,35 @@ function App({
                     )}
                     <p>
                       {importPreview.conversations.length}
-                      {t(" conversations;")}{" "}
-                      {
-                        importPreview.conversations.filter((c) =>
-                          threads.some((t) => t.id === c.id),
-                        ).length
-                      }{" "}
+                      {t(" conversations;")} {importPreview.existing.size}{" "}
                       {t("have an existing ID. Backups do not contain keys.")}
                     </p>
+                    {importPreview.settings && (
+                      <p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={importPreferences}
+                            disabled={navigating}
+                            onChange={(event) =>
+                              setImportPreferences(event.target.checked)
+                            }
+                          />{" "}
+                          {t("Also import appearance and provider settings")}
+                        </label>
+                      </p>
+                    )}
                     <div className="button-row">
                       <button
                         className="primary"
+                        disabled={working || navigating || processingFiles}
                         onClick={() => void finishImport(false)}
                       >
                         {t("Import and skip conflicts")}
                       </button>
                       <button
                         className="secondary"
+                        disabled={working || navigating || processingFiles}
                         onClick={() => {
                           if (
                             confirm(
@@ -908,7 +1060,11 @@ function App({
                       >
                         {t("Replace conflicts")}
                       </button>
-                      <button className="secondary" onClick={discardImport}>
+                      <button
+                        className="secondary"
+                        disabled={navigating}
+                        onClick={discardImport}
+                      >
                         {t("Cancel")}
                       </button>
                     </div>
@@ -975,6 +1131,13 @@ function App({
           </section>
         )}
       </main>
+      {historyTarget && (
+        <HistorySharingDialog
+          locale={locale}
+          provider={historyTarget}
+          onChoose={finishHistoryChoice}
+        />
+      )}
       {inspecting && (
         <WorkspaceInspector
           locale={locale}
@@ -1002,6 +1165,7 @@ function App({
           projects={settings.projects}
           onClose={() => setSearchMode(null)}
           onChoose={choose}
+          restoreDisabled={working || processingFiles || navigating}
           onRestore={(chatId) => organizeChat(chatId, { archived: false })}
         />
       )}

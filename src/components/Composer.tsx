@@ -6,7 +6,9 @@ import type { Locale } from "../i18n";
 import { formatSize } from "../format-size";
 import type { Attachment } from "../types";
 
-export type ReplyPhase = "idle" | "saving" | "streaming" | "stopping";
+import type { ActiveReply } from "../workspace-state";
+
+export type ReplyPhase = "idle" | ActiveReply["phase"];
 
 type Props = {
   locale: Locale;
@@ -163,7 +165,7 @@ export function Composer({
                 <button
                   className="icon"
                   type="button"
-                  disabled={saving}
+                  disabled={!enabled || saving}
                   aria-label={interpolate(t("Remove {name}"), file.name)}
                   onClick={() => onRemove(file.id)}
                 >
@@ -276,7 +278,13 @@ export function Composer({
             <button
               className="send"
               type="button"
-              aria-label={saving ? busyLabel : t("Send message")}
+              aria-label={
+                phase === "finalizing"
+                  ? t("Saving reply locally…")
+                  : saving
+                    ? busyLabel
+                    : t("Send message")
+              }
               disabled={!canSend}
               onClick={onSend}
             >

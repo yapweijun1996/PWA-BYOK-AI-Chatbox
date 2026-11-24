@@ -1,4 +1,53 @@
+import { mergeSettings, recoverMessage } from "./data-contracts";
 import type { Conversation, Settings } from "./types";
+
+import { applySettingsEdit } from "./settings-edit";
+
+export class ImportConflictError extends Error {}
+export class ConversationConflictError extends Error {
+  constructor(readonly chatId: string) {
+    super("Conversation changed or was deleted in another tab.");
+  }
+}
+
+type StoredChat = Conversation & { localRevision?: string };
+// Per-page cursor: advance only on restore, explicit recovery, or our own commit.
+// Keep the original legacy snapshot until its first versioned write.
+const observed = new Map<string, string | StoredChat>();
+function observe(row: StoredChat) {
+  observed.set(
+    row.id,
+    typeof row.localRevision === "string" ? row.localRevision : row,
+  );
+}
+function contentOf({
+  localRevision: _deviceOnly,
+  ...content
+}: StoredChat): Conversation {
+  return content;
+}
+function matches(
+  expected: string | StoredChat | undefined,
+  row: StoredChat | undefined,
+) {
+  if (!row || expected === undefined) return false;
+  return typeof expected === "string"
+    ? expected === row.localRevision
+    : JSON.stringify(expected) === JSON.stringify(row);
+}
+function readThen<T>(
+  request: IDBRequest<T>,
+  abort: (reason: unknown) => void,
+  use: (value: T) => void,
+) {
+  request.onsuccess = () => {
+    try {
+      use(request.result);
+    } catch (error) {
+      abort(error);
+    }
+  };
+}
 
 const DB = "luma-chat";
 const VERSION = 1;
@@ -115,12 +164,16 @@ async function restore(signal: AbortSignal, onDatabaseReady: () => void) {
     tx.oncomplete = () => {
       signal.removeEventListener("abort", abort);
       if (signal.aborted) reject(signal.reason);
-      else
+      else {
+        observed.clear();
+        const rows: StoredChat[] = conversations.result;
+        rows.forEach(observe);
         resolve({
-          conversations: conversations.result,
+          conversations: rows.map(contentOf),
           settings: settings.result,
           active: active.result,
         });
+      }
     };
     tx.onabort = () => {
       signal.removeEventListener("abort", abort);
@@ -135,22 +188,49 @@ async function restore(signal: AbortSignal, onDatabaseReady: () => void) {
 
 function writeTransaction(
   stores: string | string[],
-  action: (tx: IDBTransaction) => void,
+  action: (tx: IDBTransaction, abort: (reason: unknown) => void) => void,
 ) {
   return trackWrite(async () => {
     const db = await open();
     return new Promise<void>((resolve, reject) => {
       const tx = db.transaction(stores, "readwrite");
-      action(tx);
+      let failure: unknown;
+      const abort = (reason: unknown) => {
+        failure = reason;
+        tx.abort();
+      };
       tx.oncomplete = () => resolve();
       tx.onabort = () =>
-        reject(tx.error ?? new Error("Storage transaction aborted"));
+        reject(failure ?? tx.error ?? new Error("Storage transaction aborted"));
+      try {
+        action(tx, abort);
+      } catch (error) {
+        abort(error);
+      }
     });
   });
 }
 
-function write(store: string, action: (s: IDBObjectStore) => void) {
-  return writeTransaction(store, (tx) => action(tx.objectStore(store)));
+// ACTIVE_KEY is a shared resume hint. Do not replace a different tab's selection
+// as a side effect of archiving/deleting, or persist a link to a missing fallback.
+function moveSelection(
+  tx: IDBTransaction,
+  abort: (reason: unknown) => void,
+  from: string,
+  to: string,
+) {
+  const prefs = tx.objectStore("settings");
+  readThen(prefs.get(ACTIVE_KEY), abort, (active) => {
+    if (active != null && active !== from) return;
+    if (!to) {
+      prefs.delete(ACTIVE_KEY);
+      return;
+    }
+    readThen(tx.objectStore("conversations").getKey(to), abort, (key) => {
+      if (key === undefined) throw new ConversationConflictError(to);
+      prefs.put(to, ACTIVE_KEY);
+    });
+  });
 }
 
 async function inspectRepository() {
@@ -183,27 +263,155 @@ export const storage = {
       listeners.delete(listener);
     };
   },
-  saveConversation: (value: Conversation) =>
-    write("conversations", (s) => {
-      s.put(value);
-    }),
-  createActiveConversation: (value: Conversation) =>
-    writeTransaction(["conversations", "settings"], (tx) => {
-      tx.objectStore("conversations").add(value);
+  // Archiving the selected chat also commits its replacement selection (or none).
+  async saveConversation(value: Conversation, nextActive?: string) {
+    const expected = observed.get(value.id);
+    const row = { ...value, localRevision: crypto.randomUUID() };
+    await writeTransaction(
+      nextActive === undefined
+        ? "conversations"
+        : ["conversations", "settings"],
+      (tx, abort) => {
+        const chats = tx.objectStore("conversations");
+        readThen(
+          chats.get(value.id),
+          abort,
+          (stored: StoredChat | undefined) => {
+            if (!matches(expected, stored))
+              throw new ConversationConflictError(value.id);
+            chats.put(row);
+            if (nextActive !== undefined)
+              moveSelection(tx, abort, value.id, nextActive);
+          },
+        );
+      },
+    );
+    observe(row);
+  },
+  // Compare previewed records inside the write transaction, not in a separate
+  // preflight read. Legacy v1 records have no reliable modification counter.
+  async importBackup(plan: {
+    records: { previous?: Conversation; next: Conversation }[];
+    settings?: { previous: Settings; next: Settings };
+    active?: { previous: string; next: string };
+  }) {
+    const rows = plan.records.map(({ previous, next }) => ({
+      previous,
+      next: { ...next, localRevision: crypto.randomUUID() },
+    }));
+    await writeTransaction(["conversations", "settings"], (tx, abort) => {
+      const chats = tx.objectStore("conversations");
+      const prefs = tx.objectStore("settings");
+      function checked<T>(request: IDBRequest<T>, write: (stored: T) => void) {
+        readThen(request, abort, write);
+      }
+      for (const { previous, next } of rows) {
+        checked(chats.get(next.id), (stored: StoredChat | undefined) => {
+          if (previous && !matches(observed.get(previous.id), stored))
+            throw new ImportConflictError();
+          const restored = stored && {
+            ...contentOf(stored),
+            messages: stored.messages.map(recoverMessage),
+          };
+          if (JSON.stringify(restored) !== JSON.stringify(previous))
+            throw new ImportConflictError();
+          if (previous) chats.put(next);
+          else chats.add(next);
+        });
+      }
+      if (plan.settings) {
+        const { previous, next } = plan.settings;
+        checked(prefs.get("settings"), (stored: Settings | undefined) => {
+          if (
+            JSON.stringify(mergeSettings(stored)) !==
+            JSON.stringify(mergeSettings(previous))
+          )
+            throw new ImportConflictError();
+          prefs.put({ ...next, vaults: stored?.vaults ?? {} }, "settings");
+        });
+      }
+      if (plan.active) {
+        const { previous, next } = plan.active;
+        checked(prefs.get(ACTIVE_KEY), (stored: unknown) => {
+          // A legacy workspace may have restored a fallback without a saved selection.
+          if (stored != null && stored !== previous)
+            throw new ImportConflictError();
+          if (next) prefs.put(next, ACTIVE_KEY);
+          else prefs.delete(ACTIVE_KEY);
+        });
+      }
+    });
+    rows.forEach(({ next }) => observe(next));
+  },
+  async createActiveConversation(value: Conversation) {
+    const row = { ...value, localRevision: crypto.randomUUID() };
+    await writeTransaction(["conversations", "settings"], (tx) => {
+      tx.objectStore("conversations").add(row);
       tx.objectStore("settings").put(value.id, ACTIVE_KEY);
-    }),
-  removeConversation: (key: string) =>
-    write("conversations", (s) => {
-      s.delete(key);
-    }),
-  saveSettings: (value: Settings) =>
-    write("settings", (s) => {
-      s.put(value, "settings");
-    }),
+    });
+    observe(row);
+  },
+  async recoverConversation(
+    originalId: string,
+    copy: Conversation,
+    activate: boolean,
+  ) {
+    const row = { ...copy, localRevision: crypto.randomUUID() };
+    let read!: IDBRequest<StoredChat | undefined>;
+    await writeTransaction(["conversations", "settings"], (tx) => {
+      const chats = tx.objectStore("conversations");
+      read = chats.get(originalId);
+      chats.add(row);
+      if (activate) tx.objectStore("settings").put(copy.id, ACTIVE_KEY);
+    });
+    observe(row);
+    const original = read.result;
+    if (!original) {
+      observed.delete(originalId);
+      return undefined;
+    }
+    observe(original);
+    return {
+      ...contentOf(original),
+      messages: original.messages.map(recoverMessage),
+    };
+  },
+  async removeConversation(key: string, fallback: string) {
+    const expected = observed.get(key);
+    await writeTransaction(["conversations", "settings"], (tx, abort) => {
+      const chats = tx.objectStore("conversations");
+      readThen(chats.get(key), abort, (stored) => {
+        if (!matches(expected, stored))
+          throw new ConversationConflictError(key);
+        chats.delete(key);
+        moveSelection(tx, abort, key, fallback);
+      });
+    });
+    observed.delete(key);
+  },
+  async saveSettings(previous: Settings, next: Settings) {
+    let committed!: Settings;
+    await writeTransaction("settings", (tx, abort) => {
+      const prefs = tx.objectStore("settings");
+      readThen(prefs.get("settings"), abort, (stored) => {
+        const edited = applySettingsEdit(stored, previous, next);
+        prefs.put(edited, "settings");
+        committed = mergeSettings(edited);
+      });
+    });
+    return committed;
+  },
   saveActiveConversation: (id: string) =>
-    write("settings", (s) => {
-      if (id) s.put(id, ACTIVE_KEY);
-      else s.delete(ACTIVE_KEY);
+    writeTransaction(["settings", "conversations"], (tx, abort) => {
+      const prefs = tx.objectStore("settings");
+      if (!id) {
+        prefs.delete(ACTIVE_KEY);
+        return;
+      }
+      readThen(tx.objectStore("conversations").getKey(id), abort, (key) => {
+        if (key === undefined) throw new ConversationConflictError(id);
+        prefs.put(id, ACTIVE_KEY);
+      });
     }),
   clear: () =>
     trackWrite(async () => {
@@ -216,5 +424,6 @@ export const storage = {
         tx.onabort = () =>
           reject(tx.error || new Error("Storage transaction aborted"));
       });
+      observed.clear();
     }),
 };

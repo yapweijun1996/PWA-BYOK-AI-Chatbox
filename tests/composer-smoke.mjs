@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
+import { applyServerAddress } from "./provider-settings.mjs";
 
 const modelId = `vendor/${"long-model-name-".repeat(8)}preview`;
 const requests = [];
@@ -93,9 +94,7 @@ try {
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
-  await page
-    .getByLabel("Server base URL")
-    .fill(`http://127.0.0.1:${server.address().port}/v1`);
+  await applyServerAddress(page, `http://127.0.0.1:${server.address().port}/v1`);
   await page.getByRole("button", { name: "Back to chat" }).click();
   await selector.click();
   const dialog = page.getByRole("dialog", { name: "Choose model" });
@@ -180,6 +179,7 @@ try {
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   await page.getByRole("button", { name: "Stop generating" }).click();
   await page.getByText("Stopped or interrupted", { exact: true }).waitFor();
+  await page.locator(".message.assistant").first().getByText("Saved locally", { exact: true }).waitFor();
   const stoppedFooter = page.locator(".response-inspector summary").first();
   const stoppedMetrics = await stoppedFooter.innerText();
   assert.match(stoppedMetrics, /TTFT\s+\d/);
