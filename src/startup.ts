@@ -251,6 +251,11 @@ export function startApplication(host: HTMLElement, mount: Mount) {
       measure("mount", "mount-start", "mounted");
       transition("verifying");
       await nextFrame(abort.signal);
+      const math = host.querySelector(".katex");
+      if (math && document.fonts) {
+        math.getBoundingClientRect();
+        await Promise.race([document.fonts.ready, cancelled]);
+      }
       abort.signal.throwIfAborted();
       if (performance.now() >= deadline) throw timeout;
       verify(host, initial);

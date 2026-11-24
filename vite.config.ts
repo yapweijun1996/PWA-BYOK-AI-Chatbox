@@ -32,8 +32,10 @@ export default defineConfig({
     {
       name: "precache-manifest",
       generateBundle(_, bundle) {
+        // Modern browsers use the first KaTeX font source (WOFF2). Avoid caching
+        // three copies of each font during the service worker install.
         const files = Object.keys(bundle).filter((name) =>
-          /\.(js|css)$/.test(name),
+          /\.(js|css|woff2)$/.test(name),
         );
         const publicFiles = [
           "manifest.webmanifest",
@@ -68,5 +70,18 @@ export default defineConfig({
       },
     },
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id))
+            return "react-runtime";
+          if (id.includes("/node_modules/katex/")) return "katex";
+          if (/\/node_modules\/(highlight\.js|lowlight)\//.test(id))
+            return "syntax";
+        },
+      },
+    },
+  },
   base: "./",
 });

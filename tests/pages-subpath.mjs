@@ -14,6 +14,7 @@ const types = {
   ".webmanifest": "application/manifest+json",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
 };
 const server = createServer(async (req, res) => {
   try {
@@ -102,8 +103,16 @@ try {
     pngSizes,
     pngIcons.map(({ sizes }) => sizes),
   );
+  const offlineFont = await page.evaluate(async () => {
+    const cache = await caches.open((await caches.keys()).find((key) => key.startsWith("luma-shell-")));
+    const font = (await cache.keys()).find(({ url }) => /KaTeX_Main-Regular-.*\.woff2$/.test(url));
+    if (!font || !font.url.startsWith(location.href)) return false;
+    const response = await fetch(font.url);
+    return response.ok && (await response.arrayBuffer()).byteLength > 0;
+  });
+  assert.equal(offlineFont, true);
   console.log(
-    "PASS: GitHub Pages subpath, service-worker scope, and offline SVG and PNG icons",
+    "PASS: GitHub Pages subpath, service-worker scope, offline icons and KaTeX font",
   );
   await context.close();
 } finally {

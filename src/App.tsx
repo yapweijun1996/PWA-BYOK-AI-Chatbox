@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import {
   Menu,
   Paperclip,
@@ -34,6 +32,7 @@ import { PreferenceFields } from "./components/Preferences";
 import type { PreferenceProps } from "./components/Preferences";
 import { Toast } from "./components/Toast";
 import { ResponseInspector } from "./components/ResponseInspector";
+import { RichMessage } from "./components/RichMessage";
 import { createResponseTracker, responseIdentity } from "./response-telemetry";
 import { useAppUpdate } from "./pwa-update";
 import {
@@ -84,26 +83,16 @@ const offlineNotice =
 const setupNotice = "Set up a model and provider credentials before sending.";
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
-function Markdown({ text }: { text: string }) {
-  const html = DOMPurify.sanitize(
-    marked.parse(text, { async: false }) as string,
-    {
-      USE_PROFILES: { html: true },
-      FORBID_TAGS: ["img", "iframe", "form", "style"],
-    },
-  );
-  return (
-    <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />
-  );
-}
 function Reasoning({
   text,
   streaming,
   locale,
+  onNotice,
 }: {
   text: string;
   streaming: boolean;
   locale: Locale;
+  onNotice: (text: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const t = (text: string) => translate(locale, text);
@@ -114,7 +103,7 @@ function Reasoning({
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary>{streaming ? t("Thinking…") : t("Reasoning")}</summary>
-      <Markdown text={text} />
+      <RichMessage text={text} streaming={streaming} locale={locale} onNotice={onNotice} />
     </details>
   );
 }
@@ -164,8 +153,9 @@ function App({
   const attachmentJob = useRef(false);
   const draftTimers = useRef(new Map<string, number>());
   const writes = useRef<Record<string, Promise<void>>>({});
-  const bottom = useRef<HTMLDivElement>(null);
+  const messagesContent = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
+  const lastScrollTop = useRef(0);
   const followReply = useRef(true);
   const importInput = useRef<HTMLInputElement>(null);
   const report = useCallback(
@@ -334,19 +324,21 @@ function App({
   const replyBlocked = !online && config.id !== "lmstudio" ? offlineNotice
     : !config.vision && historyHasImages ? imageSupportNotice : undefined;
   const sendBlocked = replyBlocked || (!config.vision && hasImage(files) ? imageSupportNotice : undefined);
-  const lastMessage = chat?.messages[chat.messages.length - 1];
+  const hasMessages = Boolean(chat?.messages.length);
   useLayoutEffect(() => {
-    if (view === "chat" && followReply.current) {
-      bottom.current?.scrollIntoView({ block: "end" });
-    }
-  }, [
-    lastMessage?.id,
-    lastMessage?.content,
-    lastMessage?.reasoning,
-    lastMessage?.status,
-    active,
-    view,
-  ]);
+    const pane = conversation.current;
+    const content = messagesContent.current;
+    if (view !== "chat" || !hasMessages || !pane || !content) return;
+    const keepBottom = () => {
+      if (followReply.current) pane.scrollTop = pane.scrollHeight;
+      lastScrollTop.current = pane.scrollTop;
+    };
+    keepBottom();
+    const observer = new ResizeObserver(keepBottom);
+    observer.observe(content);
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, [active, view, hasMessages]);
   useLayoutEffect(onInitialCommit, [onInitialCommit]);
   const isConfigured =
     !!config.model.trim() && (config.id === "lmstudio" || !!secrets[config.id]);
@@ -1018,9 +1010,11 @@ function App({
               ref={conversation}
               onScroll={() => {
                 const el = conversation.current;
-                if (el)
-                  followReply.current =
-                    el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                if (!el) return;
+                const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+                if (gap <= 2) followReply.current = true;
+                else if (el.scrollTop !== lastScrollTop.current) followReply.current = false;
+                lastScrollTop.current = el.scrollTop;
               }}
             >
               {!chat || chat.messages.length === 0 ? (
@@ -1047,7 +1041,7 @@ function App({
                   )}
                 </div>
               ) : (
-                <div className="messages">
+                <div className="messages" ref={messagesContent}>
                   {chat.messages.map((m) => (
                     <article className={`message ${m.role}`} key={m.id}>
                       <div className="avatar">
@@ -1070,16 +1064,19 @@ function App({
                             locale={locale}
                             text={m.reasoning}
                             streaming={m.status === "streaming"}
+                            onNotice={setNotice}
                           />
                         )}
-                        <Markdown
-                          text={
-                            m.content ||
-                            (m.status === "streaming" && !m.reasoning
-                              ? "Thinking…"
-                              : "")
-                          }
-                        />
+                        {m.content ? (
+                          <RichMessage
+                            text={m.content}
+                            locale={locale}
+                            streaming={m.status === "streaming"}
+                            onNotice={setNotice}
+                          />
+                        ) : m.status === "streaming" && !m.reasoning ? (
+                          <p className="muted">{t("Thinking…")}</p>
+                        ) : null}
                         {m.attachments?.map((a) => (
                           <div className="attachment-label" key={a.id}>
                             <Paperclip size={14} />
@@ -1127,7 +1124,6 @@ function App({
                       </div>
                     </article>
                   ))}
-                  <div ref={bottom} />
                 </div>
               )}
             </section>

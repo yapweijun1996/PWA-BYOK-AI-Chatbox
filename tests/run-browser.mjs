@@ -60,6 +60,7 @@ try {
     "tests/startup-smoke.mjs",
     "tests/browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
+    "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",
     "tests/pages-subpath.mjs",
     "tests/update-smoke.mjs",

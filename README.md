@@ -43,6 +43,12 @@ The app keeps session keys in memory until lock, reload, or close. Opt-in encryp
 
 When a provider supplies reasoning text in its stream, Luma Chat displays it separately from the final answer and saves it with the conversation and backups. LM Studio supports structured reasoning fields and leading `<think>` tags; OpenRouter supports its text and summary reasoning details. For OpenRouter or Gemini, request reasoning in provider settings only for a supported model; content is not guaranteed and may affect cost. OpenAI Chat Completions does not expose raw reasoning, so it may show no reasoning text. Reasoning displayed in the app is not sent back in later chat requests.
 
+## Rich messages
+
+Chat and reasoning bubbles render CommonMark and GitHub Flavored Markdown, including checklists, tables and links. Use `$…$` for inline math and `$$` on separate lines for display math. Code fences show a language label and can be copied independently of the whole reply; supported languages are highlighted, while unknown languages remain plain text. Long code, tables, and equations scroll within the bubble.
+
+During streaming, completed blocks stay rendered and the still-changing trailing block appears as literal text. The final pass renders the complete Markdown; IndexedDB and backups keep the original source. New content follows the conversation bottom only while you are there. Raw HTML is ignored, unsafe links are disabled, and images are fetched only if you explicitly load them. External images still require their host to be reachable. KaTeX, syntax grammars, CSS and WOFF2 fonts are served locally and precached with the production PWA.
+
 ## Response telemetry
 
 Each assistant reply has a compact telemetry footer and an expandable **Response inspector**. Client timing begins when the app starts the provider request, after saving the message: TTFT measures arrival of the first generated text or reasoning delta, TTFV the first nonblank answer text, and duration through completion or interruption. TPS estimates client-observed throughput by dividing reported output tokens by the interval between the first and last generated deltas. It does not count SSE chunks or show a rate from a single arrival. Gemini reports answer and reasoning tokens separately, so its output count excludes reasoning.
