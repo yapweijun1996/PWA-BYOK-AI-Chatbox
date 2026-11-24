@@ -1,4 +1,5 @@
 import { chromePath } from "./browser-launch.mjs";
+import { waitForSavedSettings } from "./browser-storage.mjs";
 import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 
@@ -31,6 +32,7 @@ try {
   const sidebar = page.locator("#chat-sidebar");
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   assert.equal(await sidebar.isVisible(), false);
+  await waitForSavedSettings(page, { sidebarCollapsed: true });
   await page.reload();
   const expand = page.getByRole("button", { name: "Expand sidebar" });
   await expand.waitFor();
@@ -76,6 +78,7 @@ try {
   assert.equal(await page.locator("html").getAttribute("lang"), "zh-CN");
   await page.getByRole("button", { name: "本地数据", exact: true }).click();
   await page.getByRole("heading", { name: "本地数据" }).waitFor();
+  await waitForSavedSettings(page, { language: "zh-CN", theme: "dark" });
   await page.reload();
   await page.getByRole("button", { name: "展开侧栏" }).waitFor();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
@@ -116,6 +119,7 @@ try {
     .boundingBox();
   assert.ok(updateBounds && updateBounds.x + updateBounds.width <= 320);
   assert.equal(await page.locator("html").getAttribute("lang"), "en");
+  await waitForSavedSettings(page, { language: "en", theme: "light" });
   await page.reload();
   await page.getByRole("button", { name: "Open menu" }).click();
   await page

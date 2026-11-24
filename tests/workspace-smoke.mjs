@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
+import { waitForSavedSettings } from "./browser-storage.mjs";
 
 const url = process.env.TEST_BASE_URL || "http://127.0.0.1:55167/";
 const browser = await chromium.launch({
@@ -36,8 +37,25 @@ try {
     .press("Enter");
   const rename = dialog("Rename conversation");
   await rename.getByLabel("Conversation name").fill("Release notes");
+  await page.evaluate(() => {
+    // Reopening must not depend on delivery of the browser's queued close event.
+    const closedPanel = document.querySelector(
+      "dialog.workspace-actions[open]",
+    );
+    const holdClose = (event) => {
+      if (event.target !== closedPanel) return;
+      event.stopImmediatePropagation();
+      document.removeEventListener("close", holdClose, true);
+    };
+    document.addEventListener("close", holdClose, true);
+  });
   await rename.getByRole("button", { name: "Save changes" }).click();
   await actions("Release notes").press("Enter");
+  await menu.waitFor({ timeout: 3000 });
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "hidden" });
+  await actions("Release notes").press("Enter");
+  await menu.waitFor();
   await page.keyboard.press("ArrowDown");
   assert.ok(
     await menu
@@ -153,6 +171,10 @@ try {
   assert.equal((await sidebar.boundingBox()).width, 336);
   await page.mouse.up();
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await waitForSavedSettings(page, {
+    sidebarCollapsed: true,
+    sidebarWidth: 336,
+  });
   await page.reload();
   const expand = page.getByRole("button", { name: "Expand sidebar" });
   await expand.waitFor();

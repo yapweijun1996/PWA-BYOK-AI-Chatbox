@@ -71,7 +71,11 @@ export function WorkspaceActions({
           : chat
             ? "Conversation actions"
             : "Project actions";
-  const close = () => dialog.current?.close();
+  const close = () => {
+    dialog.current?.close();
+    // Reset the action form now; the browser queues the native close event.
+    onClose();
+  };
   const run = (action: () => void) => {
     close();
     action();
@@ -118,7 +122,10 @@ export function WorkspaceActions({
       className="workspace-dialog workspace-actions"
       ref={dialog}
       aria-labelledby={titleId}
-      onClose={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
