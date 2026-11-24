@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
-import { waitForSavedSettings } from "./browser-storage.mjs";
+import {
+  waitForSavedConversation,
+  waitForSavedSettings,
+} from "./browser-storage.mjs";
 
 const url = process.env.TEST_BASE_URL || "http://127.0.0.1:55167/";
 const browser = await chromium.launch({
@@ -143,6 +146,11 @@ try {
     0,
   );
   assert.equal(await draft.inputValue(), "Second draft stays isolated");
+  await waitForSavedConversation(page, {
+    title: "Release notes",
+    archived: true,
+    draft: "Do not lose this workspace draft",
+  });
   await page.reload();
   await sidebar.getByRole("button", { name: "Archived", exact: true }).click();
   assert.equal(
@@ -153,6 +161,10 @@ try {
   );
   await search.getByRole("button", { name: "Restore Release notes" }).click();
   await search.getByText("No archived conversations.").waitFor();
+  await waitForSavedConversation(page, {
+    title: "Release notes",
+    archived: false,
+  });
   await page.keyboard.press("Escape");
   await folder
     .getByRole("button", { name: "Release notes", exact: true })
