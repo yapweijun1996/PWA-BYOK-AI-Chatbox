@@ -9,9 +9,9 @@
 } from "lucide-react";
 import type { Conversation } from "../types";
 import { interpolate, translate } from "../i18n";
-import { PreferenceFields } from "./Preferences";
-import type { PreferenceProps } from "./Preferences";
-type Props = PreferenceProps & {
+import type { Locale } from "../i18n";
+type Props = {
+  locale: Locale;
   open: boolean;
   collapsed: boolean;
   hiddenFromInput: boolean;
@@ -28,10 +28,6 @@ type Props = PreferenceProps & {
 };
 export function Sidebar({
   locale,
-  theme,
-  language,
-  onTheme,
-  onLanguage,
   open,
   collapsed,
   hiddenFromInput,
@@ -156,15 +152,6 @@ export function Sidebar({
           <Sun size={19} />
           {t(" Appearance")}
         </button>
-        <div className="sidebar-preferences">
-          <PreferenceFields
-            locale={locale}
-            theme={theme}
-            language={language}
-            onTheme={onTheme}
-            onLanguage={onLanguage}
-          />
-        </div>
       </div>
     </aside>
   );

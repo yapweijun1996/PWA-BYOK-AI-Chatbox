@@ -6,6 +6,8 @@ import { resolve, sep, extname } from "node:path";
 import assert from "node:assert/strict";
 const root = resolve("dist");
 let revision = 1;
+let updateGate;
+let failUpdate = false;
 const types = {
   ".html": "text/html",
   ".css": "text/css",
@@ -24,11 +26,19 @@ const server = createServer(async (req, res) => {
       return;
     }
     let body = await readFile(file);
-    if (path === "/sw.js")
-      body = Buffer.concat([
-        body,
-        Buffer.from(`\n// test revision ${revision}\n`),
-      ]);
+    if (path === "/sw.js") {
+      await updateGate?.promise;
+      if (failUpdate) {
+        res.writeHead(503).end();
+        return;
+      }
+      body = body
+        .toString("utf8")
+        .replace(
+          /luma-shell-[a-f0-9]{12}/,
+          (name) => `${name}-test-${revision}`,
+        );
+    }
     res
       .writeHead(200, {
         "Content-Type": types[extname(file)] || "application/octet-stream",
@@ -54,14 +64,44 @@ try {
   await page.getByRole("button", { name: "Start a new chat" }).click();
   const draft = page.getByRole("textbox", { name: "Message", exact: true });
   await draft.fill("Unsent work stays here");
-  revision = 2;
-  await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.ready;
-    await registration.update();
+  const appVersion = JSON.parse(await readFile("package.json", "utf8")).version;
+  const check = page.getByRole("button", {
+    name: `Check for updates · v${appVersion}`,
   });
-  await page
-    .getByText("An update is ready.", { exact: false })
-    .waitFor({ timeout: 10000 });
+  const toast = page.getByRole("status");
+  const animation = () =>
+    check
+      .locator("svg")
+      .evaluate((icon) => getComputedStyle(icon).animationName);
+  updateGate = Promise.withResolvers();
+  await check.click();
+  await toast.getByText("Checking for updates…").waitFor();
+  assert.equal(await check.getAttribute("aria-busy"), "true");
+  assert.equal(await animation(), "update-spin");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(await animation(), "none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  updateGate.resolve();
+  updateGate = undefined;
+  await toast.getByText("Luma Chat is up to date.").waitFor();
+  assert.equal(await check.getAttribute("aria-busy"), "false");
+  await page.getByRole("button", { name: "Dismiss message" }).click();
+  assert.equal(await toast.textContent(), "");
+  await page.context().setOffline(true);
+  await check.click();
+  await toast
+    .getByText("You are offline. Reconnect to check for updates.")
+    .waitFor();
+  await page.context().setOffline(false);
+  failUpdate = true;
+  await check.click();
+  await toast
+    .getByText("Could not check for updates. Try again later.")
+    .waitFor();
+  failUpdate = false;
+  revision = 2;
+  await check.click();
+  await toast.getByText("An update is ready.", { exact: false }).waitFor();
   assert.equal(await draft.inputValue(), "Unsent work stays here");
   assert.equal(
     await page.evaluate(async () =>
@@ -69,10 +109,14 @@ try {
     ),
     true,
   );
+  await page.reload();
+  await toast.getByText("An update is ready.", { exact: false }).waitFor();
+  assert.equal(await draft.inputValue(), "Unsent work stays here");
   console.log(
-    "PASS: update notification preserves draft and leaves activation to user reopening",
+    "PASS: versioned update check, shared toast, reduced motion, and waiting update without forced reload",
   );
 } finally {
+  updateGate?.resolve();
   await browser.close();
   await new Promise((done) => server.close(done));
 }

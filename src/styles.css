@@ -206,20 +206,12 @@ select:focus-visible {
   border-top: 1px solid var(--color-border);
   padding-top: 12px;
 }
-.sidebar-preferences {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-small);
-  padding: var(--space-small) 0 0;
-}
-.sidebar-preferences label,
 .preferences-panel label {
   display: grid;
   gap: var(--space-extra-small);
   color: var(--color-muted);
   font-size: var(--font-caption);
 }
-.sidebar-preferences select,
 .preferences-panel select {
   width: 100%;
   min-width: 0;
@@ -252,6 +244,7 @@ select:focus-visible {
   min-height: 0;
 }
 .topbar {
+  position: relative;
   height: 72px;
   flex: none;
   display: flex;
@@ -291,6 +284,27 @@ select:focus-visible {
 .preferences-toggle[aria-expanded="true"] {
   background: var(--color-soft);
   color: var(--color-text);
+}
+.update-control {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  align-content: center;
+  gap: 2px;
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.update-control[aria-busy="true"] {
+  cursor: progress;
+}
+.update-control[aria-busy="true"] svg {
+  animation: update-spin 750ms linear infinite;
+}
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .preferences-panel {
   position: absolute;
@@ -340,18 +354,31 @@ select:focus-visible {
   border-radius: 50%;
   background: var(--color-status);
 }
-.notice {
+.toast {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--space-small));
+  inset-inline-end: var(--space-base);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin: var(--space-base) auto 0;
+  gap: var(--space-small);
+  width: min(420px, calc(100% - 2 * var(--space-base)));
   padding: var(--space-small) var(--space-base);
-  width: min(800px, calc(100% - 32px));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
-  background: var(--color-soft);
+  background: var(--color-surface);
+  box-shadow: 0 8px 28px var(--color-shadow);
   font-size: var(--font-label);
+  overflow-wrap: anywhere;
+}
+.toast[data-visible="false"] {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
 }
 .conversation {
   overflow-y: auto;
@@ -842,6 +869,9 @@ select:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .update-control[aria-busy="true"] svg {
+    animation: none;
+  }
   * {
     scroll-behavior: auto !important;
     transition: none !important;

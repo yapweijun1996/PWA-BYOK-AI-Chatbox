@@ -15,10 +15,13 @@ import {
   Copy,
   X,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
+import { version } from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { PreferenceFields, TopbarPreferences } from "./components/Preferences";
 import type { PreferenceProps } from "./components/Preferences";
+import { Toast } from "./components/Toast";
 import { useAppUpdate } from "./pwa-update";
 import {
   interpolate,
@@ -93,7 +96,6 @@ function Reasoning({
   );
 }
 function App() {
-  const updateAvailable = useAppUpdate();
   const [threads, setThreads] = useState<Conversation[]>([]);
   const threadsRef = useRef<Conversation[]>([]);
   const [active, setActive] = useState("");
@@ -111,6 +113,8 @@ function App() {
   );
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
+  const { checking, check } = useAppUpdate(setNotice);
+  const updateLabel = `${t("Check for updates")} · v${version}`;
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [processingFiles, setProcessingFiles] = useState(false);
@@ -737,7 +741,7 @@ function App() {
   return (
     <div className="app">
       <Sidebar
-        {...preferences}
+        locale={locale}
         open={drawer}
         collapsed={desktop && settings.sidebarCollapsed}
         hiddenFromInput={desktop ? settings.sidebarCollapsed : !drawer}
@@ -823,27 +827,25 @@ function App() {
               {t(" Local storage")}
             </span>
             <TopbarPreferences {...preferences} />
-          </div>
-        </header>
-        {updateAvailable && (
-          <div className="notice update-notice" role="status">
-            {t(
-              "An update is ready. Finish any reply, close all Luma Chat tabs and app windows, then reopen. You may need to unlock your key again.",
-            )}
-          </div>
-        )}
-        {notice && (
-          <div className="notice" role="status">
-            <span>{translateNotice(locale, notice)}</span>
             <button
-              className="icon"
-              aria-label={t("Dismiss message")}
-              onClick={() => setNotice("")}
+              className="icon update-control"
+              type="button"
+              aria-label={updateLabel}
+              title={updateLabel}
+              aria-busy={checking}
+              aria-disabled={checking}
+              onClick={() => void check()}
             >
-              <X size={17} />
+              <RefreshCw size={18} aria-hidden="true" />
+              <span aria-hidden="true">v{version}</span>
             </button>
           </div>
-        )}
+          <Toast
+            locale={locale}
+            message={notice}
+            onDismiss={() => setNotice("")}
+          />
+        </header>
         {view === "chat" && (
           <>
             <section

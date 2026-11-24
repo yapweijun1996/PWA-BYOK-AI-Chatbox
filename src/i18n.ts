@@ -142,6 +142,17 @@ const zh: Record<string, string> = {
   English: "英文",
   "Simplified Chinese": "简体中文",
   "System language": "跟随系统语言",
+  "Check for updates": "检查更新",
+  "Checking for updates…": "正在检查更新…",
+  "Luma Chat is up to date.": "Luma Chat 已是最新版本。",
+  "Could not check for updates. Try again later.":
+    "无法检查更新，请稍后重试。",
+  "You are offline. Reconnect to check for updates.":
+    "当前处于离线状态，请重新连接网络后检查更新。",
+  "The app is still preparing offline support. Try again shortly.":
+    "应用正在准备离线功能，请稍后重试。",
+  "Update checks are unavailable in this build or browser.":
+    "当前版本或浏览器不支持检查更新。",
   "An update is ready. Finish any reply, close all Luma Chat tabs and app windows, then reopen. You may need to unlock your key again.":
     "新版本已准备好。请先完成回复，关闭所有 Luma Chat 标签和窗口后重新打开；您可能需要再次解锁 Key。",
   "Delete this conversation and its saved attachments?":

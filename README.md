@@ -2,7 +2,7 @@
 
 Luma Chat is a local-first, installable BYOK AI chat application. It supports direct browser connections to Gemini, OpenAI, OpenRouter, and LM Studio. The design references in `DESIGN/` describe the intended visual direction; this is an independent implementation.
 
-The UI supports English and Simplified Chinese with a system-language option. Use the top-bar Language and theme menu, sidebar, or Appearance settings to switch languages or choose a light, dark, or system theme. All three share the same saved preferences. The desktop sidebar can be collapsed; on mobile it opens as a drawer. These preferences are saved on the current device.
+The UI supports English and Simplified Chinese with a system-language option. Use the top-bar Language and theme menu or Appearance settings to switch languages or choose a light, dark, or system theme. Both use the same saved preferences. The desktop sidebar can be collapsed; on mobile it opens as a drawer. These preferences are saved on the current device.
 
 ## Run locally
 
@@ -29,7 +29,7 @@ When a provider supplies reasoning text in its stream, Luma Chat displays it sep
 
 Conversations, drafts, draft attachments, settings, and any encrypted saved keys are stored in IndexedDB on the current browser/device. Data is not automatically synchronized. Browser storage may be cleared or evicted; export backups regularly. Backups include conversations, attachments, and provider settings but never keys. Imports require a preview and explicit conflict handling. If a conversation cannot be saved, the app does not send the message or retry, and keeps the draft visible.
 
-After the production app has been loaded and cached, the shell and saved chats can be opened offline. When an update is ready, finish active replies and close all app windows and tabs before reopening; the app does not force a reload. Cloud inference requires network access; LM Studio inference requires the local service to be reachable. Images and plain text files up to 5 MB each can be attached. Image support must be explicitly enabled for a model that accepts images. Do not attach content you do not want sent to the selected provider.
+After the production app has been loaded and cached, the shell and saved chats can be opened offline. The update button in the top bar shows the current app version and checks for a new build. Look for the status notification below the top bar. When an update is ready, finish active replies and close all app windows and tabs before reopening; the app does not force a reload. Cloud inference requires network access; LM Studio inference requires the local service to be reachable. Images and plain text files up to 5 MB each can be attached. Image support must be explicitly enabled for a model that accepts images. Do not attach content you do not want sent to the selected provider.
 
 ## Checks
 

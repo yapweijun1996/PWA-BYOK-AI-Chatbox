@@ -38,9 +38,9 @@ try {
   await page.reload();
   await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
   await page.getByRole("button", { name: "Expand sidebar" }).click();
-  await sidebar.getByLabel("Theme", { exact: true }).selectOption("dark");
+  assert.equal(await sidebar.getByRole("combobox").count(), 0);
   await toggle.click();
-  assert.equal(await panel.getByLabel("Theme").inputValue(), "dark");
+  await panel.getByLabel("Theme").selectOption("dark");
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
   assert.equal(await toggle.getAttribute("aria-expanded"), "false");
   assert.equal(
@@ -72,7 +72,9 @@ try {
   const a = luminance(colors.fg),
     b = luminance(colors.bg);
   assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5);
-  await sidebar.getByLabel("Language", { exact: true }).selectOption("zh-CN");
+  await toggle.click();
+  await panel.getByLabel("Language").selectOption("zh-CN");
+  await page.getByRole("button", { name: "语言与主题" }).click();
   await page.getByRole("heading", { name: "外观" }).waitFor();
   assert.equal(
     await page.locator("main").getByLabel("语言", { exact: true }).inputValue(),
@@ -110,6 +112,10 @@ try {
   await page.getByRole("button", { name: "语言与主题" }).click();
   const bounds = await mobilePanel.boundingBox();
   assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320);
+  const updateBounds = await page
+    .getByRole("button", { name: /检查更新/ })
+    .boundingBox();
+  assert.ok(updateBounds && updateBounds.x + updateBounds.width <= 320);
   assert.equal(await mobilePanel.getByLabel("主题").inputValue(), "system");
   await mobilePanel.getByLabel("主题").selectOption("light");
   await mobilePanel.getByLabel("语言").selectOption("en");
@@ -138,7 +144,7 @@ try {
   assert.equal(await chinesePage.locator("html").getAttribute("lang"), "zh-CN");
   await chineseSystem.close();
   console.log(
-    "PASS: keyboard and mobile top-bar preferences, sidebar and Appearance sync, persistence, and dark contrast",
+    "PASS: keyboard and mobile top-bar preferences, Appearance sync, persistence, and dark contrast",
   );
   await context.close();
 } finally {
