@@ -1,5 +1,6 @@
 export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
 import type { Language } from "./i18n";
+import type { RequestOverrides, RequestSnapshot } from "./request-config";
 import type { ResponseTelemetry } from "./response-telemetry";
 import { sidebarWidth } from "./workspace";
 export const providerIds: ProviderId[] = [
@@ -24,6 +25,7 @@ export type Message = {
   status?: "complete" | "streaming" | "interrupted" | "error";
   attachments?: Attachment[];
   telemetry?: ResponseTelemetry;
+  request?: RequestSnapshot;
 };
 export type Conversation = {
   id: string;
@@ -35,6 +37,7 @@ export type Conversation = {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  configOverride?: RequestOverrides;
 };
 export type WorkspaceProject = { id: string; name: string };
 export type ProviderConfig = {

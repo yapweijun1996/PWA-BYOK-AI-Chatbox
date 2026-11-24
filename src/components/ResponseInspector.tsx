@@ -2,7 +2,7 @@ import { memo, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { translate } from "../i18n";
 import type { Locale } from "../i18n";
-import { responseTps } from "../response-telemetry";
+import { responseThroughput } from "../response-telemetry";
 import { labels } from "../types";
 import type { Message } from "../types";
 
@@ -44,16 +44,21 @@ export const ResponseInspector = memo(function ResponseInspector({
       : value < 1000
         ? `${number.format(value)} ms`
         : `${number.format(value / 1000)} s`;
-  const costText = !cost
-    ? missing
-    : cost.usd > 0 && cost.usd < 0.000001
-      ? `<${currency.format(0.000001)}`
-      : currency.format(cost.usd);
+  const local = telemetry?.provider === "lmstudio";
+  const generation = telemetry?.generation;
+  const costText = local
+    ? t("Local inference — no API charge")
+    : !cost
+      ? missing
+      : cost.usd > 0 && cost.usd < 0.000001
+        ? `<${currency.format(0.000001)}`
+        : currency.format(cost.usd);
   const timestamp = new Date(message.createdAt);
   const timestampText = Number.isNaN(timestamp.getTime())
     ? missing
     : date.format(timestamp);
-  const tps = formatCount(responseTps(telemetry));
+  const throughput = responseThroughput(telemetry);
+  const tps = formatCount(throughput?.value);
   const ttft = formatTime(telemetry?.ttftMs);
   const duration = formatTime(telemetry?.durationMs);
   const title = t("Response inspector");
@@ -61,7 +66,9 @@ export const ResponseInspector = memo(function ResponseInspector({
     ["TPS", tps],
     ["TTFT", ttft],
     [t("Duration"), duration],
-    [t("Tokens"), formatCount(usage?.total)],
+    usage?.total === undefined && generation
+      ? [t("Generated tokens"), formatCount(generation.tokens)]
+      : [t("Tokens"), formatCount(usage?.total)],
     [t("Cost"), cost?.source === "estimated" ? `≈${costText}` : costText],
   ];
   const fields = [
@@ -76,9 +83,11 @@ export const ResponseInspector = memo(function ResponseInspector({
     [
       "TPS",
       tps,
-      t(
-        "Client estimate: reported output tokens ÷ time between first and last generated deltas",
-      ),
+      throughput?.source === "provider"
+        ? t("Provider timings: generated tokens ÷ generation duration")
+        : t(
+            "Client estimate: reported output tokens ÷ time between first and last generated deltas",
+          ),
     ],
     ["TTFT", ttft, measured],
     ["TTFV", formatTime(telemetry?.ttfvMs), measured],
@@ -88,10 +97,34 @@ export const ResponseInspector = memo(function ResponseInspector({
     [t("Total tokens"), formatCount(usage?.total), reported],
     [t("Reasoning tokens"), formatCount(usage?.reasoning), reported],
     [t("Cached tokens"), formatCount(usage?.cached), reported],
+    ...(generation
+      ? [
+          [t("Generated tokens"), formatCount(generation.tokens), reported],
+          [
+            t("Generation duration"),
+            formatTime(generation.durationMs),
+            reported,
+          ],
+          [
+            t("Prompt evaluation tokens"),
+            formatCount(generation.promptEvaluated),
+            reported,
+          ],
+          [
+            t("Timing cache tokens"),
+            formatCount(generation.cacheTokens),
+            reported,
+          ],
+        ]
+      : []),
     [
       t("API cost (USD)"),
       costText,
-      cost?.source === "estimated" ? t("Catalog estimate") : reported,
+      local
+        ? undefined
+        : cost?.source === "estimated"
+          ? t("Catalog estimate")
+          : reported,
     ],
     [t("Reasoning effort"), telemetry?.reasoningEffort || missing, reported],
     [t("Finish reason"), telemetry?.finishReason || missing, reported],

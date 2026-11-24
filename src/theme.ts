@@ -2,12 +2,15 @@ import type { Settings } from "./types";
 
 export const systemThemeQuery = "(prefers-color-scheme: dark)";
 
+export const resolveTheme = (theme: Settings["theme"], dark: boolean) =>
+  theme === "system" ? (dark ? "dark" : "light") : theme;
+
 export function applyTheme(
   theme: Settings["theme"],
   dark = matchMedia(systemThemeQuery).matches,
 ) {
   const root = document.documentElement;
-  root.dataset.theme = theme === "system" ? (dark ? "dark" : "light") : theme;
+  root.dataset.theme = resolveTheme(theme, dark);
   const chrome = document.querySelector<HTMLMetaElement>(
     'meta[name="theme-color"]',
   );

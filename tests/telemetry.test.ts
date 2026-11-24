@@ -7,7 +7,7 @@ import {
   responseTps,
   validResponseTelemetry,
 } from "../src/response-telemetry";
-import { buildRequest } from "../src/providers";
+import { buildRequest, parseEventStream } from "../src/providers";
 import { validBackup } from "../src/data-contracts";
 import { defaultSettings } from "../src/types";
 import type { Message } from "../src/types";
@@ -119,9 +119,9 @@ describe("response telemetry normalization", () => {
     expect(buildRequest(target.openrouter, messages).body).toMatchObject({
       usage: { include: true },
     });
-    expect(buildRequest(target.lmstudio, messages).body).not.toHaveProperty(
-      "stream_options",
-    );
+    expect(buildRequest(target.lmstudio, messages).body).toMatchObject({
+      stream_options: { include_usage: true },
+    });
     expect(buildRequest(target.gemini, messages).body).not.toHaveProperty(
       "usage",
     );
@@ -135,6 +135,64 @@ describe("response telemetry normalization", () => {
 });
 
 describe("response timing and pricing", () => {
+  it("replays the supplied LM Studio capture and pairs predicted_n with predicted_ms", async () => {
+    // Subset of the user-provided real events; request ID and most deltas are omitted.
+    const events = `data: {"model":"inkling-2-mini-uncensored","choices":[{"delta":{"role":"assistant","content":null}}]}
+
+data: {"model":"inkling-2-mini-uncensored","choices":[{"delta":{"reasoning_content":"The"}}]}
+
+data: {"model":"inkling-2-mini-uncensored","choices":[{"delta":{"content":"Hey"}}]}
+
+data: {"model":"inkling-2-mini-uncensored","choices":[{"finish_reason":"stop","index":0,"delta":{}}],"timings":{"cache_n":12,"prompt_n":29,"prompt_ms":801.614,"prompt_per_token_ms":27.64186206896552,"prompt_per_second":36.177012876521616,"predicted_n":81,"predicted_ms":4467.812,"predicted_per_token_ms":55.84765,"predicted_per_second":17.90585637891657}}
+
+data: [DONE]\n\n`;
+    const tracker = createResponseTracker(
+      responseIdentity(defaultSettings.providers.lmstudio),
+    );
+    let done = false;
+    await parseEventStream(
+      new Response(events).body!,
+      (data, time) => {
+        tracker.receive(
+          normalizeResponseSample("lmstudio", JSON.parse(data)),
+          time,
+        );
+      },
+      () => {
+        done = true;
+      },
+    );
+    const telemetry = tracker.snapshot();
+    expect(done).toBe(true);
+    expect(telemetry.generation).toEqual({
+      tokens: 81,
+      durationMs: 4467.812,
+      promptEvaluated: 29,
+      cacheTokens: 12,
+    });
+    expect(telemetry.usage?.total).toBeUndefined();
+    expect(telemetry.finishReason).toBe("stop");
+    expect(responseTps(telemetry)).toBeCloseTo(18.1297, 3);
+    tracker.receive(
+      normalizeResponseSample("lmstudio", {
+        choices: [],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 80,
+          total_tokens: 120,
+          prompt_tokens_details: { cached_tokens: 0 },
+        },
+      }),
+    );
+    expect(tracker.snapshot().usage).toMatchObject({
+      input: 40,
+      output: 80,
+      total: 120,
+      cached: 0,
+    });
+    expect(responseTps(tracker.snapshot())).toBe(responseTps(telemetry));
+  });
+
   it("uses a monotonic clock, measures text separately, and computes TPS only from usage", () => {
     let now = 100;
     const tracker = createResponseTracker(
@@ -173,6 +231,28 @@ describe("response timing and pricing", () => {
       finishReason: "stop",
     });
     expect(responseTps(final)).toBe(400);
+  });
+
+  it("does not treat missing reasoning counts as zero when computing Gemini throughput", () => {
+    const arrival = {
+      provider: "gemini" as const,
+      model: "gemini",
+      ttftMs: 100,
+      lastGeneratedMs: 1100,
+    };
+    expect(responseTps({ ...arrival, usage: { output: 10 } })).toBeUndefined();
+    expect(
+      responseTps({ ...arrival, usage: { output: 10, reasoning: 0 } }),
+    ).toBe(10);
+    expect(
+      responseTps({ ...arrival, usage: { input: 20, output: 10, total: 30 } }),
+    ).toBe(10);
+    expect(
+      responseTps({ ...arrival, usage: { output: 10, reasoning: 12 } }),
+    ).toBe(22);
+    expect(
+      responseTps({ ...arrival, usage: { output: 0, reasoning: 0 } }),
+    ).toBe(0);
   });
 
   it("estimates only compatible catalog rates and prefers a reported zero cost", () => {

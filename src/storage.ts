@@ -4,6 +4,30 @@ const DB = "luma-chat";
 const VERSION = 1;
 const ACTIVE_KEY = "activeConversation";
 let database: Promise<IDBDatabase> | undefined;
+let writeStatus = {
+  pending: 0,
+  revision: 0,
+  lastOutcome: "none" as "none" | "committed" | "failed",
+};
+const listeners = new Set<() => void>();
+function updateStatus(next: Partial<typeof writeStatus>) {
+  writeStatus = { ...writeStatus, ...next };
+  for (const listener of listeners) listener();
+}
+async function trackWrite(action: () => Promise<void>) {
+  updateStatus({ pending: writeStatus.pending + 1 });
+  let lastOutcome: typeof writeStatus.lastOutcome = "failed";
+  try {
+    await action();
+    lastOutcome = "committed";
+  } finally {
+    updateStatus({
+      pending: writeStatus.pending - 1,
+      revision: writeStatus.revision + 1,
+      lastOutcome,
+    });
+  }
+}
 
 export class StorageBlockedError extends Error {}
 
@@ -109,23 +133,49 @@ async function restore(signal: AbortSignal, onDatabaseReady: () => void) {
   });
 }
 
-async function write(
-  store: string,
-  action: (s: IDBObjectStore) => void,
-): Promise<void> {
+function write(store: string, action: (s: IDBObjectStore) => void) {
+  return trackWrite(async () => {
+    const db = await open();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(store, "readwrite");
+      action(tx.objectStore(store));
+      tx.oncomplete = () => resolve();
+      tx.onabort = () =>
+        reject(tx.error ?? new Error("Storage transaction aborted"));
+    });
+  });
+}
+
+async function inspectRepository() {
   const db = await open();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    action(tx.objectStore(store));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () =>
-      reject(tx.error || new Error("Storage transaction aborted"));
+  return new Promise<{
+    name: string;
+    version: number;
+    conversationCount: number;
+  }>((resolve, reject) => {
+    const transaction = db.transaction("conversations", "readonly");
+    const count = transaction.objectStore("conversations").count();
+    transaction.oncomplete = () =>
+      resolve({
+        name: db.name,
+        version: db.version,
+        conversationCount: count.result,
+      });
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error("Storage inspection aborted"));
   });
 }
 
 export const storage = {
   restore,
+  inspectRepository,
+  getWriteStatus: () => writeStatus,
+  subscribeWrites(listener: () => void) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
   saveConversation: (value: Conversation) =>
     write("conversations", (s) => {
       s.put(value);
@@ -143,16 +193,16 @@ export const storage = {
       if (id) s.put(id, ACTIVE_KEY);
       else s.delete(ACTIVE_KEY);
     }),
-  clear: async () => {
-    const db = await open();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(["conversations", "settings"], "readwrite");
-      tx.objectStore("conversations").clear();
-      tx.objectStore("settings").clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () =>
-        reject(tx.error || new Error("Storage transaction aborted"));
-    });
-  },
+  clear: () =>
+    trackWrite(async () => {
+      const db = await open();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(["conversations", "settings"], "readwrite");
+        tx.objectStore("conversations").clear();
+        tx.objectStore("settings").clear();
+        tx.oncomplete = () => resolve();
+        tx.onabort = () =>
+          reject(tx.error || new Error("Storage transaction aborted"));
+      });
+    }),
 };

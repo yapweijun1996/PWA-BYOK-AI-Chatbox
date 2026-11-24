@@ -8,6 +8,12 @@ export type ResponseUsage = {
   reasoning?: number;
   cached?: number;
 };
+export type GenerationTimings = Readonly<{
+  tokens: number;
+  durationMs: number;
+  promptEvaluated?: number;
+  cacheTokens?: number;
+}>;
 export type ResponseCost = { usd: number; source: "reported" | "estimated" };
 export type ResponseTelemetry = {
   provider: ProviderId;
@@ -18,6 +24,7 @@ export type ResponseTelemetry = {
   ttfvMs?: number;
   lastGeneratedMs?: number;
   usage?: ResponseUsage;
+  generation?: GenerationTimings;
   cost?: ResponseCost;
   reasoningEffort?: string;
   finishReason?: string;
@@ -26,6 +33,7 @@ export type ResponseSample = {
   generated?: boolean;
   servedModel?: string;
   usage?: ResponseUsage;
+  generation?: GenerationTimings;
   costUsd?: number;
   reasoningEffort?: string;
   finishReason?: string;
@@ -158,6 +166,10 @@ export function createResponseTracker(
           }
         }
       }
+      if (sample.generation) {
+        current.generation = { ...sample.generation };
+        changed = true;
+      }
       if (sample.costUsd !== undefined && reportedCost !== sample.costUsd) {
         reportedCost = sample.costUsd;
         changed = true;
@@ -189,17 +201,36 @@ export function createResponseTracker(
   };
 }
 
-export function responseTps(telemetry?: ResponseTelemetry): number | undefined {
+export function responseThroughput(telemetry?: ResponseTelemetry) {
+  const generation = telemetry?.generation;
+  if (generation && generation.durationMs > 0) {
+    const value = asAmount((generation.tokens * 1000) / generation.durationMs);
+    if (value !== undefined) return { value, source: "provider" as const };
+  }
+  const usage = telemetry?.usage;
   if (
     telemetry?.ttftMs === undefined ||
     telemetry.lastGeneratedMs === undefined ||
-    telemetry.usage?.output === undefined
+    usage?.output === undefined
   )
     return;
+  // Gemini's completion count excludes thoughts; pair the full stream span with both counts.
+  let tokens = usage.output;
+  if (telemetry.provider === "gemini") {
+    if (usage.reasoning !== undefined) tokens += usage.reasoning;
+    else if (
+      usage.input === undefined ||
+      usage.total !== usage.input + usage.output
+    )
+      return;
+  }
   const span = telemetry.lastGeneratedMs - telemetry.ttftMs;
-  return span > 0
-    ? asAmount((telemetry.usage.output * 1000) / span)
-    : undefined;
+  const value = span > 0 ? asAmount((tokens * 1000) / span) : undefined;
+  if (value !== undefined) return { value, source: "client" as const };
+}
+
+export function responseTps(telemetry?: ResponseTelemetry): number | undefined {
+  return responseThroughput(telemetry)?.value;
 }
 
 export function validResponseTelemetry(
@@ -230,6 +261,21 @@ export function validResponseTelemetry(
       !usage ||
       usageKeys.some(
         (key) => usage[key] !== undefined && asCount(usage[key]) === undefined,
+      )
+    )
+      return false;
+  }
+  if (data.generation !== undefined) {
+    const generation = asRecord(data.generation);
+    if (
+      data.provider !== "lmstudio" ||
+      !generation ||
+      asCount(generation.tokens) === undefined ||
+      asAmount(generation.durationMs) === undefined ||
+      ["promptEvaluated", "cacheTokens"].some(
+        (key) =>
+          generation[key] !== undefined &&
+          asCount(generation[key]) === undefined,
       )
     )
       return false;

@@ -47,7 +47,21 @@ export function normalizeResponseSample(
     ),
     cached: asCount(asRecord(stats.prompt_tokens_details)?.cached_tokens),
   };
+  const timings = provider === "lmstudio" ? asRecord(chunk.timings) : undefined;
+  const tokens = asCount(timings?.predicted_n);
+  const durationMs = asAmount(timings?.predicted_ms);
+  // Keep runtime timings separate from standard usage: prompt_n need not include cached tokens.
+  const generation =
+    tokens !== undefined && durationMs !== undefined
+      ? {
+          tokens,
+          durationMs,
+          promptEvaluated: asCount(timings?.prompt_n),
+          cacheTokens: asCount(timings?.cache_n),
+        }
+      : undefined;
   return {
+    generation,
     generated:
       hasText(delta?.content) ||
       hasText(delta?.reasoning_content) ||

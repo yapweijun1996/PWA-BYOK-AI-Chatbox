@@ -17,19 +17,47 @@ function waitForInstall(worker: ServiceWorker): Promise<boolean> {
   });
 }
 
+export type WorkerStatus =
+  | "unavailable"
+  | "unregistered"
+  | "registered"
+  | "installing"
+  | "waiting"
+  | "controlled";
+const supported = () => import.meta.env.PROD && "serviceWorker" in navigator;
+
 // Let waiting workers activate naturally so open drafts and replies are safe.
 export function useAppUpdate(notify: (message: string) => void) {
   const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<WorkerStatus>(() =>
+    supported() ? "unregistered" : "unavailable",
+  );
+  const [controlled, setControlled] = useState(
+    () => supported() && Boolean(navigator.serviceWorker.controller),
+  );
   const inFlight = useRef(false);
 
   useEffect(() => {
-    if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+    if (!supported()) return;
     let disposed = false;
     let registration: ServiceWorkerRegistration | undefined;
     let installing: ServiceWorker | null = null;
     const announceReady = () => {
+      if (disposed) return;
+      const hasController = Boolean(navigator.serviceWorker.controller);
+      setControlled(hasController);
+      setStatus(
+        registration?.waiting
+          ? "waiting"
+          : registration?.installing
+            ? "installing"
+            : hasController
+              ? "controlled"
+              : registration
+                ? "registered"
+                : "unregistered",
+      );
       if (
-        !disposed &&
         !inFlight.current &&
         registration?.waiting &&
         navigator.serviceWorker.controller
@@ -46,7 +74,11 @@ export function useAppUpdate(notify: (message: string) => void) {
       const found = await navigator.serviceWorker
         .getRegistration()
         .catch(() => undefined);
-      if (disposed || !found || found === registration) return;
+      if (disposed) return;
+      if (!found || found === registration) {
+        announceReady();
+        return;
+      }
       registration?.removeEventListener("updatefound", onUpdate);
       registration = found;
       found.addEventListener("updatefound", onUpdate);
@@ -55,11 +87,19 @@ export function useAppUpdate(notify: (message: string) => void) {
     const cancel = afterStartupIdle(() => {
       void attach();
       window.addEventListener("luma:worker-registered", attach);
+      navigator.serviceWorker.addEventListener(
+        "controllerchange",
+        announceReady,
+      );
     });
     return () => {
       disposed = true;
       cancel();
       window.removeEventListener("luma:worker-registered", attach);
+      navigator.serviceWorker.removeEventListener(
+        "controllerchange",
+        announceReady,
+      );
       registration?.removeEventListener("updatefound", onUpdate);
       installing?.removeEventListener("statechange", announceReady);
     };
@@ -67,7 +107,7 @@ export function useAppUpdate(notify: (message: string) => void) {
 
   const check = async () => {
     if (inFlight.current) return;
-    if (!import.meta.env.PROD || !("serviceWorker" in navigator)) {
+    if (!supported()) {
       notify("Update checks are unavailable in this build or browser.");
       return;
     }
@@ -103,5 +143,5 @@ export function useAppUpdate(notify: (message: string) => void) {
     }
   };
 
-  return { checking, check };
+  return { checking, check, status, controlled };
 }

@@ -49,11 +49,19 @@ Chat and reasoning bubbles render CommonMark and GitHub Flavored Markdown, inclu
 
 During streaming, completed blocks stay rendered and the still-changing trailing block appears as literal text. The final pass renders the complete Markdown; IndexedDB and backups keep the original source. New content follows the conversation bottom only while you are there. Raw HTML is ignored, unsafe links are disabled, and images are fetched only if you explicitly load them. External images still require their host to be reachable. KaTeX, syntax grammars, CSS and WOFF2 fonts are served locally and precached with the production PWA.
 
+## Workspace Inspector and configuration ownership
+
+Open **Workspace Inspector** from the top bar. Its read-only Runtime, Context, Configuration, Telemetry, Storage, and PWA tabs show value provenance, the active request, a selectable historical reply, and actual database and service-worker status. The JSON export is a diagnostic summary, not a backup: it omits credentials, headers, endpoint addresses, model identifiers, conversation IDs, raw messages, reasoning, drafts, and attachments. Connection targets are classified by transport and loopback/network instead of exporting the URL. Browser storage quota and usage are origin-wide estimates.
+
+IndexedDB is the persistent repository. Startup restores a single workspace session projection, and UI controls call shared actions against it. Uncommitted drafts and streamed checkpoints stay in the session until written; the inspector distinguishes in-memory state from persisted records. Credential inputs are transient, session keys are separate from preferences, and encrypted vault storage is never inspected or exported by the inspector. Theme hints are only for first paint; browser and service-worker status come from their platform owners.
+
+Model configuration resolves **request override → conversation override → global profile → app default**. In AI providers, use **Use this model for the current chat** to make model and capability changes in the composer conversation-specific, or **Use global model settings** to inherit again. Transport endpoints and credentials still belong to the provider, not the conversation. **Retry with original model** reuses the previous request’s model/capability selection with the provider’s current endpoint and credential. Each new reply stores the resolved request facts separately from Markdown and telemetry; older replies are not backfilled. Global values identical to defaults without a model profile are presented as default values.
+
 ## Response telemetry
 
-Each assistant reply has a compact telemetry footer and an expandable **Response inspector**. Client timing begins when the app starts the provider request, after saving the message: TTFT measures arrival of the first generated text or reasoning delta, TTFV the first nonblank answer text, and duration through completion or interruption. TPS estimates client-observed throughput by dividing reported output tokens by the interval between the first and last generated deltas. It does not count SSE chunks or show a rate from a single arrival. Gemini reports answer and reasoning tokens separately, so its output count excludes reasoning.
+Each assistant reply has a compact telemetry footer and an expandable **Response inspector**. Client timing begins when the app starts the provider request, after saving the message: TTFT measures arrival of the first generated text or reasoning delta, TTFV the first nonblank answer text, and duration through completion or interruption. LM Studio and OpenAI request streaming usage, including a terminal event with usage but no choices. For LM Studio, TPS prefers the server’s `timings.predicted_n ÷ timings.predicted_ms × 1000`; it does not mix that duration with standard usage counts. Without server generation timings, a browser estimate uses reported generated tokens and the first-to-last generated arrival interval. It does not count SSE chunks or show a browser rate from a single arrival. Gemini reports answer and reasoning tokens separately; the browser throughput covers both when reported. LM Studio is labeled **Local inference — no API charge**.
 
-Usage and finish reasons come from the response stream when provided. OpenRouter's reported cost takes precedence over any estimate and may exclude charges from a separate upstream account. A text-only OpenRouter request can be estimated from compatible catalog rates when available; estimates are not billing records. Unavailable metrics, including most reasoning-effort values and those on older replies, show `N/A`. Telemetry is saved locally with the reply and included in backups but is never sent in later chat requests.
+Usage and finish reasons come from the response stream when provided. OpenRouter's reported cost takes precedence over any estimate and may exclude charges from a separate upstream account. A text-only OpenRouter request can be estimated from compatible catalog rates when available; estimates are not billing records. Unavailable metrics, including most reasoning-effort values and those on older replies, show `N/A` rather than zero. Telemetry is saved locally with the reply and included in backups but is never sent in later chat requests. **Copy** copies just the raw reply Markdown. A native selection across a whole bubble or multiple bubbles also copies only Markdown; partial text selections inside one answer or expanded reasoning remain ordinary browser selections.
 
 ## Data and offline behavior
 
@@ -78,7 +86,17 @@ npx --yes --package style-dictionary@5.5.3 style-dictionary build --config token
 
 Commit the generated CSS in `src/generated/` alongside the token sources. CI rebuilds it and fails if the output differs. If the background, text, or muted colors change, update the inline first-paint palette in `index.html` to match. Translations are maintained in `src/i18n.ts`; chat and model content are not translated.
 
-The browser tests use an installed Chrome or Chromium and mocked LM Studio and OpenRouter endpoints; set `CHROME_PATH` when the executable is not in a standard location. They do not call a real model or cloud API. The reasoning test checks that reasoning appears during streaming and survives reload. Actual phone-to-LM-Studio connectivity and provider behavior depend on the user's environment and require separate device testing.
+The browser tests use an installed Chrome or Chromium and mocked LM Studio and OpenRouter endpoints; set `CHROME_PATH` when the executable is not in a standard location. They do not call a real model or cloud API. The reasoning test checks live rendering, usage-only SSE handling, raw Markdown copying, inspector export, and persistence. The LM Studio timing normalization also replays a subset of a real captured SSE response; replay is not a live provider check.
+
+For a live check, start LM Studio on loopback with a chat model loaded, then run the opt-in test (PowerShell):
+
+```powershell
+$env:LMS_LIVE_URL = 'http://127.0.0.1:1234/v1'
+npm.cmd test -- tests/lmstudio-live.test.ts
+Remove-Item Env:LMS_LIVE_URL
+```
+
+Set `LMS_LIVE_MODEL` to choose a model; supply `LMS_LIVE_TOKEN` only if the server requires it. The test uses the app’s real request builder and SSE parser, sends a fixed prompt (not local history), and prints only numeric telemetry and its source. Browser CORS, loopback permission, and phone-to-server connectivity still require browser/device verification.
 
 ## GitHub Pages deployment
 

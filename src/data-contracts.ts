@@ -12,6 +12,7 @@ import {
   validProject,
 } from "./workspace";
 import { validResponseTelemetry } from "./response-telemetry";
+import { validOverrides, validRequestSnapshot } from "./request-config";
 
 export function mergeSettings(input: Partial<Settings> | undefined): Settings {
   const provider =
@@ -68,9 +69,7 @@ function validAttachment(a: Attachment): boolean {
         /^data:image\/(png|jpeg|gif|webp);base64,/i.test(a.data)))
   );
 }
-export function validBackup(
-  value: unknown,
-): value is {
+export function validBackup(value: unknown): value is {
   version: number;
   conversations: Conversation[];
   projects?: WorkspaceProject[];
@@ -95,6 +94,7 @@ export function validBackup(
       typeof c.id === "string" &&
       typeof c.title === "string" &&
       typeof c.draft === "string" &&
+      (c.configOverride === undefined || validOverrides(c.configOverride)) &&
       (c.pinned === undefined || typeof c.pinned === "boolean") &&
       (c.archived === undefined || typeof c.archived === "boolean") &&
       (c.projectId === undefined ||
@@ -114,6 +114,8 @@ export function validBackup(
           typeof m.content !== "string" ||
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
           (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
+          (m.request !== undefined &&
+            (m.role !== "assistant" || !validRequestSnapshot(m.request))) ||
           !Number.isFinite(m.createdAt)
         )
           return false;

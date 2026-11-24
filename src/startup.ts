@@ -1,4 +1,5 @@
 import { mergeSettings } from "./data-contracts";
+import { resolveConfig } from "./request-config";
 import { resolveLanguage, translate } from "./i18n";
 import { storage, StorageBlockedError } from "./storage";
 import { applyTheme, rememberTheme } from "./theme";
@@ -104,7 +105,8 @@ function verify(host: HTMLElement, initial: InitialAppState) {
   const composer =
     app?.querySelector<HTMLTextAreaElement>(".composer textarea");
   const activeChat = initial.threads.find(({ id }) => id === initial.active);
-  const model = initial.settings.providers[initial.settings.provider].model;
+  const model = resolveConfig(initial.settings, activeChat?.configOverride)
+    .config.model;
   if (
     !app ||
     conversation?.dataset.conversationId !== initial.active ||

@@ -36,7 +36,10 @@ const server = createServer((req, res) => {
         {
           model: "served-reasoning-model",
           choices: [
-            { delta: { content: "The final answer." }, finish_reason: "stop" },
+            {
+              delta: { content: "**The final answer.**" },
+              finish_reason: "stop",
+            },
           ],
         },
         {
@@ -68,6 +71,16 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.copiedMessage = text;
+        },
+      },
+    }),
+  );
   await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await page.getByRole("button", { name: "Configure a provider" }).click();
@@ -111,6 +124,22 @@ try {
       )?.nextElementSibling?.textContent !== last,
     liveDuration,
   );
+  const inspectorButton = page.getByRole("button", {
+    name: "Workspace Inspector",
+  });
+  await inspectorButton.click();
+  const liveModal = page.getByRole("dialog", { name: "Workspace Inspector" });
+  await liveModal.getByText("streaming", { exact: true }).waitFor();
+  await liveModal.getByRole("tab", { name: "Configuration" }).click();
+  await liveModal.getByText("Active request snapshot").waitFor();
+  assert.ok(
+    await liveModal
+      .getByText("stream_options.include_usage", { exact: true })
+      .first()
+      .isVisible(),
+  );
+  await page.keyboard.press("Escape");
+  await liveModal.waitFor({ state: "hidden" });
   firstAnswer.resolve();
   await page.getByText("The final answer.").waitFor();
   await page.getByRole("button", { name: "Send message" }).waitFor();
@@ -125,7 +154,10 @@ try {
   assert.equal(await field("Cached tokens").innerText(), "0");
   assert.equal(await field("Finish reason").innerText(), "stop");
   assert.equal(await field("Reasoning effort").innerText(), "N/A");
-  assert.equal(await field("API cost (USD)").innerText(), "N/A");
+  assert.equal(
+    await field("API cost (USD)").innerText(),
+    "Local inference — no API charge",
+  );
   const completedDuration = await field("Total duration").innerText();
   await page.locator("details.reasoning summary").click();
   await page.getByText("Planning the answer.").waitFor();
@@ -142,11 +174,71 @@ try {
   await page.getByRole("button", { name: "Send message" }).click();
   await page.getByText("The final answer.").nth(1).waitFor();
   assert.equal(requests.length, 2);
+  assert.deepEqual(requests[0].stream_options, { include_usage: true });
+  assert.ok(!JSON.stringify(requests[1]).includes("capturedAt"));
   assert.equal(
     JSON.stringify(requests[1]).includes("Planning the answer."),
     false,
   );
   assert.ok(!JSON.stringify(requests[1]).includes("served-reasoning-model"));
+  const answer = page.locator(".message.assistant").first();
+  await answer.getByRole("button", { name: "Copy", exact: true }).click();
+  assert.equal(
+    await page.evaluate(() => window.copiedMessage),
+    "**The final answer.**",
+  );
+  await answer.evaluate((article) => {
+    document.activeElement.blur();
+    const range = document.createRange();
+    range.selectNodeContents(article);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    window.addEventListener(
+      "copy",
+      (event) => {
+        window.nativeMessageCopy = {
+          text: event.clipboardData.getData("text/plain"),
+          suppressed: event.defaultPrevented,
+        };
+      },
+      { once: true },
+    );
+  });
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+C" : "Control+C",
+  );
+  await page.waitForFunction(() => Boolean(window.nativeMessageCopy));
+  assert.deepEqual(
+    await page.evaluate(() => {
+      window.getSelection().removeAllRanges();
+      return window.nativeMessageCopy;
+    }),
+    {
+      text: "**The final answer.**",
+      suppressed: true,
+    },
+  );
+  const topModel = page.locator(".topbar .model-pill");
+  await topModel.click();
+  await page
+    .getByRole("button", { name: "Use this model for the current chat" })
+    .click();
+  await page.getByLabel("Model ID").fill("changed-global-profile");
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  assert.equal(await topModel.getAttribute("title"), "reasoning-model");
+  await page.reload();
+  assert.equal(await topModel.getAttribute("title"), "reasoning-model");
+  await topModel.click();
+  assert.equal(
+    await page.getByLabel("Model ID").inputValue(),
+    "changed-global-profile",
+  );
+  await page
+    .getByPlaceholder("Enter key for this session")
+    .fill("credential-export-test-marker");
+  await page.getByRole("button", { name: "Use key", exact: true }).click();
+  await page.getByRole("button", { name: "Back to chat" }).click();
   await page.setViewportSize({ width: 320, height: 650 });
   await page.emulateMedia({ colorScheme: "dark" });
   assert.ok(
@@ -154,9 +246,67 @@ try {
       (element) => element.scrollWidth <= element.clientWidth,
     ),
   );
+  const openInspector = page.getByRole("button", {
+    name: "Workspace Inspector",
+  });
+  await openInspector.click();
+  const modal = page.getByRole("dialog", { name: "Workspace Inspector" });
+  await modal.getByRole("tab", { name: "Runtime" }).waitFor();
+  const getTab = (name) => modal.getByRole("tab", { name, exact: true });
+  await getTab("Runtime").focus();
+  await page.keyboard.press("ArrowRight");
+  assert.equal(await getTab("Context").getAttribute("aria-selected"), "true");
+  await getTab("Configuration").click();
+  await modal.getByText("Historical request snapshot").waitFor();
+  assert.equal(
+    await modal.getByText("reasoning-model", { exact: true }).count(),
+    2,
+  );
+  await modal
+    .getByText("Conversation override", { exact: true })
+    .first()
+    .waitFor();
+  await modal.getByText("Available for session", { exact: true }).waitFor();
+  await getTab("Telemetry").click();
+  await modal.getByText("Local inference — no API charge").waitFor();
+  await getTab("Storage").click();
+  await modal.getByText("luma-chat", { exact: true }).waitFor();
+  await getTab("PWA").click();
+  await modal.getByText("Page controlled by worker").waitFor();
+  assert.equal(
+    await modal.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+    true,
+  );
+  const downloadEvent = page.waitForEvent("download");
+  await modal.getByRole("button", { name: "Export snapshot" }).click();
+  const download = await downloadEvent;
+  const reader = await download.createReadStream();
+  let exported = "";
+  for await (const chunk of reader) exported += chunk;
+  const sections = JSON.parse(exported).sections;
+  assert.equal(
+    sections.Configuration["effective.provider"].source,
+    "Conversation override",
+  );
+  assert.equal(sections.Configuration["historical.model"], undefined);
+  assert.equal(sections.Telemetry.cachedTokens.value, 0);
+  assert.equal(sections.Storage.savedCount.value, 1);
+  assert.doesNotMatch(
+    exported,
+    /credential-export-test-marker|reasoning-model|The final answer|Planning the answer|127\.0\.0\.1/,
+  );
+  await page.keyboard.press("Escape");
+  await modal.waitFor({ state: "hidden" });
+  assert.ok(
+    await openInspector.evaluate(
+      (element) => element === document.activeElement,
+    ),
+  );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: live reasoning, response telemetry, 320px inspector, and reasoning/telemetry persistence without request leakage",
+    "PASS: reasoning and trailing usage, raw message copy, effective and historical configuration after reload, six inspector tabs and sanitized export at 320px",
   );
 } finally {
   firstAnswer.resolve();

@@ -4,7 +4,7 @@ import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { normalizeResponseSample } from "./provider-telemetry";
 import type { ResponseSample } from "./response-telemetry";
-function baseUrl(config: ProviderConfig): string {
+export function providerBaseUrl(config: ProviderConfig): string {
   const endpoint =
     config.id === "lmstudio"
       ? config.endpoint
@@ -60,7 +60,7 @@ async function request(
         ? "loopback"
         : "local";
     }
-    response = await fetch(baseUrl(config) + path, options);
+    response = await fetch(providerBaseUrl(config) + path, options);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError")
       throw error;
@@ -99,7 +99,10 @@ export async function listModelOptions(
   return parseModelOptions(config.id, data);
 }
 
-export async function listModels(config: ProviderConfig, secret: string): Promise<string[]> {
+export async function listModels(
+  config: ProviderConfig,
+  secret: string,
+): Promise<string[]> {
   return (await listModelOptions(config, secret)).map(({ id }) => id);
 }
 function textAttachment(a: Attachment): string {
@@ -124,14 +127,21 @@ function openaiContent(m: Message): string | object[] {
       ]
     : text;
 }
+export const requestsStreamUsage = (id: ProviderConfig["id"]) =>
+  id === "openai" || id === "lmstudio";
+
+export function requestHistory(messages: readonly Message[]) {
+  return messages.filter(
+    (m) =>
+      m.role === "user" || (m.role === "assistant" && m.status === "complete"),
+  );
+}
+
 export function buildRequest(
   config: ProviderConfig,
   messages: Message[],
 ): { path: string; body: object } {
-  const completed = messages.filter(
-    (m) =>
-      m.role === "user" || (m.role === "assistant" && m.status === "complete"),
-  );
+  const completed = requestHistory(messages);
   if (config.id === "gemini")
     return {
       path: `/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`,
@@ -164,7 +174,7 @@ export function buildRequest(
     body: {
       model: config.model,
       stream: true,
-      ...(config.id === "openai"
+      ...(requestsStreamUsage(config.id)
         ? { stream_options: { include_usage: true } }
         : {}),
       ...(config.id === "openrouter" ? { usage: { include: true } } : {}),
