@@ -133,17 +133,24 @@ async function restore(signal: AbortSignal, onDatabaseReady: () => void) {
   });
 }
 
-function write(store: string, action: (s: IDBObjectStore) => void) {
+function writeTransaction(
+  stores: string | string[],
+  action: (tx: IDBTransaction) => void,
+) {
   return trackWrite(async () => {
     const db = await open();
     return new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(store, "readwrite");
-      action(tx.objectStore(store));
+      const tx = db.transaction(stores, "readwrite");
+      action(tx);
       tx.oncomplete = () => resolve();
       tx.onabort = () =>
         reject(tx.error ?? new Error("Storage transaction aborted"));
     });
   });
+}
+
+function write(store: string, action: (s: IDBObjectStore) => void) {
+  return writeTransaction(store, (tx) => action(tx.objectStore(store)));
 }
 
 async function inspectRepository() {
@@ -179,6 +186,11 @@ export const storage = {
   saveConversation: (value: Conversation) =>
     write("conversations", (s) => {
       s.put(value);
+    }),
+  createActiveConversation: (value: Conversation) =>
+    writeTransaction(["conversations", "settings"], (tx) => {
+      tx.objectStore("conversations").add(value);
+      tx.objectStore("settings").put(value.id, ACTIVE_KEY);
     }),
   removeConversation: (key: string) =>
     write("conversations", (s) => {

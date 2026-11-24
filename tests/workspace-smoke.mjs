@@ -112,6 +112,10 @@ try {
   );
   await page.keyboard.press("Enter");
   await search.waitFor({ state: "hidden" });
+  const activeReleaseNotes = folder
+    .getByRole("button", { name: "Release notes", exact: true })
+    .and(folder.locator('[aria-current="page"]'));
+  await activeReleaseNotes.waitFor();
   assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
 
   await actions("Release notes").click();
@@ -135,6 +139,7 @@ try {
   await folder
     .getByRole("button", { name: "Release notes", exact: true })
     .click();
+  await activeReleaseNotes.waitFor();
   assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
 
   const separator = page.getByRole("separator", { name: "Resize sidebar" });
@@ -258,13 +263,11 @@ try {
   await restored
     .getByRole("button", { name: "Local data", exact: true })
     .click();
-  await restored
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "workspace.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(backup)),
-    });
+  await restored.locator('input[type="file"]').setInputFiles({
+    name: "workspace.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
   restored.once("dialog", (request) => request.dismiss());
   await restored
     .getByRole("button", { name: "Import and skip conflicts" })
@@ -275,7 +278,14 @@ try {
     name: "Release project",
     exact: true,
   });
-  await restoredFolder.getByRole("button", { name: "Release notes", exact: true }).click();
+  const restoredReleaseNotes = restoredFolder.getByRole("button", {
+    name: "Release notes",
+    exact: true,
+  });
+  await restoredReleaseNotes.click();
+  await restoredReleaseNotes
+    .and(restoredFolder.locator('[aria-current="page"]'))
+    .waitFor();
   assert.equal(
     await restored
       .getByRole("textbox", { name: "Message", exact: true })

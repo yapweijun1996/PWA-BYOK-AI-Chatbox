@@ -191,20 +191,69 @@ try {
     1,
   );
   await page.getByRole("button", { name: "New chat", exact: true }).click();
+  // Keep the outgoing draft transaction alive until the test sees navigation blocked.
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    const gate = (window.draftSaveGate = {
+      started: false,
+      released: false,
+      committed: false,
+    });
+    IDBObjectStore.prototype.put = function (value, ...rest) {
+      const request = original.call(this, value, ...rest);
+      if (
+        this.name === "conversations" &&
+        value?.draft === "Other conversation draft"
+      ) {
+        IDBObjectStore.prototype.put = original;
+        gate.started = true;
+        const hold = () => {
+          if (!gate.released) this.get(value.id).onsuccess = hold;
+        };
+        this.transaction.addEventListener(
+          "complete",
+          () => {
+            gate.committed = true;
+          },
+          { once: true },
+        );
+        hold();
+      }
+      return request;
+    };
+  });
   await input.fill("Other conversation draft");
-  await page
-    .getByRole("button", { name: "Composer first request", exact: true })
-    .click();
+  const history = page.locator(".history");
+  const firstChat = history.getByRole("button", {
+    name: "Composer first request",
+    exact: true,
+  });
+  const otherChat = history.getByRole("button", {
+    name: "New chat",
+    exact: true,
+  });
+  const selected = (name) =>
+    history
+      .getByRole("button", { name, exact: true })
+      .and(history.locator('[aria-current="page"]'))
+      .waitFor();
+  await firstChat.click();
+  await page.waitForFunction(() => window.draftSaveGate.started);
+  assert.equal(await input.inputValue(), "Other conversation draft");
+  assert.equal(await input.isDisabled(), true);
+  assert.equal(await firstChat.getAttribute("aria-current"), null);
+  await page.evaluate(() => {
+    window.draftSaveGate.released = true;
+  });
+  await selected("Composer first request");
+  assert.equal(await page.evaluate(() => window.draftSaveGate.committed), true);
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   await page.reload();
-  await page
-    .locator(".history")
-    .getByRole("button", { name: "New chat", exact: true })
-    .click();
+  await otherChat.click();
+  await selected("New chat");
   assert.equal(await input.inputValue(), "Other conversation draft");
-  await page
-    .getByRole("button", { name: "Composer first request", exact: true })
-    .click();
+  await firstChat.click();
+  await selected("Composer first request");
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   assert.equal(await stoppedFooter.innerText(), stoppedMetrics);
 

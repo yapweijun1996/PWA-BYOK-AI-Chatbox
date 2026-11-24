@@ -13,12 +13,18 @@ export type ActiveReply = Readonly<{
 type State = InitialAppState & {
   reply: ActiveReply | null;
   processingFiles: boolean;
+  navigating: boolean;
 };
 
 // The session is a projection of IndexedDB plus uncommitted drafts and in-flight work.
 // Input handlers and React subscribe to the same snapshot; no separate mutable chat mirror.
 export function createWorkspaceSession(initial: InitialAppState) {
-  let current: State = { ...initial, reply: null, processingFiles: false };
+  let current: State = {
+    ...initial,
+    reply: null,
+    processingFiles: false,
+    navigating: false,
+  };
   const listeners = new Set<() => void>();
   return {
     get: () => current,

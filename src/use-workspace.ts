@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { version } from "../package.json";
 import type { SearchMode } from "./components/WorkspaceSearch";
@@ -36,9 +37,10 @@ import { storage } from "./storage";
 import type { InitialAppState } from "./startup";
 import {
   applyTheme,
+  readSystemDark,
   rememberTheme,
   resolveTheme,
-  systemThemeQuery,
+  subscribeSystemDark,
 } from "./theme";
 import { mergeSettings, recoverMessage, validBackup } from "./data-contracts";
 import { runToolTurn } from "./tool-turn";
@@ -90,6 +92,7 @@ export function useWorkspace({
     settings,
     reply: activeReply,
     processingFiles,
+    navigating,
   } = state;
   const phase: ReplyPhase = activeReply?.phase ?? "idle";
   const [systemLanguage, setSystemLanguage] = useState(
@@ -140,7 +143,7 @@ export function useWorkspace({
     projects?: WorkspaceProject[];
   } | null>(null);
   const draftTimers = useRef(new Map<string, number>());
-  const writes = useRef<Record<string, Promise<void>>>({});
+  const writes = useRef<Partial<Record<string, Promise<boolean>>>>({});
   const messagesContent = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
   const lastScrollTop = useRef(0);
@@ -162,13 +165,16 @@ export function useWorkspace({
       }
       const previous = writes.current[chat.id] || Promise.resolve();
       const write = previous
-        .catch(() => {})
-        .then(() => storage.saveConversation(chat));
-      writes.current[chat.id] = write.catch(report);
-      return write.then(
-        () => true,
-        () => false,
-      );
+        .then(() => storage.saveConversation(chat))
+        .then(
+          () => true,
+          (error) => {
+            report(error);
+            return false;
+          },
+        );
+      writes.current[chat.id] = write;
+      return write;
     },
     [report],
   );
@@ -192,7 +198,7 @@ export function useWorkspace({
       window.clearTimeout(timer);
       draftTimers.current.delete(chatId);
       const latest = session.get().threads.find((chat) => chat.id === chatId);
-      if (latest) void queueSave(latest);
+      return latest && queueSave(latest);
     },
     [queueSave, session],
   );
@@ -211,17 +217,8 @@ export function useWorkspace({
       flushDrafts();
     };
   }, [flushDrafts]);
-  const [systemDark, setSystemDark] = useState(
-    () => matchMedia(systemThemeQuery).matches,
-  );
+  const systemDark = useSyncExternalStore(subscribeSystemDark, readSystemDark);
   const effectiveTheme = resolveTheme(settings.theme, systemDark);
-  useLayoutEffect(() => {
-    const media = matchMedia(systemThemeQuery);
-    const change = () => setSystemDark(media.matches);
-    change();
-    media.addEventListener("change", change);
-    return () => media.removeEventListener("change", change);
-  }, []);
   useLayoutEffect(() => applyTheme(effectiveTheme), [effectiveTheme]);
   const settingsWrite = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
@@ -405,7 +402,7 @@ export function useWorkspace({
   const composerBlocked =
     sendBlocked || (hasDraft && !isConfigured ? setupNotice : undefined);
   const editDraft = (draft: string) => {
-    if (!chat || phase === "saving") return;
+    if (!chat || phase === "saving" || session.get().navigating) return;
     const chatId = chat.id;
     void updateChat(chatId, (current) => ({ ...current, draft }), false);
     const pending = draftTimers.current.get(chatId);
@@ -415,27 +412,51 @@ export function useWorkspace({
       window.setTimeout(() => flushDraft(chatId), 350),
     );
   };
-  const create = () => {
-    flushDraft(active);
-    followReply.current = true;
-    const next = emptyChat();
-    session.update((current) => ({ threads: [next, ...current.threads] }));
-    queueSave(next);
-    selectActive(next.id);
-    setView("chat");
-    if (mobileDrawer) closeDrawer();
+  const navigateChat = async (destination?: string) => {
+    const current = session.get();
+    if (current.navigating) return;
+    session.update({ navigating: true });
+    try {
+      // The selection must not become visible before its outgoing draft is durable.
+      const pending =
+        flushDraft(current.active) ?? writes.current[current.active];
+      if (pending && !(await pending)) {
+        const unsaved = selectActiveChat(session.get());
+        if (
+          !unsaved ||
+          unsaved.id !== current.active ||
+          !(await queueSave(unsaved))
+        )
+          return;
+      }
+      const created = destination === undefined ? emptyChat() : undefined;
+      const target =
+        created ?? session.get().threads.find(({ id }) => id === destination);
+      if (!target) return;
+      const saved = await queuePreferenceWrite(() =>
+        created
+          ? storage.createActiveConversation(created)
+          : storage.saveActiveConversation(target.id),
+      );
+      if (!saved) return;
+      followReply.current = true;
+      session.update((latest) => ({
+        ...(created ? { threads: [created, ...latest.threads] } : {}),
+        active: target.id,
+      }));
+      setView("chat");
+      if (mobileDrawer) closeDrawer();
+    } finally {
+      session.update({ navigating: false });
+    }
   };
-  const choose = (chatId: string) => {
-    flushDraft(active);
-    followReply.current = true;
-    selectActive(chatId);
-    setView("chat");
-    if (mobileDrawer) closeDrawer();
-  };
+  const create = () => void navigateChat();
+  const choose = (chatId: string) => void navigateChat(chatId);
   const remove = async (chatId: string) => {
     if (
       session.get().reply ||
       session.get().processingFiles ||
+      session.get().navigating ||
       !confirm(t("Delete this conversation and its saved attachments?"))
     )
       return;
@@ -452,6 +473,7 @@ export function useWorkspace({
     }
   };
   const organizeChat = (chatId: string, patch: ChatOrganization) => {
+    if (session.get().navigating) return;
     void updateChat(chatId, (current) => ({ ...current, ...patch }));
     if (patch.archived && active === chatId) {
       followReply.current = true;
@@ -554,6 +576,7 @@ export function useWorkspace({
     if (
       !selected.length ||
       !chat ||
+      session.get().navigating ||
       session.get().reply ||
       session.get().processingFiles
     )
@@ -740,7 +763,8 @@ export function useWorkspace({
     }
   };
   const send = async () => {
-    if (session.get().reply || session.get().processingFiles) return;
+    const current = session.get();
+    if (current.reply || current.processingFiles || current.navigating) return;
     if (!chat) {
       setNotice("Start a new chat first.");
       return;
@@ -806,7 +830,9 @@ export function useWorkspace({
     await runReply(chatId, history, prepared, abort);
   };
   const retry = async (original?: RequestSnapshot) => {
-    if (!chat || session.get().reply || session.get().processingFiles) return;
+    const current = session.get();
+    if (!chat || current.reply || current.processingFiles || current.navigating)
+      return;
     const resolved = original
       ? resolveConfig(
           settings,
@@ -974,7 +1000,13 @@ export function useWorkspace({
     if (importInput.current) importInput.current.value = "";
   };
   const finishImport = async (overwrite: boolean) => {
-    if (!importPreview || session.get().reply || session.get().processingFiles)
+    const current = session.get();
+    if (
+      !importPreview ||
+      current.reply ||
+      current.processingFiles ||
+      current.navigating
+    )
       return;
     const {
       settings: importSettings,
@@ -1026,9 +1058,11 @@ export function useWorkspace({
     }
   };
   const clearData = async () => {
+    const current = session.get();
     if (
-      session.get().reply ||
-      session.get().processingFiles ||
+      current.reply ||
+      current.processingFiles ||
+      current.navigating ||
       !confirm(
         t(
           "Permanently delete all local chats, attachments, settings, and saved keys?",
@@ -1110,6 +1144,7 @@ export function useWorkspace({
     view,
     working,
     processingFiles,
+    navigating,
     desktop,
     mobileDrawer,
     settings: {

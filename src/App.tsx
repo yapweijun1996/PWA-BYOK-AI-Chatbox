@@ -85,6 +85,7 @@ function App({
     view,
     working,
     processingFiles,
+    navigating,
     desktop,
     mobileDrawer,
     settings,
@@ -188,7 +189,7 @@ function App({
         chatView={view === "chat"}
         chats={threads}
         projects={settings.projects}
-        working={working || processingFiles}
+        working={working || processingFiles || navigating}
         onClose={closeDrawer}
         onCreate={create}
         onChoose={choose}
@@ -468,7 +469,7 @@ function App({
             </section>
             <Composer
               locale={locale}
-              enabled={Boolean(chat)}
+              enabled={Boolean(chat) && !navigating}
               enterSends={desktopInput}
               draft={displayedDraft?.draft || ""}
               files={displayedDraft?.draftAttachments || []}

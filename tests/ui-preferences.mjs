@@ -16,6 +16,17 @@ try {
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const match = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      const media = match(query);
+      if (query === "(prefers-color-scheme: dark)")
+        media.addEventListener("change", (event) => {
+          if (window.holdSystemThemeEvent) event.stopImmediatePropagation();
+        });
+      return media;
+    };
+  });
   await page.goto(url);
   const sidebar = page.locator("#chat-sidebar");
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
@@ -82,9 +93,22 @@ try {
   );
   await chineseTheme.selectOption("light");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  await page.evaluate(() => {
+    window.holdSystemThemeEvent = true;
+  });
   await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(
+    () => matchMedia("(prefers-color-scheme: dark)").matches,
+  );
   await chineseTheme.selectOption("system");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  await page.evaluate(() => {
+    window.holdSystemThemeEvent = false;
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.locator('html[data-theme="light"]').waitFor();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.locator('html[data-theme="dark"]').waitFor();
   await chineseTheme.selectOption("light");
   await page.getByLabel("语言", { exact: true }).selectOption("en");
   const updateBounds = await page
