@@ -11,18 +11,24 @@ export default defineConfig({
         const files = Object.keys(bundle).filter((name) =>
           /\.(js|css)$/.test(name),
         );
+        const publicFiles = [
+          "manifest.webmanifest",
+          "icon.svg",
+          "icon-192.png",
+          "icon-512.png",
+        ];
         const manifest = JSON.stringify([
           "./",
-          "./manifest.webmanifest",
-          "./icon.svg",
-          "./icon-192.png",
-          "./icon-512.png",
-          ...files.map((f) => "./" + f),
+          ...publicFiles.map((file) => "./" + file),
+          ...files.map((file) => "./" + file),
         ]);
-        const revision = createHash("sha256")
-          .update(manifest)
-          .digest("hex")
-          .slice(0, 12);
+        const hash = createHash("sha256").update(manifest);
+        // Public assets keep the same filenames when their contents change.
+        for (const file of publicFiles) {
+          const content = readFileSync(`public/${file}`);
+          hash.update(createHash("sha256").update(content).digest());
+        }
+        const revision = hash.digest("hex").slice(0, 12);
         const worker = readFileSync("public/sw.js", "utf8").replace(
           "luma-shell-v1",
           `luma-shell-${revision}`,

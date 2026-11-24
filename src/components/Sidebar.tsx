@@ -4,19 +4,14 @@
   Plus,
   Search,
   Settings,
-  Sparkles,
   Sun,
   X,
 } from "lucide-react";
-import type { Conversation, Settings as AppSettings } from "../types";
+import type { Conversation } from "../types";
 import { interpolate, translate } from "../i18n";
-import type { Language, Locale } from "../i18n";
-type Props = {
-  locale: Locale;
-  theme: AppSettings["theme"];
-  language: Language;
-  onTheme: (value: AppSettings["theme"]) => void;
-  onLanguage: (value: Language) => void;
+import { PreferenceFields } from "./Preferences";
+import type { PreferenceProps } from "./Preferences";
+type Props = PreferenceProps & {
   open: boolean;
   collapsed: boolean;
   hiddenFromInput: boolean;
@@ -81,9 +76,13 @@ export function Sidebar({
       aria-hidden={hiddenFromInput || undefined}
     >
       <div className="brand">
-        <span className="brand-mark">
-          <Sparkles size={21} />
-        </span>
+        <img
+          className="brand-mark"
+          src={`${import.meta.env.BASE_URL}icon.svg`}
+          width={38}
+          height={38}
+          alt=""
+        />
         <strong>{t("Luma Chat")}</strong>
         <button
           className="icon mobile close"
@@ -158,32 +157,13 @@ export function Sidebar({
           {t(" Appearance")}
         </button>
         <div className="sidebar-preferences">
-          <label>
-            <span>{t("Theme")}</span>
-            <select
-              aria-label={t("Theme")}
-              value={theme}
-              onChange={(event) =>
-                onTheme(event.target.value as AppSettings["theme"])
-              }
-            >
-              <option value="system">{t("System")}</option>
-              <option value="light">{t("Light")}</option>
-              <option value="dark">{t("Dark")}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t("Language")}</span>
-            <select
-              aria-label={t("Language")}
-              value={language}
-              onChange={(event) => onLanguage(event.target.value as Language)}
-            >
-              <option value="system">{t("System language")}</option>
-              <option value="en">{t("English")}</option>
-              <option value="zh-CN">{t("Simplified Chinese")}</option>
-            </select>
-          </label>
+          <PreferenceFields
+            locale={locale}
+            theme={theme}
+            language={language}
+            onTheme={onTheme}
+            onLanguage={onLanguage}
+          />
         </div>
       </div>
     </aside>

@@ -133,6 +133,7 @@ const zh: Record<string, string> = {
   "messages ·": "条消息 ·",
   "Choose how Luma Chat looks on this device.":
     "选择此设备上的 Luma Chat 外观。",
+  "Language and theme": "语言与主题",
   Theme: "主题",
   System: "跟随系统",
   Light: "浅色",

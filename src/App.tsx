@@ -17,6 +17,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
+import { PreferenceFields, TopbarPreferences } from "./components/Preferences";
+import type { PreferenceProps } from "./components/Preferences";
 import { useAppUpdate } from "./pwa-update";
 import {
   interpolate,
@@ -24,7 +26,7 @@ import {
   translate,
   translateNotice,
 } from "./i18n";
-import type { Locale, Language } from "./i18n";
+import type { Locale } from "./i18n";
 import { storage } from "./storage";
 import { mergeSettings, validBackup } from "./data-contracts";
 import { decryptSecret, encryptSecret } from "./crypto";
@@ -725,14 +727,17 @@ function App() {
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
   if (!ready) return <div className="loading">{t("Loading Luma Chat…")}</div>;
+  const preferences: PreferenceProps = {
+    locale,
+    theme: settings.theme,
+    language: settings.language,
+    onTheme: (theme) => saveSettings({ ...settings, theme }),
+    onLanguage: (language) => saveSettings({ ...settings, language }),
+  };
   return (
     <div className="app">
       <Sidebar
-        locale={locale}
-        theme={settings.theme}
-        language={settings.language}
-        onTheme={(theme) => saveSettings({ ...settings, theme })}
-        onLanguage={(language) => saveSettings({ ...settings, language })}
+        {...preferences}
         open={drawer}
         collapsed={desktop && settings.sidebarCollapsed}
         hiddenFromInput={desktop ? settings.sidebarCollapsed : !drawer}
@@ -817,6 +822,7 @@ function App() {
               <span className="dot" />
               {t(" Local storage")}
             </span>
+            <TopbarPreferences {...preferences} />
           </div>
         </header>
         {updateAvailable && (
@@ -1481,40 +1487,7 @@ function App() {
               {t("Choose how Luma Chat looks on this device.")}
             </p>
             <div className="card">
-              <label className="field">
-                {t("Theme")}
-                <select
-                  aria-label={t("Theme")}
-                  value={settings.theme}
-                  onChange={(e) =>
-                    saveSettings({
-                      ...settings,
-                      theme: e.target.value as AppSettings["theme"],
-                    })
-                  }
-                >
-                  <option value="system">{t("System")}</option>
-                  <option value="light">{t("Light")}</option>
-                  <option value="dark">{t("Dark")}</option>
-                </select>
-              </label>
-              <label className="field">
-                {t("Language")}
-                <select
-                  aria-label={t("Language")}
-                  value={settings.language}
-                  onChange={(e) =>
-                    saveSettings({
-                      ...settings,
-                      language: e.target.value as Language,
-                    })
-                  }
-                >
-                  <option value="system">{t("System language")}</option>
-                  <option value="en">{t("English")}</option>
-                  <option value="zh-CN">{t("Simplified Chinese")}</option>
-                </select>
-              </label>
+              <PreferenceFields {...preferences} fieldClassName="field" />
             </div>
           </section>
         )}

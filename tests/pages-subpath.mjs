@@ -50,6 +50,26 @@ try {
   const url = `http://127.0.0.1:${server.address().port}${prefix}`;
   await page.goto(url);
   await page.getByText("How can I help you today?").waitFor();
+  const faviconUrl = await page
+    .locator('link[rel="icon"][type="image/svg+xml"]')
+    .evaluate((link) => link.href);
+  assert.equal(faviconUrl, new URL("icon.svg", url).href);
+  const manifestUrl = await page
+    .locator('link[rel="manifest"]')
+    .evaluate((link) => link.href);
+  const manifestResponse = await page.request.get(manifestUrl);
+  assert.ok(manifestResponse.ok());
+  const manifest = await manifestResponse.json();
+  const icon = manifest.icons.find(
+    ({ type, sizes }) => type === "image/svg+xml" && sizes === "any",
+  );
+  assert.ok(icon);
+  assert.equal(new URL(icon.src, manifestUrl).href, faviconUrl);
+  const pngIcons = manifest.icons.filter(({ type }) => type === "image/png");
+  assert.deepEqual(pngIcons.map(({ sizes }) => sizes).sort(), [
+    "192x192",
+    "512x512",
+  ]);
   const scope = await page.evaluate(
     async () => (await navigator.serviceWorker.ready).scope,
   );
@@ -58,8 +78,32 @@ try {
   await context.setOffline(true);
   await page.reload();
   await page.getByText("How can I help you today?").waitFor({ timeout: 5000 });
+  await page.waitForFunction(
+    (src) => {
+      const logo = document.querySelector("img.brand-mark");
+      return logo?.src === src && logo.complete && logo.naturalWidth > 0;
+    },
+    faviconUrl,
+    { timeout: 5000 },
+  );
+  const pngSizes = await page.evaluate(
+    (urls) =>
+      Promise.all(
+        urls.map(async (src) => {
+          const image = new Image();
+          image.src = src;
+          await image.decode();
+          return `${image.naturalWidth}x${image.naturalHeight}`;
+        }),
+      ),
+    pngIcons.map(({ src }) => new URL(src, manifestUrl).href),
+  );
+  assert.deepEqual(
+    pngSizes,
+    pngIcons.map(({ sizes }) => sizes),
+  );
   console.log(
-    "PASS: GitHub Pages subpath, service-worker scope, and offline reload",
+    "PASS: GitHub Pages subpath, service-worker scope, and offline SVG and PNG icons",
   );
   await context.close();
 } finally {

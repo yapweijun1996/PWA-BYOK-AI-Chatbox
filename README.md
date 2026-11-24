@@ -2,7 +2,7 @@
 
 Luma Chat is a local-first, installable BYOK AI chat application. It supports direct browser connections to Gemini, OpenAI, OpenRouter, and LM Studio. The design references in `DESIGN/` describe the intended visual direction; this is an independent implementation.
 
-The UI supports English and Simplified Chinese with a system-language option. Light, dark, and system themes and language can be selected in the sidebar or Appearance settings; both controls share the same saved preference. The desktop sidebar can be collapsed; on mobile it opens as a drawer. These preferences are saved on the current device.
+The UI supports English and Simplified Chinese with a system-language option. Use the top-bar Language and theme menu, sidebar, or Appearance settings to switch languages or choose a light, dark, or system theme. All three share the same saved preferences. The desktop sidebar can be collapsed; on mobile it opens as a drawer. These preferences are saved on the current device.
 
 ## Run locally
 

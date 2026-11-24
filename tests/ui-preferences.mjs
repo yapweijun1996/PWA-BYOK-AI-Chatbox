@@ -16,6 +16,17 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
   const sidebar = page.locator("#chat-sidebar");
+  const toggle = page.getByRole("button", { name: "Language and theme" });
+  const panel = page.getByRole("group", { name: "Language and theme" });
+  await toggle.press("Enter");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+  await page.keyboard.press("Tab");
+  assert.ok(
+    await panel.getByLabel("Theme").evaluate((el) => el.matches(":focus")),
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(await panel.count(), 0);
+  assert.ok(await toggle.evaluate((el) => el.matches(":focus")));
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   assert.equal(await sidebar.isVisible(), false);
   assert.equal(
@@ -28,7 +39,10 @@ try {
   await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
   await page.getByRole("button", { name: "Expand sidebar" }).click();
   await sidebar.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await toggle.click();
+  assert.equal(await panel.getByLabel("Theme").inputValue(), "dark");
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  assert.equal(await toggle.getAttribute("aria-expanded"), "false");
   assert.equal(
     await page
       .locator("main")
@@ -90,6 +104,24 @@ try {
     .getByLabel("主题", { exact: true })
     .selectOption("system");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  await page.getByRole("button", { name: "返回对话" }).click();
+  await page.setViewportSize({ width: 320, height: 640 });
+  const mobilePanel = page.getByRole("group", { name: "语言与主题" });
+  await page.getByRole("button", { name: "语言与主题" }).click();
+  const bounds = await mobilePanel.boundingBox();
+  assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320);
+  assert.equal(await mobilePanel.getByLabel("主题").inputValue(), "system");
+  await mobilePanel.getByLabel("主题").selectOption("light");
+  await mobilePanel.getByLabel("语言").selectOption("en");
+  assert.equal(await panel.getByLabel("Language").inputValue(), "en");
+  assert.equal(await page.locator("html").getAttribute("lang"), "en");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  await page.locator(".privacy").click();
+  assert.equal(await panel.count(), 0);
+  await page.reload();
+  await toggle.click();
+  assert.equal(await panel.getByLabel("Language").inputValue(), "en");
+  assert.equal(await panel.getByLabel("Theme").inputValue(), "light");
   assert.deepEqual(errors, []);
   const chineseSystem = await browser.newContext({
     locale: "zh-CN",
@@ -100,11 +132,13 @@ try {
     process.env.TEST_BASE_URL || "http://127.0.0.1:55167/",
   );
   await chinesePage.getByRole("button", { name: "打开菜单" }).click();
-  await chinesePage.getByRole("button", { name: "新对话", exact: true }).waitFor();
+  await chinesePage
+    .getByRole("button", { name: "新对话", exact: true })
+    .waitFor();
   assert.equal(await chinesePage.locator("html").getAttribute("lang"), "zh-CN");
   await chineseSystem.close();
   console.log(
-    "PASS: sidebar toggle, mobile drawer, language and theme persistence, dark contrast and system theme",
+    "PASS: keyboard and mobile top-bar preferences, sidebar and Appearance sync, persistence, and dark contrast",
   );
   await context.close();
 } finally {
