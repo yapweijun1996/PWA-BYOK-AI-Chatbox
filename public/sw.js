@@ -1,15 +1,74 @@
-﻿const CACHE = 'luma-shell-v1';
-self.addEventListener('install', event => {
-  event.waitUntil((async () => {
-    const scope = self.registration.scope;
-    const response = await fetch(new URL('precache-manifest.json', scope), { cache: 'no-store' });
-    if (!response.ok) throw new Error('Precache manifest unavailable');
-    const urls = await response.json();
-    const cache = await caches.open(CACHE);
-    await cache.addAll(
-      urls.map(url => new Request(new URL(url, scope), { cache: 'reload' })),
-    );
-  })());
+// Vite fills these with the final build identity and [relative URL, SRI] pairs.
+const REVISION = "__LUMA_REVISION__";
+const PRECACHE = /* __LUMA_PRECACHE__ */ [];
+const scope = self.registration.scope;
+// Unlike the old luma-shell-* namespace, this cannot be swept by a legacy worker.
+const prefix = `luma-shell:${encodeURIComponent(scope)}:`;
+const cacheName = prefix + REVISION;
+const shell = new URL("./", scope).href;
+const index = new URL("index.html", scope).href;
+const assets = new Map(
+  PRECACHE.map(([path, digest]) => [new URL(path, scope).href, digest]),
+);
+const pinnedRequest = (url) =>
+  new Request(url, {
+    mode: "same-origin",
+    redirect: "error",
+    cache: "reload",
+    integrity: assets.get(url),
+  });
+
+async function installShell() {
+  if (!assets.has(shell)) throw new Error("Missing built shell manifest");
+  const existed = await caches.has(cacheName);
+  const cache = await caches.open(cacheName);
+  try {
+    // A single atomic batch. Even a 200 response from the wrong deploy fails SRI.
+    await cache.addAll(Array.from(assets.keys(), pinnedRequest));
+  } catch (error) {
+    if (!existed) await caches.delete(cacheName);
+    throw error;
+  }
+}
+self.addEventListener("install", (event) => event.waitUntil(installShell()));
+
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    (async () => {
+      // Activation waits naturally for the old clients. Legacy caches have no
+      // trustworthy owner, so never delete them (or a sibling registration's cache).
+      const old = (await caches.keys()).filter(
+        (name) =>
+          name !== cacheName &&
+          name.startsWith(prefix) &&
+          /^[a-f0-9]{64}$/.test(name.slice(prefix.length)),
+      );
+      await Promise.all(old.map((name) => caches.delete(name)));
+      await self.clients.claim();
+    })(),
+  ),
+);
+
+async function fromInstalledBuild(url) {
+  const cached = await caches.match(url, { cacheName, ignoreVary: true });
+  // If the entry was evicted, only these exact bytes can substitute for it.
+  return cached || fetch(pinnedRequest(url));
+}
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (
+    request.method !== "GET" ||
+    request.headers.has("Authorization") ||
+    request.headers.has("Range")
+  )
+    return;
+  const url = new URL(request.url);
+  if (request.mode === "navigate") {
+    url.search = "";
+    url.hash = "";
+    if (url.href === shell || url.href === index)
+      event.respondWith(fromInstalledBuild(shell));
+  } else if (assets.has(url.href) && url.href !== shell) {
+    event.respondWith(fromInstalledBuild(url.href));
+  }
 });
-self.addEventListener('activate', event => event.waitUntil((async () => { const names = await caches.keys(); await Promise.all(names.filter(name => name.startsWith('luma-shell-') && name !== CACHE).map(name => caches.delete(name))); await self.clients.claim(); })()));
-self.addEventListener('fetch', event => { const request = event.request; const url = new URL(request.url); const scope = new URL(self.registration.scope); if (request.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return; if (request.mode === 'navigate') { event.respondWith(fetch(request).then(response => { if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(new URL('./', scope).toString(), copy)); } return response; }).catch(() => caches.match(new URL('./', scope).toString(), { ignoreVary: true }))); return; } if (!/\.(?:js|css|svg|png|webmanifest|woff2?|wasm)$/.test(url.pathname)) return; event.respondWith(caches.match(request.url, { ignoreVary: true }).then(cached => cached || fetch(request))); });

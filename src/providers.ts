@@ -92,8 +92,9 @@ async function request(
 export async function listModelOptions(
   config: ProviderConfig,
   secret: string,
+  signal?: AbortSignal,
 ): Promise<ModelOption[]> {
-  const response = await request(config, "/models", secret);
+  const response = await request(config, "/models", secret, { signal });
   let data: unknown;
   try {
     data = await response.json();

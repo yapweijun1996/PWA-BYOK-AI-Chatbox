@@ -474,6 +474,11 @@ const zh: Record<string, string> = {
     "替换 ID 相同的现有对话？",
   "Permanently delete all local chats, attachments, settings, and saved keys?":
     "永久删除所有本地对话、附件、设置和保存的 Key？",
+  "Other open tabs keep their in-memory drafts and keys. Close them to end those sessions.":
+    "其他已打开的标签页仍保留其内存中的草稿和密钥。要结束这些会话，请关闭对应的标签页。",
+  "Clearing local data…": "正在清除本地数据…",
+  "Could not clear local data. Nothing was deleted. Try again.":
+    "未能清除本地数据，没有删除任何内容。请重试。",
   "Local data cleared.": "已清除本地数据。",
   "Copied.": "已复制。",
   "Copy unavailable.": "无法复制。",

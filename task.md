@@ -1,6 +1,6 @@
 # Luma Chat improvement tasks
 
-Tasks 1–5 are implemented in the working tree; their regression tests have not been run. Next: **6. Keep the offline shell paired with its assets**.
+Tasks 1–5 were committed at `2d73183`; tasks 6 and 7 complete the implementation of this plan. The regression cases for these changes have not been run locally, and CI and deployment status have not been checked.
 
 These tasks are from the source review at `e813fa0`. LM Studio credential binding to the approved server base URL is already implemented; preserve it rather than rebuilding it. See the [feature map](FEATURE-MAP.md) for current behavior and the [issue backlog](docs/ISSUE-BACKLOG.md) for the referenced `LC-*` tickets.
 
@@ -26,10 +26,12 @@ These tasks are from the source review at `e813fa0`. LM Studio credential bindin
 - [x] **5. Prevent stale writes across tabs (LC-04).** Check the expected conversation revision in the write transaction. Apply settings changes without replacing unrelated fields from a stale snapshot.
   - **Done when:** A stale tab cannot silently overwrite newer messages or recreate a deleted chat. Its unsaved draft can be kept as a copy. Changing a theme cannot restore an old provider configuration.
 
-- [ ] **6. Keep the offline shell paired with its assets (LC-06).** Treat each installed HTML shell and its precached assets as one version. Limit cache cleanup to the service worker's own registration scope.
+- [x] **6. Keep the offline shell paired with its assets (LC-06).** Treat each installed HTML shell and its precached assets as one version. Limit cache cleanup to the service worker's own registration scope.
   - **Done when:** An interrupted update leaves the previously installed build usable offline. Updating one Pages subpath does not delete another's cache or force a reload during a reply.
+  - **Coverage written (not run):** the [update harness](tests/update-smoke.mjs) serves the production output as A and distinct HTML/JS/CSS as fixture B. It exercises wrong bytes, a disconnected install, natural activation, draft recovery and an independent same-origin registration.
 
-- [ ] **7. Clear transient state when clearing local data.** Reset credential and password inputs and dismiss any import preview. Ignore completions from unlock or import operations started before the clear.
+- [x] **7. Clear transient state when clearing local data.** Reset credential and password inputs and dismiss any import preview. Ignore completions from unlock or import operations started before the clear.
   - **Done when:** After clearing, returning to Settings shows no previous credential input or pending import. A late operation cannot unlock a key or repopulate cleared chats.
+  - **Coverage written (not run):** [clear-data browser cases](tests/clear-data.mjs) hold crypto results, a backup read, a mocked catalog and the real deletion transaction. They cover cancel, rollback, successful reset and a fresh explicit import.
 
 Keep direct browser-to-provider requests, per-conversation drafts, and v1 backup compatibility throughout. A chat backup contains private content; it is not a shareable diagnostic export.

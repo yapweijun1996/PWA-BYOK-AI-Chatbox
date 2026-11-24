@@ -89,6 +89,7 @@ function App({
     working,
     processingFiles,
     navigating,
+    clearing,
     desktop,
     mobileDrawer,
     settings,
@@ -610,6 +611,8 @@ function App({
           <section
             className="page settings-page"
             aria-labelledby="settings-title"
+            aria-busy={clearing || undefined}
+            inert={clearing || undefined}
           >
             <button className="back" onClick={() => setView("chat")}>
               <ArrowLeft size={16} aria-hidden="true" />
@@ -1076,7 +1079,7 @@ function App({
                     <button
                       className="danger"
                       onClick={() => void clearData()}
-                      disabled={working}
+                      disabled={working || processingFiles || navigating}
                     >
                       <Trash2 size={16} />
                       {t(" Clear all local data")}

@@ -1,3 +1,4 @@
+import { onlyShellCache } from "./shell-cache.mjs";
 import { chromePath } from "./browser-launch.mjs";
 import { chromium } from "playwright-core";
 import { createServer } from "node:http";
@@ -104,22 +105,19 @@ try {
     pngSizes,
     pngIcons.map(({ sizes }) => sizes),
   );
-  const offlineFont = await page.evaluate(async () => {
-    const cache = await caches.open(
-      (await caches.keys()).find((key) => key.startsWith("luma-shell-")),
-    );
+  const name = await onlyShellCache(page, url);
+  const offlineFont = await page.evaluate(async (name) => {
+    const cache = await caches.open(name);
     const font = (await cache.keys()).find(({ url }) =>
       /KaTeX_Main-Regular-.*\.woff2$/.test(url),
     );
     if (!font || !font.url.startsWith(location.href)) return false;
     const response = await fetch(font.url);
     return response.ok && (await response.arrayBuffer()).byteLength > 0;
-  });
+  }, name);
   assert.equal(offlineFont, true);
-  const offlineTool = await page.evaluate(async () => {
-    const cache = await caches.open(
-      (await caches.keys()).find((key) => key.startsWith("luma-shell-")),
-    );
+  const offlineTool = await page.evaluate(async (name) => {
+    const cache = await caches.open(name);
     const workerEntry = (await cache.keys()).find(({ url }) =>
       /\/execute\.worker-.*\.js$/.test(url),
     );
@@ -145,7 +143,7 @@ try {
       };
       worker.postMessage({ code: "7 * 6" });
     });
-  });
+  }, name);
   assert.equal(offlineTool, "42");
   console.log(
     "PASS: GitHub Pages subpath, service-worker scope, offline icons, KaTeX font and QuickJS/WASM",

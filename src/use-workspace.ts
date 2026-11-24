@@ -99,6 +99,10 @@ export function useWorkspace({
   onInitialCommit: () => void;
 }) {
   const { session, state } = useWorkspaceSession(initial);
+  // Non-exclusive operations (Web Crypto, file reads, catalogs) may outlive
+  // their initiating view. A confirmed clear retires their signal synchronously.
+  const [lifetime, setLifetime] = useState(() => new AbortController());
+  const { signal: workspaceSignal } = lifetime;
   const {
     threads,
     active,
@@ -367,7 +371,7 @@ export function useWorkspace({
     change:
       Partial<AppSettings> | ((current: AppSettings) => Partial<AppSettings>),
   ) => {
-    if (importing.current) return false;
+    if (importing.current || workspaceSignal.aborted) return false;
     const previous = session.get().settings;
     const next = {
       ...previous,
@@ -405,7 +409,7 @@ export function useWorkspace({
       if (JSON.stringify(committed) !== JSON.stringify(next))
         session.update({ settings: committed });
     }
-    return saved;
+    return saved && !workspaceSignal.aborted;
   };
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -709,7 +713,7 @@ export function useWorkspace({
     }));
   };
   const resetProviderForm = () => {
-    setKeyInput("");
+    setCredentialInput(undefined);
     setPassword("");
     setSaveKey(false);
     setShowKey(false);
@@ -719,6 +723,7 @@ export function useWorkspace({
     setEditingProvider(provider);
   };
   const openProvider = (provider: ProviderId) => {
+    if (workspaceSignal.aborted) return;
     browseProvider(provider);
     setDrawer(false);
     setView("providers");
@@ -765,10 +770,13 @@ export function useWorkspace({
   };
   const loadCatalog = async (provider: ProviderId, keyOverride?: string) => {
     const target = settings.providers[provider];
+    workspaceSignal.throwIfAborted();
     const options = await listModelOptions(
       target,
       keyOverride || credentialFor(target, secrets[provider]),
+      workspaceSignal,
     );
+    workspaceSignal.throwIfAborted();
     setCatalogs((current) => ({
       ...current,
       [provider]: { endpoint: target.endpoint, options },
@@ -979,7 +987,7 @@ export function useWorkspace({
   };
   const canStartReply = (source: Conversation | undefined) => {
     const current = session.get();
-    return !current.reply && !current.navigating && !current.processingFiles &&
+    return !workspaceSignal.aborted && !current.reply && !current.navigating && !current.processingFiles &&
       !(source && (current.replySaves.has(source.id) || current.conflicts.has(source.id))) &&
       !historyDecision.current && current.settings === settings &&
       selectActiveChat(current) === source;
@@ -1134,19 +1142,22 @@ export function useWorkspace({
     await runReply(chat.id, chat.messages, prepared, abort);
   };
   const testConnection = async () => {
+    if (workspaceSignal.aborted) return;
     try {
       setNotice("Connecting…");
       const result = await loadCatalog(config.id, keyInput);
+      if (workspaceSignal.aborted) return;
       setNotice(
         result.length
           ? `Model list loaded (${result.length}). This does not verify your key or chat access. Select one or enter its ID.`
           : "Model list loaded but no models were listed. This does not verify your key or chat access; enter a model ID manually.",
       );
     } catch (e) {
-      setNotice(errorText(e));
+      if (!workspaceSignal.aborted) setNotice(errorText(e));
     }
   };
   const storeKey = async () => {
+    if (workspaceSignal.aborted) return;
     if (!keyInput) {
       setNotice("Enter a key or token first.");
       return;
@@ -1160,11 +1171,12 @@ export function useWorkspace({
       if (saveKey) {
         if (!password) throw new Error("Enter an unlock password.");
         const cipher = await encryptSecret(keyInput, password);
+        if (workspaceSignal.aborted) return;
         if (config.id === "lmstudio") cipher.destination = destination;
         const saved = await saveSettings((current) => ({
           vaults: { ...current.vaults, [config.id]: cipher },
         }));
-        if (!saved) return;
+        if (!saved || workspaceSignal.aborted) return;
       }
       setSecrets((previous) => ({
         ...previous,
@@ -1178,12 +1190,12 @@ export function useWorkspace({
           : "Key available for this session only.",
       );
     } catch (e) {
-      setNotice(errorText(e));
+      if (!workspaceSignal.aborted) setNotice(errorText(e));
     }
   };
   const unlock = async () => {
     const vault = settings.vaults[config.id];
-    if (!vault) return;
+    if (!vault || workspaceSignal.aborted) return;
     try {
       const destination = credentialDestination(config);
       if (!destination)
@@ -1208,6 +1220,7 @@ export function useWorkspace({
       )
         return;
       const secret = await decryptSecret(vault, password);
+      if (workspaceSignal.aborted) return;
       if (
         bindLegacy &&
         !(await saveSettings((current) => ({
@@ -1215,6 +1228,7 @@ export function useWorkspace({
         })))
       )
         return;
+      if (workspaceSignal.aborted) return;
       setSecrets((previous) => ({
         ...previous,
         [config.id]: { destination, value: secret },
@@ -1222,7 +1236,7 @@ export function useWorkspace({
       setPassword("");
       setNotice("Key unlocked for this session.");
     } catch (e) {
-      setNotice(errorText(e));
+      if (!workspaceSignal.aborted) setNotice(errorText(e));
     }
   };
   const deleteKey = async () => {
@@ -1231,7 +1245,7 @@ export function useWorkspace({
       delete vaults[config.id];
       return { vaults };
     });
-    if (!saved) return;
+    if (!saved || workspaceSignal.aborted) return;
     setSecrets((previous) => ({ ...previous, [config.id]: undefined }));
     setKeyInput("");
     setPassword("");
@@ -1277,14 +1291,15 @@ export function useWorkspace({
     }
   };
   const importFile = async (file?: File) => {
-    if (!file || importing.current) return;
+    if (!file || importing.current || workspaceSignal.aborted) return;
     const selection = ++fileSelection.current;
     setImportPreview(null);
     setImportPreferences(false);
     if (importInput.current) importInput.current.value = "";
     try {
-      const value = await readBackupFile(file);
-      if (selection !== fileSelection.current) return;
+      const value = await readBackupFile(file, undefined, workspaceSignal);
+      if (workspaceSignal.aborted || selection !== fileSelection.current)
+        return;
       const address = value.settings?.providers?.lmstudio?.endpoint;
       if (address !== undefined && !checkedLmStudioAddress(address))
         setNotice(
@@ -1301,13 +1316,15 @@ export function useWorkspace({
         previousSettings: current.settings,
       });
     } catch (e) {
-      if (selection === fileSelection.current) setNotice(errorText(e));
+      if (!workspaceSignal.aborted && selection === fileSelection.current)
+        setNotice(errorText(e));
     }
   };
   const finishImport = async (overwrite: boolean) => {
     const current = session.get();
     if (
       !importPreview ||
+      workspaceSignal.aborted ||
       current.reply ||
       current.processingFiles ||
       current.navigating
@@ -1343,7 +1360,8 @@ export function useWorkspace({
       const byId = new Map(latest.threads.map((c) => [c.id, c]));
       const records = selected.map((chat) => {
         const previous = preview.existing.get(chat.id);
-        if (byId.get(chat.id) !== previous || latest.conflicts.has(chat.id)) throw new ImportConflictError();
+        if (byId.get(chat.id) !== previous || latest.conflicts.has(chat.id))
+          throw new ImportConflictError();
         return {
           previous,
           next: {
@@ -1425,31 +1443,67 @@ export function useWorkspace({
       current.reply ||
       current.processingFiles ||
       current.navigating ||
+      workspaceSignal.aborted ||
       !confirm(
-        t(
-          "Permanently delete all local chats, attachments, settings, and saved keys?",
-        ),
+        [
+          t(
+            "Permanently delete all local chats, attachments, settings, and saved keys?",
+          ),
+          t(
+            "Other open tabs keep their in-memory drafts and keys. Close them to end those sessions.",
+          ),
+        ].join("\n\n"),
       )
     )
       return;
+    // Stop new credential/import work before the first await, not after the
+    // delete commits. Already queued writes must settle before the final clear.
+    lifetime.abort();
     session.update({ navigating: true });
+    setNotice("Clearing local data…");
     try {
-      flushDrafts();
-      await Promise.all([
-        ...Object.values(writes.current),
-        settingsWrite.current,
-      ]);
-      await storage.clear();
-      setExportPlan(null);
+      try {
+        flushDrafts();
+        await Promise.all([
+          ...Object.values(writes.current),
+          settingsWrite.current,
+        ]);
+        await storage.clear();
+      } catch {
+        setNotice(
+          "Could not clear local data. Nothing was deleted. Try again.",
+        );
+        return;
+      }
+      // Only publish the empty workspace once both stores have committed.
       committedSettings.current = defaultSettings;
-      session.update({ threads: [], active: "", settings: defaultSettings, replySaves: new Map(), conflicts: new Set() });
-      setCatalogs({});
-      rememberTheme(defaultSettings.theme);
+      writes.current = Object.create(null);
+      session.update({
+        threads: [],
+        active: "",
+        settings: defaultSettings,
+        replySaves: new Map(),
+        conflicts: new Set(),
+      });
+      resetProviderForm();
       setSecrets({});
+      setEditingProvider(defaultSettings.provider);
+      setCatalogs({});
+      setImportPreview(null);
+      setImportPreferences(false);
+      if (importInput.current) importInput.current.value = "";
+      setExportPlan(null);
+      setArmedChat(undefined);
+      finishHistoryChoice("cancel");
+      setSearchMode(null);
+      setInspecting(false);
+      setDrawer(false);
+      rememberTheme(defaultSettings.theme);
+      refreshStorage();
       setNotice("Local data cleared.");
-    } catch (e) {
-      report(e);
     } finally {
+      // New actions get a fresh lifetime even when IndexedDB aborted the clear.
+      setLifetime(new AbortController());
       session.update({ navigating: false });
     }
   };
@@ -1480,12 +1534,14 @@ export function useWorkspace({
     setNotice("Key locked for this session.");
   };
   const requestPersistence = async () => {
+    if (workspaceSignal.aborted) return;
     if (!navigator.storage?.persist) {
       setNotice("Persistent storage is unavailable in this browser.");
       return;
     }
     try {
       const ok = await navigator.storage.persist();
+      if (workspaceSignal.aborted) return;
       refreshStorage();
       setNotice(
         ok
@@ -1493,7 +1549,7 @@ export function useWorkspace({
           : "Persistent storage was not granted; keep backups.",
       );
     } catch {
-      setNotice("Could not request persistent storage.");
+      if (!workspaceSignal.aborted) setNotice("Could not request persistent storage.");
     }
   };
   const preferences: PreferenceProps = {
@@ -1512,6 +1568,7 @@ export function useWorkspace({
     working,
     processingFiles,
     navigating,
+    clearing: workspaceSignal.aborted,
     desktop,
     mobileDrawer,
     settings: {

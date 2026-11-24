@@ -92,10 +92,16 @@ export function downloadBackup(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export async function readBackupFile(file: Blob, limit = backupByteLimit) {
+export async function readBackupFile(
+  file: Blob,
+  limit = backupByteLimit,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted();
   if (file.size > limit)
     throw new Error("Backup exceeds the 100 MiB file limit.");
   const text = await file.text();
+  signal?.throwIfAborted();
   let data: unknown;
   try {
     data = JSON.parse(text);

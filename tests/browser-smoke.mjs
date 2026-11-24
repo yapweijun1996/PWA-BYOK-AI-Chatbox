@@ -4,6 +4,7 @@ import { holdConversationWrite } from "./browser-storage.mjs";
 import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 import { exerciseAtomicImport } from "./backup-import.mjs";
+import { exerciseClearData } from "./clear-data.mjs";
 const browser = await chromium.launch({
   executablePath: chromePath(),
   headless: true,
@@ -377,6 +378,7 @@ try {
     .first()
     .waitFor({ timeout: 5000 });
   await context.setOffline(false);
+  await exerciseClearData(browser, page.url());
   assert.deepEqual(errors, []);
   const mobile = await browser.newContext({
     viewport: { width: 390, height: 844 },

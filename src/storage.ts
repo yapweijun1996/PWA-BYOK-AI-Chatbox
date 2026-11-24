@@ -413,17 +413,11 @@ export const storage = {
         prefs.put(id, ACTIVE_KEY);
       });
     }),
-  clear: () =>
-    trackWrite(async () => {
-      const db = await open();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(["conversations", "settings"], "readwrite");
-        tx.objectStore("conversations").clear();
-        tx.objectStore("settings").clear();
-        tx.oncomplete = () => resolve();
-        tx.onabort = () =>
-          reject(tx.error || new Error("Storage transaction aborted"));
-      });
-      observed.clear();
-    }),
+  async clear() {
+    await writeTransaction(["conversations", "settings"], (tx) => {
+      tx.objectStore("conversations").clear();
+      tx.objectStore("settings").clear();
+    });
+    observed.clear();
+  },
 };

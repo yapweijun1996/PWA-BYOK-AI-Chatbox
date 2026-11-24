@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";
+import { onlyShellCache } from "./shell-cache.mjs";
 import { chromePath } from "./browser-launch.mjs";
 import { applyServerAddress } from "./provider-settings.mjs";
 
@@ -110,7 +111,10 @@ try {
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
-  await applyServerAddress(page, `http://127.0.0.1:${server.address().port}/v1`);
+  await applyServerAddress(
+    page,
+    `http://127.0.0.1:${server.address().port}/v1`,
+  );
   await page.getByLabel("Model ID").fill("tool-model");
   await page.getByRole("button", { name: "Set as default provider" }).click();
   await page.getByPlaceholder("Enter key for this session").fill(secret);
@@ -187,50 +191,51 @@ try {
   await page.context().setOffline(true);
   await page.reload();
   await page.locator('.tool-execution[data-status="success"]').waitFor();
-  const offline = await page.evaluate(async () => {
-    const response = await caches.open(
-      (await caches.keys()).find((key) => key.startsWith("luma-shell-")),
-    );
-    const assets = (await response.keys()).map(({ url }) => url);
-    const workerUrl = assets.find((url) =>
-      /\/execute\.worker-.*\.js$/.test(url),
-    );
-    if (!workerUrl || !assets.some((url) => url.endsWith(".wasm")))
-      throw new Error("Worker and WASM were not precached");
-    const run = (code) =>
-      new Promise((resolve) => {
-        const worker = new Worker(workerUrl, { type: "module" });
-        const timer = setTimeout(
-          () => finish({ status: "unavailable" }),
-          12500,
-        );
-        const finish = (result) => {
-          clearTimeout(timer);
-          worker.terminate();
-          resolve(result);
-        };
-        worker.onerror = (event) =>
-          finish({ status: "worker-error", message: event.message });
-        worker.onmessage = ({ data }) => {
-          if (data.type === "result") finish(data.result);
-        };
-        worker.postMessage({ code });
-      });
-    return {
-      globals: await run(
-        `['fetch', 'WebSocket', 'XMLHttpRequest', 'document', 'navigator', 'indexedDB', 'localStorage', 'sessionStorage', 'caches', 'postMessage', 'importScripts', 'process', 'std', 'os', 'setTimeout'].map(name => typeof globalThis[name])`,
-      ),
-      timeout: await run('console.info("before"); for (;;) {}'),
-      memory: await run(
-        "const buffer = new Uint8Array(64 * 1024 * 1024); buffer.length",
-      ),
-      output: await run(
-        'for (let i = 0; i < 100; i++) console.warn("x".repeat(2000)); "z".repeat(10000)',
-      ),
-      exception: await run('throw new Error("example failure")'),
-      next: await run("typeof buffer"),
-    };
-  });
+  const offline = await page.evaluate(
+    async (name) => {
+      const response = await caches.open(name);
+      const assets = (await response.keys()).map(({ url }) => url);
+      const workerUrl = assets.find((url) =>
+        /\/execute\.worker-.*\.js$/.test(url),
+      );
+      if (!workerUrl || !assets.some((url) => url.endsWith(".wasm")))
+        throw new Error("Worker and WASM were not precached");
+      const run = (code) =>
+        new Promise((resolve) => {
+          const worker = new Worker(workerUrl, { type: "module" });
+          const timer = setTimeout(
+            () => finish({ status: "unavailable" }),
+            12500,
+          );
+          const finish = (result) => {
+            clearTimeout(timer);
+            worker.terminate();
+            resolve(result);
+          };
+          worker.onerror = (event) =>
+            finish({ status: "worker-error", message: event.message });
+          worker.onmessage = ({ data }) => {
+            if (data.type === "result") finish(data.result);
+          };
+          worker.postMessage({ code });
+        });
+      return {
+        globals: await run(
+          `['fetch', 'WebSocket', 'XMLHttpRequest', 'document', 'navigator', 'indexedDB', 'localStorage', 'sessionStorage', 'caches', 'postMessage', 'importScripts', 'process', 'std', 'os', 'setTimeout'].map(name => typeof globalThis[name])`,
+        ),
+        timeout: await run('console.info("before"); for (;;) {}'),
+        memory: await run(
+          "const buffer = new Uint8Array(64 * 1024 * 1024); buffer.length",
+        ),
+        output: await run(
+          'for (let i = 0; i < 100; i++) console.warn("x".repeat(2000)); "z".repeat(10000)',
+        ),
+        exception: await run('throw new Error("example failure")'),
+        next: await run("typeof buffer"),
+      };
+    },
+    await onlyShellCache(page),
+  );
   assert.deepEqual(
     JSON.parse(offline.globals.value.text),
     Array(15).fill("undefined"),

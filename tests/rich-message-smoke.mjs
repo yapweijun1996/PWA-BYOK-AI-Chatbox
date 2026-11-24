@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";
+import { onlyShellCache } from "./shell-cache.mjs";
 import { chromePath } from "./browser-launch.mjs";
 import { applyServerAddress } from "./provider-settings.mjs";
 
@@ -85,7 +86,10 @@ try {
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
-  await applyServerAddress(page, `http://127.0.0.1:${server.address().port}/v1`);
+  await applyServerAddress(
+    page,
+    `http://127.0.0.1:${server.address().port}/v1`,
+  );
   await page.getByLabel("Model ID").fill("render-test");
   await page.getByRole("button", { name: "Set as default provider" }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
@@ -200,28 +204,28 @@ try {
   await page.locator('html[data-startup="ready"]').waitFor();
   await reply.locator(".katex-display").waitFor();
   assert.ok(
-    await page.evaluate(async () => {
-      const fonts = await document.fonts.load('16px "KaTeX_Main"', "1+2");
-      const cacheKeys = await caches.keys();
-      const cache = await caches.open(
-        cacheKeys.find((key) => key.startsWith("luma-shell-")),
-      );
-      const cachedFonts = (await cache.keys()).filter((request) =>
-        request.url.endsWith(".woff2"),
-      );
-      return (
-        fonts.length > 0 &&
-        fonts.every((font) => font.status === "loaded") &&
-        cachedFonts.length > 0 &&
-        performance
-          .getEntriesByType("resource")
-          .some(
-            (entry) =>
-              /KaTeX.*\.woff2$/.test(entry.name) &&
-              new URL(entry.name).origin === location.origin,
-          )
-      );
-    }),
+    await page.evaluate(
+      async (name) => {
+        const fonts = await document.fonts.load('16px "KaTeX_Main"', "1+2");
+        const cache = await caches.open(name);
+        const cachedFonts = (await cache.keys()).filter((request) =>
+          request.url.endsWith(".woff2"),
+        );
+        return (
+          fonts.length > 0 &&
+          fonts.every((font) => font.status === "loaded") &&
+          cachedFonts.length > 0 &&
+          performance
+            .getEntriesByType("resource")
+            .some(
+              (entry) =>
+                /KaTeX.*\.woff2$/.test(entry.name) &&
+                new URL(entry.name).origin === location.origin,
+            )
+        );
+      },
+      await onlyShellCache(page),
+    ),
   );
   assert.equal(await reply.getByRole("table").count(), 1);
   assert.equal(imageRequests, 1);
