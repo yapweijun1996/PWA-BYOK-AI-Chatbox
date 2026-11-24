@@ -29,8 +29,15 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Verify design tokens
+        run: |
+          npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/light.config.json
+          npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/dark.config.json
+          git diff --exit-code -- src/generated
       - name: Build app
         run: npm run build
+      - name: Run browser regression tests
+        run: npm run test:browser
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

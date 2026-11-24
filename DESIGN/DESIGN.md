@@ -24,6 +24,7 @@ Images communicate style, density and layout. Actual features, labels and behavi
 - Put the conversation first; keep controls discoverable without crowding the reading area.
 - Make local storage, the selected provider and network needs understandable.
 - Use familiar controls, readable type, sufficient contrast and comfortable touch targets.
+- Offer English, Simplified Chinese, and system language. Use the same locally saved language and theme preferences in the sidebar and Appearance view.
 - Preserve work across refreshes and make failures recoverable.
 - Support desktop, tablet and mobile from the beginning, with light and dark themes.
 
@@ -44,6 +45,7 @@ Settings may be implemented as a dedicated responsive view or dialog; on mobile 
 At approximately 1440 × 900:
 
 - **Sidebar:** approximately 248–280 px wide; brand, New chat, search, recent conversations, settings and local-data access. Collapsible without deleting data.
+- **Sidebar preferences:** provide quick access to language and light, dark, or system theme; hiding the sidebar must not remove the current conversation.
 - **Chat header:** current conversation title, selected provider/model, connection or generation status, and an overflow menu for secondary actions.
 - **Conversation:** centered reading column, approximately 720–800 px maximum, with enough room for code, lists and tables. User and assistant messages are visually distinct; keep message text selectable.
 - **Composer:** anchored near the bottom of the chat area. Multiline text input, attachment control, provider/model selector and send/stop control. Support sensible auto-growing with a maximum height and internal scrolling.
@@ -80,7 +82,7 @@ Breakpoints are starting guidance; verify content and controls at real widths ra
 
 ## 9. Provider and key settings
 
-Provider cards support Gemini, OpenAI and LM Studio. LM Studio uses its OpenAI-compatible endpoint with a configurable base URL and optional authentication. All provider requests connect directly from the browser; this version does not provide a proxy. Browser CORS, local-network permissions and mixed-content restrictions can prevent a connection, especially when a phone connects to a computer on the LAN. Explain that localhost on a phone refers to the phone, and recommend authentication and a trusted connection when exposing a local server.
+Provider cards support Gemini, OpenAI, OpenRouter and LM Studio. OpenRouter uses its own fixed endpoint, key and model IDs; listing models alone does not establish chat access. LM Studio uses its OpenAI-compatible endpoint with a configurable base URL and optional authentication. All provider requests connect directly from the browser; this version does not provide a proxy. Browser CORS, local-network permissions and mixed-content restrictions can prevent a connection, especially when a phone connects to a computer on the LAN. Explain that localhost on a phone refers to the phone, and recommend authentication and a trusted connection when exposing a local server.
 
 Each provider configuration includes:
 

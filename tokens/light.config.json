@@ -1,0 +1,1 @@
+{"source":["tokens/light.json"],"platforms":{"web":{"transformGroup":"css","buildPath":"src/generated/","files":[{"destination":"tokens-light.css","format":"css/variables","options":{"selector":":root"}}]}}}

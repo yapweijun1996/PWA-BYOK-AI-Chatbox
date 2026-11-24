@@ -1,4 +1,11 @@
-﻿export type ProviderId = "gemini" | "openai" | "lmstudio";
+export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
+import type { Language } from "./i18n";
+export const providerIds: ProviderId[] = [
+  "gemini",
+  "openai",
+  "openrouter",
+  "lmstudio",
+];
 export type Attachment = {
   id: string;
   name: string;
@@ -21,6 +28,7 @@ export type Conversation = {
   updatedAt: number;
   messages: Message[];
   draft: string;
+  draftAttachments?: Attachment[];
 };
 export type ProviderConfig = {
   id: ProviderId;
@@ -39,12 +47,16 @@ export type Cipher = {
 export type Settings = {
   provider: ProviderId;
   theme: "light" | "dark" | "system";
+  sidebarCollapsed: boolean;
+  language: Language;
   providers: Record<ProviderId, ProviderConfig>;
   vaults: Partial<Record<ProviderId, Cipher>>;
 };
 export const defaultSettings: Settings = {
   provider: "gemini",
   theme: "system",
+  sidebarCollapsed: false,
+  language: "system",
   providers: {
     gemini: {
       id: "gemini",
@@ -56,6 +68,12 @@ export const defaultSettings: Settings = {
       id: "openai",
       model: "",
       endpoint: "https://api.openai.com/v1",
+      vision: false,
+    },
+    openrouter: {
+      id: "openrouter",
+      model: "",
+      endpoint: "https://openrouter.ai/api/v1",
       vision: false,
     },
     lmstudio: {
@@ -70,6 +88,7 @@ export const defaultSettings: Settings = {
 export const labels: Record<ProviderId, string> = {
   gemini: "Gemini",
   openai: "OpenAI",
+  openrouter: "OpenRouter",
   lmstudio: "LM Studio",
 };
 export const id = () => crypto.randomUUID();

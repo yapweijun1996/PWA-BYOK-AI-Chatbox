@@ -3,16 +3,10 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import {
   Menu,
-  Plus,
-  Search,
-  Settings,
-  Database,
   Send,
   Square,
   Paperclip,
-  MessageCircle,
   Sparkles,
-  Sun,
   ArrowLeft,
   Trash2,
   Download,
@@ -22,10 +16,20 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
+import { Sidebar } from "./components/Sidebar";
+import { useAppUpdate } from "./pwa-update";
+import {
+  interpolate,
+  resolveLanguage,
+  translate,
+  translateNotice,
+} from "./i18n";
+import type { Locale, Language } from "./i18n";
 import { storage } from "./storage";
+import { mergeSettings, validBackup } from "./data-contracts";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { listModels, streamChat } from "./providers";
-import { defaultSettings, id, labels } from "./types";
+import { defaultSettings, id, labels, providerIds as providers } from "./types";
 import type {
   Attachment,
   Conversation,
@@ -33,11 +37,12 @@ import type {
   ProviderId,
   Settings as AppSettings,
 } from "./types";
+import "./generated/tokens-light.css";
+import "./generated/tokens-dark.css";
 import "./styles.css";
 
 type View = "chat" | "providers" | "data" | "appearance";
 type Secrets = Partial<Record<ProviderId, string>>;
-const providers: ProviderId[] = ["gemini", "openai", "lmstudio"];
 const emptyChat = (): Conversation => ({
   id: id(),
   title: "New chat",
@@ -51,80 +56,6 @@ const formatSize = (size: number) =>
     : `${(size / 1024).toFixed(1)} KB`;
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
-function mergeSettings(input: Partial<AppSettings> | undefined): AppSettings {
-  const provider =
-    input?.provider && providers.includes(input.provider)
-      ? input.provider
-      : defaultSettings.provider;
-  const theme =
-    input?.theme && ["light", "dark", "system"].includes(input.theme)
-      ? input.theme
-      : defaultSettings.theme;
-  const configs = { ...defaultSettings.providers };
-  for (const providerId of providers) {
-    const saved = input?.providers?.[providerId];
-    configs[providerId] = {
-      ...defaultSettings.providers[providerId],
-      model: typeof saved?.model === "string" ? saved.model : "",
-      vision: saved?.vision === true,
-      requestThoughts: saved?.requestThoughts === true,
-      endpoint:
-        providerId === "lmstudio" && typeof saved?.endpoint === "string"
-          ? saved.endpoint
-          : defaultSettings.providers[providerId].endpoint,
-    };
-  }
-  return {
-    provider,
-    theme,
-    providers: configs,
-    vaults:
-      input?.vaults && typeof input.vaults === "object" ? input.vaults : {},
-  };
-}
-function validBackup(
-  value: unknown,
-): value is { version: number; conversations: Conversation[] } {
-  if (!value || typeof value !== "object") return false;
-  const data = value as { version?: unknown; conversations?: unknown };
-  if (data.version !== 1 || !Array.isArray(data.conversations)) return false;
-  return data.conversations.every(
-    (c: Conversation) =>
-      c &&
-      typeof c.id === "string" &&
-      typeof c.title === "string" &&
-      typeof c.draft === "string" &&
-      Number.isFinite(c.updatedAt) &&
-      Array.isArray(c.messages) &&
-      c.messages.every((m: Message) => {
-        if (
-          !m ||
-          typeof m.id !== "string" ||
-          !["user", "assistant"].includes(m.role) ||
-          typeof m.content !== "string" ||
-          (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
-          !Number.isFinite(m.createdAt)
-        )
-          return false;
-        return (
-          !m.attachments ||
-          (Array.isArray(m.attachments) &&
-            m.attachments.every(
-              (a) =>
-                a &&
-                typeof a.id === "string" &&
-                typeof a.name === "string" &&
-                typeof a.mime === "string" &&
-                typeof a.data === "string" &&
-                Number.isFinite(a.size) &&
-                (a.mime.startsWith("text/") ||
-                  (a.mime.startsWith("image/") &&
-                    /^data:image\/(png|jpeg|gif|webp);base64,/i.test(a.data))),
-            ))
-        );
-      }),
-  );
-}
 function Markdown({ text }: { text: string }) {
   const html = DOMPurify.sanitize(
     marked.parse(text, { async: false }) as string,
@@ -137,32 +68,50 @@ function Markdown({ text }: { text: string }) {
     <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }
-function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
+function Reasoning({
+  text,
+  streaming,
+  locale,
+}: {
+  text: string;
+  streaming: boolean;
+  locale: Locale;
+}) {
   const [open, setOpen] = useState(true);
+  const t = (text: string) => translate(locale, text);
   return (
     <details
       className="reasoning"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary>{streaming ? "Thinking…" : "Reasoning"}</summary>
+      <summary>{streaming ? t("Thinking…") : t("Reasoning")}</summary>
       <Markdown text={text} />
     </details>
   );
 }
 function App() {
+  const updateAvailable = useAppUpdate();
   const [threads, setThreads] = useState<Conversation[]>([]);
   const threadsRef = useRef<Conversation[]>([]);
   const [active, setActive] = useState("");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [systemLanguage, setSystemLanguage] = useState(
+    () => navigator.language,
+  );
+  const locale = resolveLanguage(settings.language, systemLanguage);
+  const t = (text: string) => translate(locale, text);
   const [secrets, setSecrets] = useState<Secrets>({});
   const [view, setView] = useState<View>("chat");
   const [drawer, setDrawer] = useState(false);
+  const [desktop, setDesktop] = useState(
+    () => matchMedia("(min-width: 768px)").matches,
+  );
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
-  const [files, setFiles] = useState<Attachment[]>([]);
+  const [processingFiles, setProcessingFiles] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [password, setPassword] = useState("");
   const [keyInput, setKeyInput] = useState("");
@@ -190,10 +139,14 @@ function App() {
   const queueSave = useCallback(
     (chat: Conversation) => {
       const previous = writes.current[chat.id] || Promise.resolve();
-      writes.current[chat.id] = previous
+      const write = previous
         .catch(() => {})
-        .then(() => storage.saveConversation(chat))
-        .catch(report);
+        .then(() => storage.saveConversation(chat));
+      writes.current[chat.id] = write.catch(report);
+      return write.then(
+        () => true,
+        () => false,
+      );
     },
     [report],
   );
@@ -207,7 +160,7 @@ function App() {
       });
       threadsRef.current = next;
       setThreads(next);
-      if (changed && persist) queueSave(changed);
+      return changed && persist ? queueSave(changed) : Promise.resolve(true);
     },
     [queueSave],
   );
@@ -260,15 +213,32 @@ function App() {
     return () => media.removeEventListener("change", change);
   }, [settings.theme]);
   const settingsWrite = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    const update = () => setSystemLanguage(navigator.language);
+    window.addEventListener("languagechange", update);
+    return () => window.removeEventListener("languagechange", update);
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+  useEffect(() => {
+    const media = matchMedia("(min-width: 768px)");
+    const update = () => setDesktop(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const saveSettings = (next: AppSettings) => {
     setSettings(next);
-    settingsWrite.current = settingsWrite.current
-      .catch(() => {})
-      .then(() => storage.saveSettings(next))
-      .catch(report);
+    const write = settingsWrite.current.then(() => storage.saveSettings(next));
+    settingsWrite.current = write.catch(report);
+    return write.then(
+      () => true,
+      () => false,
+    );
   };
   const config = settings.providers[settings.provider];
   const chat = threads.find((c) => c.id === active);
+  const files = chat?.draftAttachments || [];
   useEffect(() => {
     if (view === "chat" && followReply.current) {
       bottom.current?.scrollIntoView({ block: "end" });
@@ -283,19 +253,18 @@ function App() {
     setThreads(threadsRef.current);
     setActive(next.id);
     queueSave(next);
-    setFiles([]);
     setView("chat");
     setDrawer(false);
   };
   const choose = (chatId: string) => {
     followReply.current = true;
     setActive(chatId);
-    setFiles([]);
     setView("chat");
     setDrawer(false);
   };
   const remove = async (chatId: string) => {
-    if (!confirm("Delete this conversation and its saved attachments?")) return;
+    if (!confirm(t("Delete this conversation and its saved attachments?")))
+      return;
     await writes.current[chatId]?.catch(() => {});
     try {
       await storage.removeConversation(chatId);
@@ -308,7 +277,7 @@ function App() {
     }
   };
   const rename = (c: Conversation) => {
-    const title = prompt("Conversation name", c.title)?.trim();
+    const title = prompt(t("Conversation name"), c.title)?.trim();
     if (title)
       updateChat(c.id, (x) => ({ ...x, title, updatedAt: Date.now() }));
   };
@@ -328,7 +297,9 @@ function App() {
       },
     });
   const processFiles = async (selected: FileList | null) => {
-    if (!selected) return;
+    if (!selected || !chat) return;
+    const chatId = chat.id;
+    setProcessingFiles(true);
     const result: Attachment[] = [];
     try {
       for (const file of Array.from(selected)) {
@@ -354,11 +325,15 @@ function App() {
             });
         result.push({ id: id(), name: file.name, mime, size: file.size, data });
       }
-      setFiles((previous) => [...previous, ...result]);
+      updateChat(chatId, (current) => ({
+        ...current,
+        draftAttachments: [...(current.draftAttachments || []), ...result],
+      }));
     } catch (e) {
       setNotice(errorText(e));
     }
     if (fileInput.current) fileInput.current.value = "";
+    setProcessingFiles(false);
   };
   const runReply = async (
     chatId: string,
@@ -428,7 +403,7 @@ function App() {
     }
   };
   const send = async () => {
-    if (working) return;
+    if (working || processingFiles) return;
     if (!chat) {
       setNotice("Start a new chat first.");
       return;
@@ -469,18 +444,37 @@ function App() {
       chat.title === "New chat"
         ? chat.draft.trim().slice(0, 60) || files[0]?.name || "New chat"
         : chat.title;
-    updateChat(chatId, (c) => ({
+    setWorking(true);
+    const saved = await updateChat(chatId, (c) => ({
       ...c,
       title: nextTitle,
       draft: "",
+      draftAttachments: [],
       updatedAt: Date.now(),
       messages: [...c.messages, user, reply],
     }));
-    setFiles([]);
+    if (!saved) {
+      updateChat(chatId, (c) => ({
+        ...c,
+        draft: c.draft ? `${user.content}\n${c.draft}` : user.content,
+        draftAttachments: [
+          ...(user.attachments || []),
+          ...(c.draftAttachments || []),
+        ],
+        messages: c.messages.filter(
+          (m) => m.id !== user.id && m.id !== reply.id,
+        ),
+      }));
+      setWorking(false);
+      setNotice(
+        "Message was not sent because local storage failed. Your draft and attachments are still visible.",
+      );
+      return;
+    }
     await runReply(chatId, history, reply);
   };
   const retry = async () => {
-    if (!chat || working) return;
+    if (!chat || working || processingFiles) return;
     if (!isConfigured) {
       setNotice("Choose a model and unlock its key in Providers.");
       setView("providers");
@@ -488,7 +482,9 @@ function App() {
     }
     if (
       !confirm(
-        "Retry sends a new request to the selected provider and may incur charges. Continue?",
+        t(
+          "Retry sends a new request to the selected provider and may incur charges. Continue?",
+        ),
       )
     )
       return;
@@ -499,11 +495,23 @@ function App() {
       createdAt: Date.now(),
       status: "streaming",
     };
-    updateChat(chat.id, (c) => ({
+    setWorking(true);
+    const saved = await updateChat(chat.id, (c) => ({
       ...c,
       messages: [...c.messages, reply],
       updatedAt: Date.now(),
     }));
+    if (!saved) {
+      updateChat(chat.id, (c) => ({
+        ...c,
+        messages: c.messages.filter((m) => m.id !== reply.id),
+      }));
+      setWorking(false);
+      setNotice(
+        "Retry was not sent because local storage failed. The conversation remains visible.",
+      );
+      return;
+    }
     await runReply(chat.id, chat.messages, reply);
   };
   const testConnection = async () => {
@@ -516,8 +524,8 @@ function App() {
       setModels(result);
       setNotice(
         result.length
-          ? `Connected. ${result.length} models found. Select one or enter its ID.`
-          : "Connected, but no models were listed. Enter a model ID manually.",
+          ? `Model list loaded (${result.length}). This does not verify your key or chat access. Select one or enter its ID.`
+          : "Model list loaded but no models were listed. This does not verify your key or chat access; enter a model ID manually.",
       );
     } catch (e) {
       setNotice(errorText(e));
@@ -532,10 +540,14 @@ function App() {
       if (saveKey) {
         if (!password) throw new Error("Enter an unlock password.");
         const cipher = await encryptSecret(keyInput, password);
-        saveSettings({
+        const saved = await saveSettings({
           ...settings,
           vaults: { ...settings.vaults, [config.id]: cipher },
         });
+        if (!saved) {
+          setSettings(settings);
+          return;
+        }
       }
       setSecrets((previous) => ({ ...previous, [config.id]: keyInput }));
       setKeyInput("");
@@ -561,10 +573,14 @@ function App() {
       setNotice(errorText(e));
     }
   };
-  const deleteKey = () => {
+  const deleteKey = async () => {
     const vaults = { ...settings.vaults };
     delete vaults[config.id];
-    saveSettings({ ...settings, vaults });
+    const saved = await saveSettings({ ...settings, vaults });
+    if (!saved) {
+      setSettings(settings);
+      return;
+    }
     setSecrets((previous) => ({ ...previous, [config.id]: undefined }));
     setKeyInput("");
     setPassword("");
@@ -657,7 +673,9 @@ function App() {
       if (
         importSettings &&
         confirm(
-          "Import appearance and provider settings? Saved keys will remain on this device.",
+          t(
+            "Import appearance and provider settings? Saved keys will remain on this device.",
+          ),
         )
       ) {
         const merged = mergeSettings({
@@ -677,7 +695,9 @@ function App() {
   const clearData = async () => {
     if (
       !confirm(
-        "Permanently delete all local chats, attachments, settings, and saved keys?",
+        t(
+          "Permanently delete all local chats, attachments, settings, and saved keys?",
+        ),
       )
     )
       return;
@@ -692,7 +712,6 @@ function App() {
       setActive("");
       setSettings(defaultSettings);
       setSecrets({});
-      setFiles([]);
       setNotice("Local data cleared.");
     } catch (e) {
       report(e);
@@ -705,113 +724,76 @@ function App() {
         .includes(query.toLowerCase()),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
-  if (!ready) return <div className="loading">Loading Luma Chat…</div>;
+  if (!ready) return <div className="loading">{t("Loading Luma Chat…")}</div>;
   return (
     <div className="app">
-      <aside className={`sidebar ${drawer ? "open" : ""}`}>
-        <div className="brand">
-          <span className="brand-mark">
-            <Sparkles size={21} />
-          </span>
-          <strong>Luma Chat</strong>
-          <button
-            className="icon mobile close"
-            aria-label="Close menu"
-            onClick={() => setDrawer(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <button className="primary new-chat" onClick={create}>
-          <Plus size={19} /> New chat
-        </button>
-        <label className="search">
-          <Search size={18} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search chats..."
-            aria-label="Search chats"
-          />
-        </label>
-        <div className="history-label">Recent conversations</div>
-        <div className="history">
-          {filtered.length === 0 && (
-            <p className="muted small">No conversations found.</p>
-          )}
-          {filtered.map((c) => (
-            <div
-              className={`history-item ${c.id === active && view === "chat" ? "selected" : ""}`}
-              key={c.id}
-            >
-              <button className="history-name" onClick={() => choose(c.id)}>
-                <MessageCircle size={16} />
-                <span>{c.title}</span>
-              </button>
-              <button
-                className="icon more"
-                aria-label={`Rename ${c.title}`}
-                onClick={() => rename(c)}
-              >
-                ⋯
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="sidebar-bottom">
-          <button
-            className="nav"
-            onClick={() => {
-              setView("providers");
-              setDrawer(false);
-            }}
-          >
-            <Settings size={19} /> Settings
-          </button>
-          <button
-            className="nav"
-            onClick={() => {
-              setView("data");
-              setDrawer(false);
-            }}
-          >
-            <Database size={19} /> Local data
-          </button>
-          <button
-            className="nav"
-            onClick={() => {
-              setView("appearance");
-              setDrawer(false);
-            }}
-          >
-            <Sun size={19} /> Appearance
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        locale={locale}
+        theme={settings.theme}
+        language={settings.language}
+        onTheme={(theme) => saveSettings({ ...settings, theme })}
+        onLanguage={(language) => saveSettings({ ...settings, language })}
+        open={drawer}
+        collapsed={desktop && settings.sidebarCollapsed}
+        hiddenFromInput={desktop ? settings.sidebarCollapsed : !drawer}
+        active={active}
+        chatView={view === "chat"}
+        query={query}
+        chats={filtered}
+        onQuery={setQuery}
+        onClose={() => setDrawer(false)}
+        onCreate={create}
+        onChoose={choose}
+        onRename={rename}
+        onNavigate={(next) => {
+          setView(next);
+          setDrawer(false);
+        }}
+      />
       {drawer && (
         <button
           className="scrim"
-          aria-label="Close menu"
+          aria-label={t("Close menu")}
           onClick={() => setDrawer(false)}
         />
       )}
       <main className="main">
         <header className="topbar">
           <button
+            className="icon desktop-toggle"
+            aria-label={
+              settings.sidebarCollapsed
+                ? t("Expand sidebar")
+                : t("Collapse sidebar")
+            }
+            aria-expanded={!settings.sidebarCollapsed}
+            aria-controls="chat-sidebar"
+            onClick={() =>
+              saveSettings({
+                ...settings,
+                sidebarCollapsed: !settings.sidebarCollapsed,
+              })
+            }
+          >
+            <Menu size={22} />
+          </button>
+          <button
             className="icon mobile"
-            aria-label="Open menu"
+            aria-label={t("Open menu")}
             onClick={() => setDrawer(true)}
           >
             <Menu size={22} />
           </button>
           <strong>
             {view === "chat"
-              ? chat?.title || "New chat"
+              ? !chat || chat.title === "New chat"
+                ? t("New chat")
+                : chat.title
               : view === "providers"
-                ? "AI providers"
+                ? t("AI providers")
                 : view === "data"
-                  ? "Local data"
-                  : "Appearance"}
+                  ? t("Local data")
+                  : t("Appearance")}
           </strong>
           <div className="top-actions">
             {view === "chat" && (
@@ -820,21 +802,36 @@ function App() {
                 onClick={() => setView("providers")}
               >
                 <Sparkles size={17} />
-                <span>{config.model || "Choose a model"}</span>
+                <span>
+                  {labels[config.id]} · {config.model || t("Choose a model")}
+                </span>
                 <ChevronDown size={16} />
               </button>
             )}
+            {view === "chat" && (
+              <span className="connection-state">
+                {isConfigured ? t("Ready to send") : t("Setup needed")}
+              </span>
+            )}
             <span className="local-pill">
-              <span className="dot" /> Local storage
+              <span className="dot" />
+              {t(" Local storage")}
             </span>
           </div>
         </header>
+        {updateAvailable && (
+          <div className="notice update-notice" role="status">
+            {t(
+              "An update is ready. Finish any reply, close all Luma Chat tabs and app windows, then reopen. You may need to unlock your key again.",
+            )}
+          </div>
+        )}
         {notice && (
           <div className="notice" role="status">
-            <span>{notice}</span>
+            <span>{translateNotice(locale, notice)}</span>
             <button
               className="icon"
-              aria-label="Dismiss message"
+              aria-label={t("Dismiss message")}
               onClick={() => setNotice("")}
             >
               <X size={17} />
@@ -845,7 +842,7 @@ function App() {
           <>
             <section
               className="conversation"
-              aria-label="Conversation"
+              aria-label={t("Conversation")}
               ref={conversation}
               onScroll={() => {
                 const el = conversation.current;
@@ -859,20 +856,21 @@ function App() {
                   <div className="welcome-icon">
                     <Sparkles size={28} />
                   </div>
-                  <h1>How can I help you today?</h1>
+                  <h1>{t("How can I help you today?")}</h1>
                   <p>
-                    Your conversations stay on this device. Choose a provider
-                    and model to get started.
+                    {t(
+                      "Your conversations stay on this device. Choose a provider and model to get started.",
+                    )}
                   </p>
                   <button
                     className="secondary"
                     onClick={() => setView("providers")}
                   >
-                    Configure a provider
+                    {t("Configure a provider")}
                   </button>
                   {!chat && (
                     <button className="primary" onClick={create}>
-                      Start a new chat
+                      {t("Start a new chat")}
                     </button>
                   )}
                 </div>
@@ -881,15 +879,15 @@ function App() {
                   {chat.messages.map((m) => (
                     <article className={`message ${m.role}`} key={m.id}>
                       <div className="avatar">
-                        {m.role === "user" ? "U" : <Sparkles size={19} />}
+                        {m.role === "user" ? t("U") : <Sparkles size={19} />}
                       </div>
                       <div className="bubble">
                         <div className="message-meta">
                           <strong>
-                            {m.role === "assistant" ? "Luma Chat" : "You"}
+                            {m.role === "assistant" ? t("Luma Chat") : t("You")}
                           </strong>
                           <time>
-                            {new Date(m.createdAt).toLocaleTimeString([], {
+                            {new Date(m.createdAt).toLocaleTimeString(locale, {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
@@ -897,6 +895,7 @@ function App() {
                         </div>
                         {m.reasoning && (
                           <Reasoning
+                            locale={locale}
                             text={m.reasoning}
                             streaming={m.status === "streaming"}
                           />
@@ -917,11 +916,13 @@ function App() {
                         ))}
                         {m.status === "interrupted" && (
                           <div className="status-label">
-                            Stopped or interrupted
+                            {t("Stopped or interrupted")}
                           </div>
                         )}
                         {m.status === "error" && (
-                          <div className="status-label">Response failed</div>
+                          <div className="status-label">
+                            {t("Response failed")}
+                          </div>
                         )}
                         {(m.status === "error" || m.status === "interrupted") &&
                           m.id ===
@@ -931,7 +932,7 @@ function App() {
                               disabled={working}
                               onClick={() => void retry()}
                             >
-                              Retry
+                              {t("Retry")}
                             </button>
                           )}
                         {m.content && (
@@ -944,7 +945,8 @@ function App() {
                                 .catch(() => setNotice("Copy unavailable."))
                             }
                           >
-                            <Copy size={14} /> Copy
+                            <Copy size={14} />
+                            {t(" Copy")}
                           </button>
                         )}
                       </div>
@@ -955,6 +957,11 @@ function App() {
               )}
             </section>
             <div className="composer-wrap">
+              {processingFiles && (
+                <p className="hint" role="status">
+                  {t("Preparing attachments…")}
+                </p>
+              )}
               {files.length > 0 && (
                 <div className="file-list">
                   {files.map((f) => (
@@ -962,9 +969,15 @@ function App() {
                       {f.name}
                       <button
                         className="icon"
-                        aria-label={`Remove ${f.name}`}
+                        aria-label={interpolate(t("Remove {name}"), f.name)}
                         onClick={() =>
-                          setFiles(files.filter((x) => x.id !== f.id))
+                          chat &&
+                          updateChat(chat.id, (c) => ({
+                            ...c,
+                            draftAttachments: (c.draftAttachments || []).filter(
+                              (x) => x.id !== f.id,
+                            ),
+                          }))
                         }
                       >
                         <X size={14} />
@@ -976,8 +989,8 @@ function App() {
               <div className="composer">
                 <textarea
                   rows={1}
-                  placeholder="Ask anything..."
-                  aria-label="Message"
+                  placeholder={t("Ask anything...")}
+                  aria-label={t("Message")}
                   value={chat?.draft || ""}
                   disabled={!chat}
                   onChange={(e) =>
@@ -1001,9 +1014,9 @@ function App() {
                 <div className="composer-actions">
                   <button
                     className="icon outlined"
-                    aria-label="Attach image or text"
+                    aria-label={t("Attach image or text")}
                     onClick={() => fileInput.current?.click()}
-                    disabled={!chat || working}
+                    disabled={!chat || working || processingFiles}
                   >
                     <Paperclip size={20} />
                   </button>
@@ -1020,13 +1033,13 @@ function App() {
                     onClick={() => setView("providers")}
                   >
                     <Sparkles size={17} />
-                    {config.model || "Choose model"}
+                    {config.model || t("Choose model")}
                   </button>
                   <span className="spacer" />
                   {working ? (
                     <button
                       className="send"
-                      aria-label="Stop generating"
+                      aria-label={t("Stop generating")}
                       onClick={() => controller.current?.abort()}
                     >
                       <Square size={18} />
@@ -1034,9 +1047,9 @@ function App() {
                   ) : (
                     <button
                       className="send"
-                      aria-label="Send message"
+                      aria-label={t("Send message")}
                       onClick={() => void send()}
-                      disabled={!chat}
+                      disabled={!chat || processingFiles}
                     >
                       <Send size={20} />
                     </button>
@@ -1044,8 +1057,10 @@ function App() {
                 </div>
               </div>
               <p className="privacy">
-                <Lock size={13} /> Chats are stored on this device. Content is
-                sent to your selected provider.
+                <Lock size={13} />
+                {t(
+                  " Chats are stored on this device. Content is sent to your selected provider.",
+                )}
               </p>
             </div>
           </>
@@ -1053,12 +1068,14 @@ function App() {
         {view === "providers" && (
           <section className="page">
             <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} /> Back to chat
+              <ArrowLeft size={16} />
+              {t(" Back to chat")}
             </button>
-            <h1>AI providers</h1>
+            <h1>{t("AI providers")}</h1>
             <p className="subtitle">
-              Connect your own model. Requests go directly from this browser to
-              the selected provider.
+              {t(
+                "Connect your own model. Requests go directly from this browser to the selected provider.",
+              )}
             </p>
             <div className="provider-tabs">
               {providers.map((p) => (
@@ -1080,15 +1097,19 @@ function App() {
                   <h2>{labels[config.id]}</h2>
                   <p>
                     {config.id === "lmstudio"
-                      ? "Connect to a local or trusted network server."
-                      : "Use your own API key and choose a model."}
+                      ? t("Connect to a local or trusted network server.")
+                      : config.id === "openrouter"
+                        ? t(
+                            "Use an OpenRouter key to access its model catalog.",
+                          )
+                        : t("Use your own API key and choose a model.")}
                   </p>
                 </div>
               </div>
               {config.id === "lmstudio" && (
                 <>
                   <label className="field">
-                    Server base URL
+                    {t("Server base URL")}
                     <input
                       value={config.endpoint}
                       onChange={(e) =>
@@ -1098,21 +1119,19 @@ function App() {
                     />
                   </label>
                   <p className="hint">
-                    Enable CORS in LM Studio. On a phone, use the computer’s
-                    network address; localhost refers to the phone. Browser
-                    local-network permission, HTTPS restrictions and firewall
-                    settings can affect access. Enable authentication when
-                    exposing the server.
+                    {t(
+                      "Enable CORS in LM Studio. On a phone, use the computer’s network address; localhost refers to the phone. Browser local-network permission, HTTPS restrictions and firewall settings can affect access. Enable authentication when exposing the server.",
+                    )}
                   </p>
                 </>
               )}
               <label className="field">
-                Model ID
+                {t("Model ID")}
                 <input
                   list="model-list"
                   value={config.model}
                   onChange={(e) => updateConfig({ model: e.target.value })}
-                  placeholder="Enter a model ID or test connection"
+                  placeholder={t("Enter a model ID or test connection")}
                 />
               </label>
               <datalist id="model-list">
@@ -1126,13 +1145,14 @@ function App() {
                   checked={config.vision}
                   onChange={(e) => updateConfig({ vision: e.target.checked })}
                 />{" "}
-                This model supports image input
+                {t("This model supports image input")}
               </label>
               <p className="hint">
-                Enable only when your selected model supports images. Plain text
-                attachments are sent as text.
+                {t(
+                  "Enable only when your selected model supports images. Plain text attachments are sent as text.",
+                )}
               </p>
-              {config.id === "gemini" && (
+              {(config.id === "gemini" || config.id === "openrouter") && (
                 <>
                   <label className="check">
                     <input
@@ -1142,38 +1162,47 @@ function App() {
                         updateConfig({ requestThoughts: e.target.checked })
                       }
                     />{" "}
-                    Request thought summaries
+                    {config.id === "gemini"
+                      ? t("Request thought summaries")
+                      : t("Request reasoning")}
                   </label>
                   <p className="hint">
-                    Enable for Gemini models that support thought summaries.
-                    Some requests or models return no summary.
+                    {config.id === "gemini"
+                      ? t(
+                          "Enable for models that support thought summaries. Some requests or models return no summary.",
+                        )
+                      : t(
+                          "Enable for supported models. Reasoning may affect cost, and some models do not expose it.",
+                        )}
                   </p>
                 </>
               )}
               <div className="divider" />
               <h3>
-                {config.id === "lmstudio" ? "API token (optional)" : "API key"}
+                {config.id === "lmstudio"
+                  ? t("API token (optional)")
+                  : t("API key")}
               </h3>
               <p className="hint">
-                Keys are accessible to this app while unlocked. Encrypted
-                storage does not protect against malicious scripts or a
-                compromised device. Your provider receives your messages.
+                {t(
+                  "Keys are accessible to this app while unlocked. Encrypted storage does not protect against malicious scripts or a compromised device. Your provider receives your messages.",
+                )}
               </p>
               <label className="field">
-                {config.id === "lmstudio" ? "Token" : "Key"}
+                {config.id === "lmstudio" ? t("Token") : t("Key")}
                 <div className="password-row">
                   <input
                     type={showKey ? "text" : "password"}
                     autoComplete="off"
                     value={keyInput}
                     onChange={(e) => setKeyInput(e.target.value)}
-                    placeholder="Enter key for this session"
+                    placeholder={t("Enter key for this session")}
                   />
                   <button
                     className="secondary"
                     onClick={() => setShowKey(!showKey)}
                   >
-                    {showKey ? "Hide" : "Show"}
+                    {showKey ? t("Hide") : t("Show")}
                   </button>
                 </div>
               </label>
@@ -1183,35 +1212,39 @@ function App() {
                   checked={saveKey}
                   onChange={(e) => setSaveKey(e.target.checked)}
                 />{" "}
-                Save encrypted on this device
+                {t("Save encrypted on this device")}
               </label>
               {(saveKey || settings.vaults[config.id]) && (
                 <label className="field">
-                  Unlock password
+                  {t("Unlock password")}
                   <input
                     type="password"
                     autoComplete="off"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
+                    placeholder={t("Enter your password")}
                   />
                 </label>
               )}
               <p className="hint">
-                If you forget the password, the saved key cannot be recovered.
-                Session keys are cleared on reload.
+                {t(
+                  "If you forget the password, the saved key cannot be recovered. Session keys are cleared on reload.",
+                )}
               </p>
               <div className="button-row">
                 <button className="primary" onClick={() => void storeKey()}>
-                  Use key
+                  {t("Use key")}
                 </button>
                 {settings.vaults[config.id] && (
                   <>
                     <button className="secondary" onClick={() => void unlock()}>
-                      Unlock saved key
+                      {t("Unlock saved key")}
                     </button>
-                    <button className="secondary" onClick={deleteKey}>
-                      Delete saved key
+                    <button
+                      className="secondary"
+                      onClick={() => void deleteKey()}
+                    >
+                      {t("Delete saved key")}
                     </button>
                   </>
                 )}
@@ -1226,54 +1259,59 @@ function App() {
                       setNotice("Key locked for this session.");
                     }}
                   >
-                    Lock
+                    {t("Lock")}
                   </button>
                 )}
                 <button
                   className="secondary"
                   onClick={() => void testConnection()}
                 >
-                  Test connection
+                  {t("Test connection")}
                 </button>
               </div>
               <p className="hint">
                 {secrets[config.id]
-                  ? "A key or token is available for this session."
+                  ? t("A key or token is available for this session.")
                   : settings.vaults[config.id]
-                    ? "A saved key is locked."
-                    : "No key is saved."}{" "}
-                Testing requests the model list and may use network resources.
+                    ? t("A saved key is locked.")
+                    : t("No key is saved.")}{" "}
+                {t(
+                  "Testing requests the model list and may use network resources. A model list does not confirm the key or chat access.",
+                )}
               </p>
             </div>
             <div className="info">
-              Cloud providers may reject direct browser requests. This app does
-              not include a proxy or server-side key store.
+              {t(
+                "Cloud providers may reject direct browser requests. This app does not include a proxy or server-side key store.",
+              )}
             </div>
           </section>
         )}
         {view === "data" && (
           <section className="page">
             <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} /> Back to chat
+              <ArrowLeft size={16} />
+              {t(" Back to chat")}
             </button>
-            <h1>Local data</h1>
+            <h1>{t("Local data")}</h1>
             <p className="subtitle">
-              Manage your chats, attachments, and browser storage.
+              {t("Manage your chats, attachments, and browser storage.")}
             </p>
             <div className="data-grid">
               <div className="card">
-                <h2>Local storage</h2>
-                <p>{usage}</p>
+                <h2>{t("Local storage")}</h2>
+                <p>{translateNotice(locale, usage)}</p>
                 <div className="stat-row">
                   <div>
                     <strong>{threads.length}</strong>
-                    <span>Conversations</span>
+                    <span>{t("Conversations")}</span>
                   </div>
                   <div>
                     <strong>
                       {threads.reduce(
                         (n, c) =>
                           n +
+                          (c.draftAttachments?.length || 0) +
                           c.messages.reduce(
                             (s, m) => s + (m.attachments?.length || 0),
                             0,
@@ -1281,7 +1319,7 @@ function App() {
                         0,
                       )}
                     </strong>
-                    <span>Attachments</span>
+                    <span>{t("Attachments")}</span>
                   </div>
                 </div>
                 <button
@@ -1307,25 +1345,28 @@ function App() {
                       );
                   }}
                 >
-                  Request persistent storage
+                  {t("Request persistent storage")}
                 </button>
               </div>
               <div className="card">
-                <h2>Backup</h2>
+                <h2>{t("Backup")}</h2>
                 <p>
-                  Export conversations, attachments, and settings. API keys are
-                  excluded.
+                  {t(
+                    "Export conversations, attachments, and settings. API keys are excluded.",
+                  )}
                 </p>
                 <div className="button-row">
                   <button className="primary" onClick={exportData}>
-                    <Download size={16} /> Export backup
+                    <Download size={16} />
+                    {t(" Export backup")}
                   </button>
                   <button
                     className="secondary"
                     onClick={() => importInput.current?.click()}
                     disabled={working}
                   >
-                    <Upload size={16} /> Import backup
+                    <Upload size={16} />
+                    {t(" Import backup")}
                   </button>
                   <input
                     type="file"
@@ -1338,63 +1379,67 @@ function App() {
               </div>
             </div>
             <div className="info">
-              Browser storage can be cleared or evicted. Keep a backup of
-              conversations you need. Data does not automatically sync between
-              devices.
+              {t(
+                "Browser storage can be cleared or evicted. Keep a backup of conversations you need. Data does not automatically sync between devices.",
+              )}
             </div>
             {importData && (
               <div className="card">
-                <h2>Import preview</h2>
+                <h2>{t("Import preview")}</h2>
                 <p>
-                  {importData.length} conversations;{" "}
+                  {importData.length}
+                  {t(" conversations;")}{" "}
                   {
                     importData.filter((c) => threads.some((t) => t.id === c.id))
                       .length
                   }{" "}
-                  have an existing ID. Backups do not contain keys.
+                  {t("have an existing ID. Backups do not contain keys.")}
                 </p>
                 <div className="button-row">
                   <button
                     className="primary"
                     onClick={() => void finishImport(false)}
                   >
-                    Import and skip conflicts
+                    {t("Import and skip conflicts")}
                   </button>
                   <button
                     className="secondary"
                     onClick={() => {
                       if (
                         confirm(
-                          "Replace existing conversations with matching IDs?",
+                          t(
+                            "Replace existing conversations with matching IDs?",
+                          ),
                         )
                       )
                         void finishImport(true);
                     }}
                   >
-                    Replace conflicts
+                    {t("Replace conflicts")}
                   </button>
                   <button
                     className="secondary"
                     onClick={() => setImportData(null)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </button>
                 </div>
               </div>
             )}
             <div className="card">
               <div className="section-head">
-                <h2>Conversations</h2>
+                <h2>{t("Conversations")}</h2>
                 <button
                   className="danger"
                   onClick={() => void clearData()}
                   disabled={working}
                 >
-                  <Trash2 size={16} /> Clear all local data
+                  <Trash2 size={16} />
+                  {t(" Clear all local data")}
                 </button>
               </div>
               {threads.length === 0 ? (
-                <p className="muted">No conversations yet.</p>
+                <p className="muted">{t("No conversations yet.")}</p>
               ) : (
                 <div className="data-list">
                   {threads.map((c) => (
@@ -1402,13 +1447,17 @@ function App() {
                       <div>
                         <strong>{c.title}</strong>
                         <small>
-                          {c.messages.length} messages ·{" "}
-                          {new Date(c.updatedAt).toLocaleDateString()}
+                          {c.messages.length}
+                          {t(" messages ·")}{" "}
+                          {new Date(c.updatedAt).toLocaleDateString(locale)}
                         </small>
                       </div>
                       <button
                         className="icon"
-                        aria-label={`Delete ${c.title}`}
+                        aria-label={interpolate(
+                          t("Delete {name}"),
+                          c.title === "New chat" ? t("New chat") : c.title,
+                        )}
                         disabled={working}
                         onClick={() => void remove(c.id)}
                       >
@@ -1424,16 +1473,18 @@ function App() {
         {view === "appearance" && (
           <section className="page">
             <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} /> Back to chat
+              <ArrowLeft size={16} />
+              {t(" Back to chat")}
             </button>
-            <h1>Appearance</h1>
+            <h1>{t("Appearance")}</h1>
             <p className="subtitle">
-              Choose how Luma Chat looks on this device.
+              {t("Choose how Luma Chat looks on this device.")}
             </p>
             <div className="card">
               <label className="field">
-                Theme
+                {t("Theme")}
                 <select
+                  aria-label={t("Theme")}
                   value={settings.theme}
                   onChange={(e) =>
                     saveSettings({
@@ -1442,9 +1493,26 @@ function App() {
                     })
                   }
                 >
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
+                  <option value="system">{t("System")}</option>
+                  <option value="light">{t("Light")}</option>
+                  <option value="dark">{t("Dark")}</option>
+                </select>
+              </label>
+              <label className="field">
+                {t("Language")}
+                <select
+                  aria-label={t("Language")}
+                  value={settings.language}
+                  onChange={(e) =>
+                    saveSettings({
+                      ...settings,
+                      language: e.target.value as Language,
+                    })
+                  }
+                >
+                  <option value="system">{t("System language")}</option>
+                  <option value="en">{t("English")}</option>
+                  <option value="zh-CN">{t("Simplified Chinese")}</option>
                 </select>
               </label>
             </div>

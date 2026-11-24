@@ -1,0 +1,60 @@
+{
+  "color": {
+    "bg": {
+      "$type": "color",
+      "$value": "#17181b"
+    },
+    "surface": {
+      "$type": "color",
+      "$value": "#232428"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "#f4f4f5"
+    },
+    "muted": {
+      "$type": "color",
+      "$value": "#b7b8be"
+    },
+    "border": {
+      "$type": "color",
+      "$value": "#3a3b42"
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "#aaa5ff"
+    },
+    "soft": {
+      "$type": "color",
+      "$value": "#33304d"
+    },
+    "danger": {
+      "$type": "color",
+      "$value": "#ffaea5"
+    },
+    "focus": {
+      "$type": "color",
+      "$value": "#aaa5ff"
+    },
+    "status": {
+      "$type": "color",
+      "$value": "#46c47e"
+    },
+    "user-bg": {
+      "$type": "color",
+      "$value": "#47416a"
+    },
+    "user-text": {
+      "$type": "color",
+      "$value": "#e3dfff"
+    },
+    "scrim": {
+      "$type": "color",
+      "$value": "#000000aa"
+    },
+    "shadow": {
+      "$type": "color",
+      "$value": "#00000033"
+    }
+  }
+}

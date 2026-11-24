@@ -1,6 +1,11 @@
 ﻿import type { Attachment, Message, ProviderConfig } from "./types";
+import { defaultSettings } from "./types";
 function baseUrl(config: ProviderConfig): string {
-  const url = new URL(config.endpoint);
+  const endpoint =
+    config.id === "lmstudio"
+      ? config.endpoint
+      : defaultSettings.providers[config.id].endpoint;
+  const url = new URL(endpoint);
   if (
     !["http:", "https:"].includes(url.protocol) ||
     url.username ||
@@ -59,11 +64,17 @@ async function request(
   }
   if (!response.ok) {
     const message =
-      response.status === 401 || response.status === 403
-        ? "Authentication or access was rejected."
-        : response.status === 429
-          ? "Rate limit or quota exceeded."
-          : `Provider returned HTTP ${response.status}.`;
+      response.status === 401
+        ? "Authentication failed (HTTP 401). Check this provider's key or token."
+        : response.status === 403
+          ? "Access denied (HTTP 403). Check the provider's account permissions and model access."
+          : response.status === 402
+            ? "Payment or credit limit reached (HTTP 402). Check the provider account and key limits."
+            : response.status === 404
+              ? "Model or endpoint not found (HTTP 404). Check the provider, model ID, and server address."
+              : response.status === 429
+                ? "Rate limit or quota exceeded (HTTP 429). Wait or check the provider account."
+                : `Provider returned HTTP ${response.status}.`;
     throw new Error(message);
   }
   return response;
@@ -73,15 +84,30 @@ export async function listModels(
   secret: string,
 ): Promise<string[]> {
   const response = await request(config, "/models", secret);
-  const data = await response.json();
+  let data: { models?: unknown; data?: unknown };
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Provider returned an invalid model list.");
+  }
+  if (!data || typeof data !== "object")
+    throw new Error("Provider returned an invalid model list.");
   const values =
     config.id === "gemini"
-      ? data.models
-          ?.filter((m: { supportedGenerationMethods?: string[] }) =>
-            m.supportedGenerationMethods?.includes("generateContent"),
+      ? (Array.isArray(data.models) ? data.models : [])
+          .filter(
+            (m: { supportedGenerationMethods?: string[] }) =>
+              Array.isArray(m?.supportedGenerationMethods) &&
+              m.supportedGenerationMethods.includes("generateContent"),
           )
-          .map((m: { name: string }) => m.name.replace(/^models\//, ""))
-      : data.data?.map((m: { id: string }) => m.id);
+          .map((m: { name?: unknown }) =>
+            typeof m.name === "string"
+              ? m.name.replace(/^models\//, "")
+              : undefined,
+          )
+      : (Array.isArray(data.data) ? data.data : []).map(
+          (m: { id?: unknown }) => m?.id,
+        );
   return Array.isArray(values)
     ? values.filter((x: unknown): x is string => typeof x === "string")
     : [];
@@ -148,6 +174,9 @@ export function buildRequest(
     body: {
       model: config.model,
       stream: true,
+      ...(config.id === "openrouter" && config.requestThoughts
+        ? { reasoning: { enabled: true } }
+        : {}),
       messages: completed.map((m) => ({
         role: m.role,
         content: openaiContent(m),
@@ -295,14 +324,19 @@ export async function streamChat(
     await parseEventStream(
       response.body,
       (data) => {
-        const chunk = JSON.parse(data);
+        let chunk;
+        try {
+          chunk = JSON.parse(data);
+        } catch {
+          throw new Error(
+            "The provider returned invalid streaming data. Partial output was retained.",
+          );
+        }
         if (chunk.error)
           throw new Error("The provider reported an error while generating.");
-        if (
-          chunk.candidates?.[0]?.finishReason ||
-          chunk.choices?.[0]?.finish_reason
-        )
-          finished = true;
+        const finishReason =
+          chunk.candidates?.[0]?.finishReason ??
+          chunk.choices?.[0]?.finish_reason;
         if (config.id === "gemini") {
           const parts = chunk.candidates?.[0]?.content?.parts;
           if (Array.isArray(parts)) {
@@ -315,13 +349,40 @@ export async function streamChat(
         } else {
           const delta = chunk.choices?.[0]?.delta;
           const reasoning = delta?.reasoning_content ?? delta?.reasoning;
-          if (typeof reasoning === "string" && reasoning)
+          if (typeof reasoning === "string" && reasoning) {
             onReasoning(reasoning);
+          } else if (
+            config.id === "openrouter" &&
+            Array.isArray(delta?.reasoning_details)
+          ) {
+            for (const detail of delta.reasoning_details) {
+              const text =
+                detail?.type === "reasoning.text"
+                  ? detail.text
+                  : detail?.type === "reasoning.summary"
+                    ? detail.summary
+                    : undefined;
+              if (typeof text === "string" && text) onReasoning(text);
+            }
+          }
           if (typeof delta?.content === "string" && delta.content) {
             if (localTags) localTags.push(delta.content);
             else emitText(delta.content);
           }
         }
+        if (finishReason === "error")
+          throw new Error(
+            "The provider reported an error while generating. Partial output was retained.",
+          );
+        if (finishReason === "length" || finishReason === "MAX_TOKENS")
+          throw new Error(
+            "The model reached its output limit. Partial output was retained.",
+          );
+        if (finishReason === "content_filter" || finishReason === "SAFETY")
+          throw new Error(
+            "The provider stopped the response due to its content policy. Partial output was retained.",
+          );
+        if (finishReason) finished = true;
       },
       () => {
         finished = true;

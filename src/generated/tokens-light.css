@@ -1,0 +1,45 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root {
+  --color-bg: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-text: #202124;
+  --color-muted: #60646f;
+  --color-border: #e4e5e8;
+  --color-accent: #5149d9;
+  --color-soft: #eeedff;
+  --color-danger: #b42318;
+  --color-primary: #554bf0;
+  --color-primary-hover: #463dd6;
+  --color-on-primary: #ffffff;
+  --color-icon-bg: #5b52ef;
+  --color-focus: #8b86ff;
+  --color-status: #19a35b;
+  --color-user-bg: #eae8ff;
+  --color-user-text: #5047d7;
+  --color-scrim: rgba(0, 0, 0, 0.5333333333333333);
+  --color-shadow: rgba(0, 0, 0, 0.043137254901960784);
+  --space-small: 8px;
+  --space-medium: 16px;
+  --space-large: 24px;
+  --space-extra-small: 4px;
+  --space-base: 12px;
+  --space-extended: 20px;
+  --space-extra-large: 32px;
+  --radius-small: 8px;
+  --radius-medium: 12px;
+  --radius-large: 16px;
+  --font-body: 16px;
+  --font-small: 13px;
+  --font-title: 32px;
+  --font-caption: 12px;
+  --font-label: 14px;
+  --font-lead: 18px;
+  --font-brand: 21px;
+  --font-icon: 22px;
+  --font-metric: 24px;
+  --font-heading: 28px;
+  --font-mobile-caption: 11px;
+}

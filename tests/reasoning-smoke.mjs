@@ -1,4 +1,5 @@
-﻿import { chromium } from "playwright-core";
+import { chromePath } from "./browser-launch.mjs";
+import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import assert from "node:assert/strict";
 const requests = [];
@@ -39,14 +40,14 @@ await new Promise((resolveListen) =>
   server.listen(0, "127.0.0.1", resolveListen),
 );
 const browser = await chromium.launch({
-  executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  executablePath: chromePath(),
   headless: true,
 });
 try {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("http://127.0.0.1:55167/");
+  await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await page.getByRole("button", { name: "Configure a provider" }).click();
   await page.getByRole("button", { name: "LM Studio" }).click();

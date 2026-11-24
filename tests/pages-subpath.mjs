@@ -1,4 +1,5 @@
-﻿import { chromium } from "playwright-core";
+import { chromePath } from "./browser-launch.mjs";
+import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
@@ -40,7 +41,7 @@ await new Promise((resolveListen) =>
   server.listen(0, "127.0.0.1", resolveListen),
 );
 const browser = await chromium.launch({
-  executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  executablePath: chromePath(),
   headless: true,
 });
 try {

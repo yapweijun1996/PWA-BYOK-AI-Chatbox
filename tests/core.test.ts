@@ -1,8 +1,14 @@
 ﻿import { describe, expect, it, vi } from "vitest";
-import { buildRequest, parseEventStream, streamChat } from "../src/providers";
+import {
+  buildRequest,
+  listModels,
+  parseEventStream,
+  streamChat,
+} from "../src/providers";
+import { mergeSettings, validBackup } from "../src/data-contracts";
 import { encryptSecret, decryptSecret } from "../src/crypto";
 import { defaultSettings } from "../src/types";
-import type { Message } from "../src/types";
+import type { Message, Settings } from "../src/types";
 const message: Message = {
   id: "m",
   role: "user",
@@ -21,6 +27,198 @@ const stream = (chunks: string[]) =>
     },
   });
 describe("provider contracts", () => {
+  it("adds OpenRouter to old settings without changing saved provider configuration or keys", () => {
+    const old = {
+      provider: "openai",
+      theme: "dark",
+      providers: {
+        openai: { ...defaultSettings.providers.openai, model: "old-model" },
+        lmstudio: {
+          ...defaultSettings.providers.lmstudio,
+          endpoint: "http://localhost:9999/v1",
+        },
+      },
+      vaults: {
+        openai: {
+          version: 1,
+          salt: "s",
+          iv: "i",
+          data: "ciphertext",
+          iterations: 600000,
+        },
+      },
+    } as unknown as Settings;
+    const restored = mergeSettings(old);
+    expect(restored.providers.openrouter.endpoint).toBe(
+      "https://openrouter.ai/api/v1",
+    );
+    expect(restored.providers.openai.model).toBe("old-model");
+    expect(restored.providers.lmstudio.endpoint).toBe(
+      "http://localhost:9999/v1",
+    );
+    expect(restored.vaults.openai).toEqual(old.vaults.openai);
+  });
+  it("recognizes legacy backup conversations without reasoning", () => {
+    expect(
+      validBackup({
+        version: 1,
+        conversations: [
+          {
+            id: "c",
+            title: "Old",
+            updatedAt: 1,
+            draft: "",
+            messages: [
+              { id: "m", role: "user", content: "hello", createdAt: 1 },
+            ],
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+  it("uses the fixed OpenRouter endpoint and maps the model catalog", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: [{ id: "thinkingmachines/inkling-2-mini" }] }),
+          { status: 200 },
+        ),
+      );
+    const config = {
+      ...defaultSettings.providers.openrouter,
+      endpoint: "https://untrusted.example/v1",
+    };
+    expect(await listModels(config, "example-key")).toEqual([
+      "thinkingmachines/inkling-2-mini",
+    ]);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://openrouter.ai/api/v1/models",
+    );
+    fetchMock.mockRestore();
+  });
+  it("requests OpenRouter reasoning only when explicitly enabled", () => {
+    const config = {
+      ...defaultSettings.providers.openrouter,
+      model: "example/model",
+    };
+    expect(JSON.stringify(buildRequest(config, [message]).body)).not.toContain(
+      '"reasoning"',
+    );
+    expect(
+      JSON.stringify(
+        buildRequest({ ...config, requestThoughts: true }, [message]).body,
+      ),
+    ).toContain('"reasoning":{"enabled":true}');
+  });
+  it("does not display invalid stream payloads as errors", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(stream(["data: confidential-payload\n\n"]), {
+          status: 200,
+        }),
+      );
+    try {
+      await expect(
+        streamChat(
+          { ...defaultSettings.providers.openrouter, model: "example/model" },
+          "example-key",
+          [message],
+          new AbortController().signal,
+          () => {},
+        ),
+      ).rejects.toThrow("invalid streaming data");
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+  it.each([
+    [401, "Authentication"],
+    [402, "credit"],
+    [403, "Access denied"],
+    [404, "not found"],
+    [429, "Rate limit"],
+  ])(
+    "reports actionable HTTP %i without leaking provider response",
+    async (status, expected) => {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response('{"error":"private-example"}', { status }),
+        );
+      try {
+        await expect(
+          listModels(defaultSettings.providers.openrouter, "example-key"),
+        ).rejects.toThrow(expected);
+      } finally {
+        fetchMock.mockRestore();
+      }
+    },
+  );
+  it("streams OpenRouter reasoning details and does not duplicate mirrored reasoning", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          stream([
+            'data: {"choices":[{"delta":{"reasoning":"one","reasoning_details":[{"type":"reasoning.text","text":"one"}]}}]}\n\n',
+            'data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":" two"},{"type":"reasoning.encrypted","data":"opaque"}]}}]}\n\n',
+            'data: {"choices":[{"delta":{"content":"answer"}}]}\n\ndata: [DONE]\n\n',
+          ]),
+          { status: 200 },
+        ),
+      );
+    let answer = "",
+      reasoning = "";
+    await streamChat(
+      { ...defaultSettings.providers.openrouter, model: "example/model" },
+      "example-key",
+      [message],
+      new AbortController().signal,
+      (text) => {
+        answer += text;
+      },
+      (text) => {
+        reasoning += text;
+      },
+    );
+    expect(reasoning).toBe("one two");
+    expect(answer).toBe("answer");
+    fetchMock.mockRestore();
+  });
+  it.each(["length", "error", "content_filter"])(
+    "retains partial output when finish reason is %s",
+    async (finishReason) => {
+      const event = JSON.stringify({
+        choices: [
+          { delta: { content: "partial" }, finish_reason: finishReason },
+        ],
+      });
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(stream([`data: ${event}\n\n`]), { status: 200 }),
+        );
+      let answer = "";
+      try {
+        await expect(
+          streamChat(
+            { ...defaultSettings.providers.openrouter, model: "example/model" },
+            "example-key",
+            [message],
+            new AbortController().signal,
+            (text) => {
+              answer += text;
+            },
+          ),
+        ).rejects.toThrow();
+        expect(answer).toBe("partial");
+      } finally {
+        fetchMock.mockRestore();
+      }
+    },
+  );
   it("parses split SSE events, CRLF, UTF-8 and final event without trailing newline", async () => {
     const out: string[] = [];
     await parseEventStream(

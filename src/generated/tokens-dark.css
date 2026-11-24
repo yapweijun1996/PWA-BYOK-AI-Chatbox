@@ -1,0 +1,20 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root[data-theme="dark"] {
+  --color-bg: #17181b;
+  --color-surface: #232428;
+  --color-text: #f4f4f5;
+  --color-muted: #b7b8be;
+  --color-border: #3a3b42;
+  --color-accent: #aaa5ff;
+  --color-soft: #33304d;
+  --color-danger: #ffaea5;
+  --color-focus: #aaa5ff;
+  --color-status: #46c47e;
+  --color-user-bg: #47416a;
+  --color-user-text: #e3dfff;
+  --color-scrim: rgba(0, 0, 0, 0.6666666666666666);
+  --color-shadow: rgba(0, 0, 0, 0.2);
+}

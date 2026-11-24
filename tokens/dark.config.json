@@ -1,0 +1,1 @@
+{"source":["tokens/dark.json"],"platforms":{"web":{"transformGroup":"css","buildPath":"src/generated/","files":[{"destination":"tokens-dark.css","format":"css/variables","options":{"selector":":root[data-theme=\"dark\"]"}}]}}}
