@@ -27,6 +27,12 @@ The app keeps session keys in memory until lock, reload, or close. Opt-in encryp
 
 When a provider supplies reasoning text in its stream, Luma Chat displays it separately from the final answer and saves it with the conversation and backups. LM Studio supports structured reasoning fields and leading `<think>` tags; OpenRouter supports its text and summary reasoning details. For OpenRouter or Gemini, request reasoning in provider settings only for a supported model; content is not guaranteed and may affect cost. OpenAI Chat Completions does not expose raw reasoning, so it may show no reasoning text. Reasoning displayed in the app is not sent back in later chat requests.
 
+## Response telemetry
+
+Each assistant reply has a compact telemetry footer and an expandable **Response inspector**. Client timing begins when the app starts the provider request, after saving the message: TTFT measures arrival of the first generated text or reasoning delta, TTFV the first nonblank answer text, and duration through completion or interruption. TPS estimates client-observed throughput by dividing reported output tokens by the interval between the first and last generated deltas. It does not count SSE chunks or show a rate from a single arrival. Gemini reports answer and reasoning tokens separately, so its output count excludes reasoning.
+
+Usage and finish reasons come from the response stream when provided. OpenRouter's reported cost takes precedence over any estimate and may exclude charges from a separate upstream account. A text-only OpenRouter request can be estimated from compatible catalog rates when available; estimates are not billing records. Unavailable metrics, including most reasoning-effort values and those on older replies, show `N/A`. Telemetry is saved locally with the reply and included in backups but is never sent in later chat requests.
+
 ## Data and offline behavior
 
 Conversations, drafts, draft attachments, settings, and any encrypted saved keys are stored in IndexedDB on the current browser/device. Data is not automatically synchronized. Browser storage may be cleared or evicted; export backups regularly. Backups include conversations, attachments, and provider settings but never keys. Imports require a preview and explicit conflict handling. If a conversation cannot be saved, the app does not send the message or retry, and keeps the draft visible.

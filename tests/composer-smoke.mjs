@@ -180,6 +180,11 @@ try {
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   await page.getByRole("button", { name: "Stop generating" }).click();
   await page.getByText("Stopped or interrupted", { exact: true }).waitFor();
+  const stoppedFooter = page.locator(".response-inspector summary").first();
+  const stoppedMetrics = await stoppedFooter.innerText();
+  assert.match(stoppedMetrics, /TTFT\s+\d/);
+  assert.match(stoppedMetrics, /Duration\s+\d/);
+  assert.match(stoppedMetrics, /Tokens\s+N\/A/);
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   assert.equal(
     await page.getByText("Partial answer", { exact: true }).count(),
@@ -201,6 +206,7 @@ try {
     .getByRole("button", { name: "Composer first request", exact: true })
     .click();
   assert.equal(await input.inputValue(), "Draft typed during streaming");
+  assert.equal(await stoppedFooter.innerText(), stoppedMetrics);
 
   await page.setViewportSize({ width: 320, height: 650 });
   const longFile = `${"a".repeat(110)}.txt`;

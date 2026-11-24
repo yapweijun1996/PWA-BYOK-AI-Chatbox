@@ -14,7 +14,7 @@ try {
   const page = await context.newPage();
   const errors = [];
   let failedOnce = false;
-  let routerFailed = false;
+  let routerRequests = 0;
   let localChatRequests = 0;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("http://localhost:1234/v1/**", async (route) => {
@@ -68,21 +68,36 @@ try {
         status: 200,
         headers,
         body: JSON.stringify({
-          data: [{ id: "thinkingmachines/inkling-2-mini" }],
+          data: [
+            {
+              id: "thinkingmachines/inkling-2-mini",
+              pricing: { prompt: "0.00002", completion: "0.00003" },
+            },
+          ],
         }),
       });
     assert.equal(
       JSON.parse(request.postData()).model,
       "thinkingmachines/inkling-2-mini",
     );
-    if (!routerFailed) {
-      routerFailed = true;
+    if (++routerRequests === 1) {
       return route.fulfill({ status: 401, headers, body: "{}" });
     }
+    const reportsCost = routerRequests === 2;
+    const content = reportsCost
+      ? 'OpenRouter answer\n\n<img src=x onerror="window.testXss=1">'
+      : "Answer with catalog estimate";
+    const usage = {
+      prompt_tokens: 90,
+      completion_tokens: 10,
+      total_tokens: 100,
+      ...(reportsCost ? { cost: 0.0012 } : {}),
+    };
+    const events = [{ choices: [{ delta: { content } }] }, { choices: [], usage }];
     return route.fulfill({
       status: 200,
       headers: { ...headers, "Content-Type": "text/event-stream" },
-      body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'OpenRouter answer\n\n<img src=x onerror="window.testXss=1">' } }] })}\n\ndata: [DONE]\n\n`,
+      body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n",
     });
   });
   await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
@@ -191,11 +206,24 @@ try {
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByText("OpenRouter answer").waitFor();
+  const response = page.locator(".message.assistant").filter({ hasText: "OpenRouter answer" });
+  await response.locator("summary").click();
+  await response.getByText("$0.0012", { exact: true }).last().waitFor();
+  const cost = response.locator("dl > div").filter({ hasText: "API cost (USD)" });
+  assert.equal(await cost.locator("dd").first().innerText(), "$0.0012");
+  assert.ok(await cost.getByText("Provider reported").isVisible());
   assert.equal(await page.evaluate(() => window.testXss), undefined);
   assert.equal(
     await page.locator('section[aria-label="Conversation"] img').count(),
     0,
   );
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Estimate a reply");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const estimated = page.locator(".message.assistant").filter({ hasText: "Answer with catalog estimate" });
+  const estimateFooter = estimated.locator("summary");
+  await estimateFooter.getByText("≈$0.0021", { exact: true }).waitFor();
+  await estimateFooter.click();
+  await estimated.getByText("Catalog estimate", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "OpenAI", exact: true }).click();
   await page
@@ -235,6 +263,8 @@ try {
   const content = await (await download.createReadStream()).toArray();
   const json = Buffer.concat(content).toString("utf8");
   assert.ok(json.includes("Hello from local model"));
+  const exportedReply = JSON.parse(json).conversations.flatMap((chat) => chat.messages).find((message) => message.telemetry?.cost?.source === "reported");
+  assert.deepEqual(exportedReply?.telemetry.cost, { usd: 0.0012, source: "reported" });
   assert.ok(!json.includes("vaults"));
   assert.ok(!json.includes("mock-test-key"));
   await page.locator('input[accept="application/json,.json"]').setInputFiles({

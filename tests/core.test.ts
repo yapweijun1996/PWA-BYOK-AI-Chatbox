@@ -198,9 +198,16 @@ describe("provider contracts", () => {
       const fetchMock = vi
         .spyOn(globalThis, "fetch")
         .mockResolvedValue(
-          new Response(stream([`data: ${event}\n\n`]), { status: 200 }),
+          new Response(
+            stream([
+              `data: ${event}\n\n`,
+              'data: {"choices":[],"usage":{"completion_tokens":9}}\n\ndata: [DONE]\n\n',
+            ]),
+            { status: 200 },
+          ),
         );
       let answer = "";
+      const metadata = vi.fn();
       try {
         await expect(
           streamChat(
@@ -211,9 +218,15 @@ describe("provider contracts", () => {
             (text) => {
               answer += text;
             },
+            undefined,
+            metadata,
           ),
         ).rejects.toThrow();
         expect(answer).toBe("partial");
+        expect(metadata).toHaveBeenCalledWith(
+          expect.objectContaining({ usage: expect.objectContaining({ output: 9 }) }),
+          expect.any(Number),
+        );
       } finally {
         fetchMock.mockRestore();
       }

@@ -1,5 +1,6 @@
 import { defaultSettings, providerIds } from "./types";
 import type { Attachment, Conversation, Message, Settings } from "./types";
+import { validResponseTelemetry } from "./response-telemetry";
 
 export function mergeSettings(input: Partial<Settings> | undefined): Settings {
   const provider =
@@ -75,6 +76,7 @@ export function validBackup(
           !["user", "assistant"].includes(m.role) ||
           typeof m.content !== "string" ||
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
+          (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
           !Number.isFinite(m.createdAt)
         )
           return false;

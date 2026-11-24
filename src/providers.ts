@@ -2,6 +2,8 @@
 import { defaultSettings } from "./types";
 import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
+import { normalizeResponseSample } from "./provider-telemetry";
+import type { ResponseSample } from "./response-telemetry";
 function baseUrl(config: ProviderConfig): string {
   const endpoint =
     config.id === "lmstudio"
@@ -162,6 +164,10 @@ export function buildRequest(
     body: {
       model: config.model,
       stream: true,
+      ...(config.id === "openai"
+        ? { stream_options: { include_usage: true } }
+        : {}),
+      ...(config.id === "openrouter" ? { usage: { include: true } } : {}),
       ...(config.id === "openrouter" && config.requestThoughts
         ? { reasoning: { enabled: true } }
         : {}),
@@ -174,12 +180,13 @@ export function buildRequest(
 }
 export async function parseEventStream(
   stream: ReadableStream<Uint8Array>,
-  onData: (data: string) => void,
+  onData: (data: string, receivedAt: number) => void,
   onDone: () => void = () => {},
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedAt = performance.now();
   const consume = (block: string) => {
     const data = block
       .split(/\r?\n/)
@@ -187,11 +194,13 @@ export async function parseEventStream(
       .map((line) => line.slice(5).replace(/^ /, ""))
       .join("\n");
     if (data === "[DONE]") onDone();
-    else if (data) onData(data);
+    else if (data) onData(data, receivedAt);
   };
   try {
     while (true) {
       const { value, done } = await reader.read();
+      // Events in one read have the same observable arrival time.
+      if (!done) receivedAt = performance.now();
       buffer += decoder.decode(value, { stream: !done });
       let match: RegExpExecArray | null;
       while ((match = /\r?\n\r?\n/.exec(buffer))) {
@@ -274,6 +283,7 @@ export async function streamChat(
   signal: AbortSignal,
   onText: (text: string) => void,
   onReasoning: (text: string) => void = () => {},
+  onSample?: (sample: ResponseSample, receivedAt: number) => void,
 ): Promise<void> {
   if (!config.model.trim())
     throw new Error("Choose or enter a model in Providers.");
@@ -298,6 +308,7 @@ export async function streamChat(
     throw new Error("The provider returned an empty response.");
   let received = false;
   let finished = false;
+  let finishError: string | undefined;
   const emitText = (text: string) => {
     if (text) {
       received = true;
@@ -311,25 +322,27 @@ export async function streamChat(
   try {
     await parseEventStream(
       response.body,
-      (data) => {
+      (data, receivedAt) => {
         let chunk;
         try {
           chunk = JSON.parse(data);
+          if (!chunk || typeof chunk !== "object" || Array.isArray(chunk))
+            throw new Error("Invalid stream payload");
         } catch {
           throw new Error(
             "The provider returned invalid streaming data. Partial output was retained.",
           );
         }
+        const sample = normalizeResponseSample(config.id, chunk);
+        onSample?.(sample, receivedAt);
         if (chunk.error)
           throw new Error("The provider reported an error while generating.");
-        const finishReason =
-          chunk.candidates?.[0]?.finishReason ??
-          chunk.choices?.[0]?.finish_reason;
+        const finishReason = sample.finishReason;
         if (config.id === "gemini") {
           const parts = chunk.candidates?.[0]?.content?.parts;
           if (Array.isArray(parts)) {
             for (const part of parts) {
-              if (typeof part.text !== "string" || !part.text) continue;
+              if (typeof part?.text !== "string" || !part.text) continue;
               if (part.thought === true) onReasoning(part.text);
               else emitText(part.text);
             }
@@ -358,18 +371,16 @@ export async function streamChat(
             else emitText(delta.content);
           }
         }
+        // A usage-only event can follow the terminating choice, including on truncation.
         if (finishReason === "error")
-          throw new Error(
-            "The provider reported an error while generating. Partial output was retained.",
-          );
+          finishError =
+            "The provider reported an error while generating. Partial output was retained.";
         if (finishReason === "length" || finishReason === "MAX_TOKENS")
-          throw new Error(
-            "The model reached its output limit. Partial output was retained.",
-          );
+          finishError =
+            "The model reached its output limit. Partial output was retained.";
         if (finishReason === "content_filter" || finishReason === "SAFETY")
-          throw new Error(
-            "The provider stopped the response due to its content policy. Partial output was retained.",
-          );
+          finishError =
+            "The provider stopped the response due to its content policy. Partial output was retained.";
         if (finishReason) finished = true;
       },
       () => {
@@ -379,6 +390,7 @@ export async function streamChat(
   } finally {
     localTags?.flush();
   }
+  if (finishError) throw new Error(finishError);
   if (!received)
     throw new Error(
       "The provider returned no text. Check model compatibility or safety filters.",

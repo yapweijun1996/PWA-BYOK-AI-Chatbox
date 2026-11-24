@@ -26,6 +26,8 @@ import { readAttachment } from "./attachments";
 import { PreferenceFields, TopbarPreferences } from "./components/Preferences";
 import type { PreferenceProps } from "./components/Preferences";
 import { Toast } from "./components/Toast";
+import { ResponseInspector } from "./components/ResponseInspector";
+import { createResponseTracker, responseIdentity } from "./response-telemetry";
 import { useAppUpdate } from "./pwa-update";
 import {
   interpolate,
@@ -312,11 +314,19 @@ function App() {
   const replyBlocked = !online && config.id !== "lmstudio" ? offlineNotice
     : !config.vision && historyHasImages ? imageSupportNotice : undefined;
   const sendBlocked = replyBlocked || (!config.vision && hasImage(files) ? imageSupportNotice : undefined);
+  const lastMessage = chat?.messages[chat.messages.length - 1];
   useEffect(() => {
     if (view === "chat" && followReply.current) {
       bottom.current?.scrollIntoView({ block: "end" });
     }
-  }, [chat?.messages, active, view]);
+  }, [
+    lastMessage?.id,
+    lastMessage?.content,
+    lastMessage?.reasoning,
+    lastMessage?.status,
+    active,
+    view,
+  ]);
   const isConfigured =
     !!config.model.trim() && (config.id === "lmstudio" || !!secrets[config.id]);
   const desktopInput = desktop && matchMedia("(pointer: fine)").matches;
@@ -457,24 +467,48 @@ function App() {
     setNotice("");
     let content = "";
     let reasoning = "";
-    let lastCheckpoint = Date.now();
-    const updateDelta = (kind: "content" | "reasoning", text: string) => {
-      if (controller.current !== abort || abort.signal.aborted) return;
-      if (kind === "content") content += text;
-      else reasoning += text;
-      const checkpoint = Date.now() - lastCheckpoint >= 500;
-      if (checkpoint) lastCheckpoint = Date.now();
-      updateChat(
+    const pricing = !history.some((message) => hasImage(message.attachments))
+      ? selectedModel?.pricing
+      : undefined;
+    const tracker = createResponseTracker(
+      reply.telemetry ?? responseIdentity(config),
+      pricing,
+    );
+    let lastCheckpoint = performance.now();
+    const publish = (status: NonNullable<Message["status"]>, persist: boolean) => {
+      if (controller.current !== abort) return;
+      const telemetry = tracker.snapshot();
+      void updateChat(
         chatId,
         (c) => ({
           ...c,
+          ...(status === "complete" ? { updatedAt: Date.now() } : {}),
           messages: c.messages.map((m) =>
-            m.id === reply.id ? { ...m, content, reasoning } : m,
+            m.id === reply.id
+              ? { ...m, content, reasoning, status, telemetry }
+              : m,
           ),
         }),
-        checkpoint,
+        persist,
       );
     };
+    const publishStream = () => {
+      const now = performance.now();
+      const checkpoint = now - lastCheckpoint >= 500;
+      if (checkpoint) lastCheckpoint = now;
+      publish("streaming", checkpoint);
+    };
+    const updateDelta = (kind: "content" | "reasoning", text: string) => {
+      if (controller.current !== abort || abort.signal.aborted) return;
+      if (kind === "content") {
+        tracker.visible(text);
+        content += text;
+      } else reasoning += text;
+      publishStream();
+    };
+    const timer = window.setInterval(() => {
+      if (!abort.signal.aborted) publish("streaming", false);
+    }, 500);
     try {
       await streamChat(
         config,
@@ -483,35 +517,24 @@ function App() {
         abort.signal,
         (text) => updateDelta("content", text),
         (text) => updateDelta("reasoning", text),
+        (sample, receivedAt) => {
+          if (
+            controller.current === abort &&
+            !abort.signal.aborted &&
+            tracker.receive(sample, receivedAt)
+          ) {
+            publishStream();
+          }
+        },
       );
-      if (controller.current !== abort) return;
-      updateChat(chatId, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: c.messages.map((m) =>
-          m.id === reply.id
-            ? { ...m, content, reasoning, status: abort.signal.aborted ? "interrupted" : "complete" }
-            : m,
-        ),
-      }));
+      publish(abort.signal.aborted ? "interrupted" : "complete", true);
     } catch (e) {
       if (controller.current !== abort) return;
       const stopped = abort.signal.aborted;
-      updateChat(chatId, (c) => ({
-        ...c,
-        messages: c.messages.map((m) =>
-          m.id === reply.id
-            ? {
-                ...m,
-                content,
-                reasoning,
-                status: stopped ? "interrupted" : "error",
-              }
-            : m,
-        ),
-      }));
+      publish(stopped ? "interrupted" : "error", true);
       if (!stopped) setNotice(errorText(e));
     } finally {
+      window.clearInterval(timer);
       finishReply(abort);
     }
   };
@@ -548,6 +571,7 @@ function App() {
       content: "",
       createdAt: Date.now(),
       status: "streaming",
+      telemetry: responseIdentity(config),
     };
     const history = [...chat.messages, user];
     const chatId = chat.id;
@@ -610,6 +634,7 @@ function App() {
       content: "",
       createdAt: Date.now(),
       status: "streaming",
+      telemetry: responseIdentity(config),
     };
     const abort = beginReply(null);
     const saved = await updateChat(chat.id, (c) => ({
@@ -1065,6 +1090,9 @@ function App() {
                             <Copy size={14} />
                             {t(" Copy")}
                           </button>
+                        )}
+                        {m.role === "assistant" && (
+                          <ResponseInspector message={m} locale={locale} />
                         )}
                       </div>
                     </article>

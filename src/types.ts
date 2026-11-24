@@ -1,5 +1,6 @@
 export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
 import type { Language } from "./i18n";
+import type { ResponseTelemetry } from "./response-telemetry";
 export const providerIds: ProviderId[] = [
   "gemini",
   "openai",
@@ -21,6 +22,7 @@ export type Message = {
   createdAt: number;
   status?: "complete" | "streaming" | "interrupted" | "error";
   attachments?: Attachment[];
+  telemetry?: ResponseTelemetry;
 };
 export type Conversation = {
   id: string;

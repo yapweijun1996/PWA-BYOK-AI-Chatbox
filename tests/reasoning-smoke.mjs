@@ -3,6 +3,7 @@ import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import assert from "node:assert/strict";
 const requests = [];
+const firstAnswer = Promise.withResolvers();
 const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -19,7 +20,8 @@ const server = createServer((req, res) => {
   }
   let body = "";
   req.on("data", (chunk) => (body += chunk));
-  req.on("end", () => {
+  req.on("end", async () => {
+    const isFirst = requests.length === 0;
     requests.push(JSON.parse(body));
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -28,12 +30,31 @@ const server = createServer((req, res) => {
     res.write(
       'data: {"choices":[{"delta":{"reasoning_content":"Planning the answer."}}]}\n\n',
     );
-    setTimeout(() => {
-      if (!res.destroyed)
-        res.end(
-          'data: {"choices":[{"delta":{"content":"The final answer."}}]}\n\ndata: [DONE]\n\n',
-        );
-    }, 1200);
+    if (isFirst) await firstAnswer.promise;
+    if (!res.destroyed) {
+      const events = [
+        {
+          model: "served-reasoning-model",
+          choices: [
+            { delta: { content: "The final answer." }, finish_reason: "stop" },
+          ],
+        },
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 50,
+            completion_tokens: 21,
+            total_tokens: 71,
+            prompt_tokens_details: { cached_tokens: 0 },
+            completion_tokens_details: { reasoning_tokens: 10 },
+          },
+        },
+      ];
+      res.end(
+        events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
+          "data: [DONE]\n\n",
+      );
+    }
   });
 });
 await new Promise((resolveListen) =>
@@ -68,13 +89,53 @@ try {
     .waitFor();
   await page.locator("details.reasoning summary").click();
   assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
+  const inspector = page.locator(".response-inspector").first();
+  const field = (name) =>
+    inspector
+      .locator("dl > div")
+      .filter({ has: page.getByText(name, { exact: true }) })
+      .locator("dd")
+      .first();
+  await inspector.locator("summary").press("Enter");
+  assert.equal(await field("Provider").innerText(), "LM Studio");
+  assert.equal(await field("Model").innerText(), "reasoning-model");
+  assert.notEqual(await field("TTFT").innerText(), "N/A");
+  assert.equal(await field("TTFV").innerText(), "N/A");
+  assert.equal(await field("TPS").innerText(), "N/A");
+  assert.equal(await field("Total tokens").innerText(), "N/A");
+  const liveDuration = await field("Total duration").innerText();
+  await page.waitForFunction(
+    (last) =>
+      [...document.querySelectorAll(".response-inspector dt")].find(
+        (term) => term.textContent === "Total duration",
+      )?.nextElementSibling?.textContent !== last,
+    liveDuration,
+  );
+  firstAnswer.resolve();
   await page.getByText("The final answer.").waitFor();
+  await page.getByRole("button", { name: "Send message" }).waitFor();
+  assert.equal(
+    await field("Served model").innerText(),
+    "served-reasoning-model",
+  );
+  assert.notEqual(await field("TTFV").innerText(), "N/A");
+  assert.notEqual(await field("TPS").innerText(), "N/A");
+  assert.equal(await field("Total tokens").innerText(), "71");
+  assert.equal(await field("Reasoning tokens").innerText(), "10");
+  assert.equal(await field("Cached tokens").innerText(), "0");
+  assert.equal(await field("Finish reason").innerText(), "stop");
+  assert.equal(await field("Reasoning effort").innerText(), "N/A");
+  assert.equal(await field("API cost (USD)").innerText(), "N/A");
+  const completedDuration = await field("Total duration").innerText();
   await page.locator("details.reasoning summary").click();
   await page.getByText("Planning the answer.").waitFor();
   await page.waitForTimeout(500);
   await page.reload();
   await page.getByText("Planning the answer.").waitFor();
   await page.getByText("The final answer.").waitFor();
+  await inspector.locator("summary").click();
+  assert.equal(await field("Total duration").innerText(), completedDuration);
+  assert.equal(await field("Total tokens").innerText(), "71");
   await page
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("Second message");
@@ -85,11 +146,21 @@ try {
     JSON.stringify(requests[1]).includes("Planning the answer."),
     false,
   );
+  assert.ok(!JSON.stringify(requests[1]).includes("served-reasoning-model"));
+  await page.setViewportSize({ width: 320, height: 650 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  assert.ok(
+    await inspector.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: live SSE reasoning displayed before answer, collapsible, persisted, and excluded from later requests",
+    "PASS: live reasoning, response telemetry, 320px inspector, and reasoning/telemetry persistence without request leakage",
   );
 } finally {
+  firstAnswer.resolve();
   await browser.close();
+  server.closeAllConnections();
   await new Promise((resolveClose) => server.close(resolveClose));
 }
