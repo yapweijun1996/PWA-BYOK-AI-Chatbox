@@ -11,6 +11,7 @@ import {
   ChevronDown,
   RefreshCw,
   Brain,
+  Code2,
   Search,
   Settings as SettingsIcon,
   SquarePen,
@@ -27,6 +28,7 @@ import { formatSize } from "./format-size";
 import { PreferenceFields } from "./components/Preferences";
 import { Toast } from "./components/Toast";
 import { ResponseInspector } from "./components/ResponseInspector";
+import { ToolExecutionCard } from "./components/ToolExecutionCard";
 import { RichMessage } from "./components/RichMessage";
 import { copyMessage } from "./message-copy";
 import { interpolate, translate, translateNotice } from "./i18n";
@@ -127,6 +129,8 @@ function App({
     setView,
     reasoningAvailable,
     reasoningLabel,
+    javascriptEnabled,
+    toggleJavaScript,
     setReasoning,
     editDraft,
     processFiles,
@@ -385,6 +389,13 @@ function App({
                             onNotice={setNotice}
                           />
                         )}
+                        {m.toolExecutions?.map((execution) => (
+                          <ToolExecutionCard
+                            key={execution.id}
+                            execution={execution}
+                            locale={locale}
+                          />
+                        ))}
                         {m.content ? (
                           <div className="message-answer">
                             <RichMessage
@@ -394,7 +405,9 @@ function App({
                               onNotice={setNotice}
                             />
                           </div>
-                        ) : m.status === "streaming" && !m.reasoning ? (
+                        ) : m.status === "streaming" &&
+                          !m.reasoning &&
+                          !m.toolExecutions?.length ? (
                           <p className="muted">{t("Thinking…")}</p>
                         ) : null}
                         {m.attachments?.map((a) => (
@@ -474,6 +487,20 @@ function App({
                     onSelect={selectModel}
                     onSettings={() => setView("providers")}
                   />
+                  <button
+                    className="icon composer-reasoning"
+                    type="button"
+                    aria-label={t("JavaScript tool for next reply")}
+                    aria-pressed={javascriptEnabled}
+                    disabled={!chat || working}
+                    title={t(
+                      "Allow the model to run local JavaScript and receive its results for this reply. Requires a tool-capable model.",
+                    )}
+                    onClick={toggleJavaScript}
+                  >
+                    <Code2 size={17} aria-hidden="true" />
+                    <span>JS</span>
+                  </button>
                   {reasoningAvailable && (
                     <button
                       className="icon composer-reasoning"

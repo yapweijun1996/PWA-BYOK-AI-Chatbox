@@ -2,6 +2,7 @@ export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
 import type { Language } from "./i18n";
 import type { RequestOverrides, RequestSnapshot } from "./request-config";
 import type { ResponseTelemetry } from "./response-telemetry";
+import type { ToolExecution } from "./javascript-tool";
 import { sidebarWidth } from "./workspace";
 export const providerIds: ProviderId[] = [
   "gemini",
@@ -26,6 +27,7 @@ export type Message = {
   attachments?: Attachment[];
   telemetry?: ResponseTelemetry;
   request?: RequestSnapshot;
+  toolExecutions?: ToolExecution[];
 };
 export type Conversation = {
   id: string;

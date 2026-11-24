@@ -36,7 +36,11 @@ async function ready() {
       throw new Error(`Preview failed: ${serverOutput}`);
     try {
       const response = await fetch(baseUrl);
-      if (response.ok && stripVTControlCharacters(serverOutput).includes(baseUrl)) return;
+      if (
+        response.ok &&
+        stripVTControlCharacters(serverOutput).includes(baseUrl)
+      )
+        return;
     } catch {}
     await delay(200);
   }
@@ -60,6 +64,7 @@ try {
     "tests/startup-smoke.mjs",
     "tests/browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
+    "tests/tool-execution-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",
     "tests/pages-subpath.mjs",

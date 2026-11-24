@@ -4,6 +4,13 @@ import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { normalizeResponseSample } from "./provider-telemetry";
 import type { ResponseSample } from "./response-telemetry";
+import {
+  collectToolRound,
+  geminiToolFields,
+  maxToolReplayChars,
+  openAIToolFields,
+} from "./provider-tools";
+import type { ToolRequest, ToolRound } from "./provider-tools";
 export function providerBaseUrl(config: ProviderConfig): string {
   const endpoint =
     config.id === "lmstudio"
@@ -140,35 +147,46 @@ export function requestHistory(messages: readonly Message[]) {
 export function buildRequest(
   config: ProviderConfig,
   messages: Message[],
+  tool?: ToolRequest,
 ): { path: string; body: object } {
   const completed = requestHistory(messages);
-  if (config.id === "gemini")
+  if (config.id === "gemini") {
+    const { options, tail } = geminiToolFields(tool);
     return {
       path: `/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`,
       body: {
         ...(config.requestThoughts
           ? { generationConfig: { thinkingConfig: { includeThoughts: true } } }
           : {}),
-        contents: completed.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [
-            {
-              text:
-                m.content +
-                (m.attachments || [])
-                  .filter((a) => a.mime.startsWith("text/"))
-                  .map(textAttachment)
-                  .join(""),
-            },
-            ...(m.attachments || [])
-              .filter((a) => a.mime.startsWith("image/"))
-              .map((a) => ({
-                inline_data: { mime_type: a.mime, data: a.data.split(",")[1] },
-              })),
-          ],
-        })),
+        ...options,
+        contents: [
+          ...completed.map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [
+              {
+                text:
+                  m.content +
+                  (m.attachments || [])
+                    .filter((a) => a.mime.startsWith("text/"))
+                    .map(textAttachment)
+                    .join(""),
+              },
+              ...(m.attachments || [])
+                .filter((a) => a.mime.startsWith("image/"))
+                .map((a) => ({
+                  inline_data: {
+                    mime_type: a.mime,
+                    data: a.data.split(",")[1],
+                  },
+                })),
+            ],
+          })),
+          ...tail,
+        ],
       },
     };
+  }
+  const { options, tail } = openAIToolFields(tool, config.id === "openrouter");
   return {
     path: "/chat/completions",
     body: {
@@ -181,10 +199,14 @@ export function buildRequest(
       ...(config.id === "openrouter" && config.requestThoughts
         ? { reasoning: { enabled: true } }
         : {}),
-      messages: completed.map((m) => ({
-        role: m.role,
-        content: openaiContent(m),
-      })),
+      ...options,
+      messages: [
+        ...completed.map((m) => ({
+          role: m.role,
+          content: openaiContent(m),
+        })),
+        ...tail,
+      ],
     },
   };
 }
@@ -222,6 +244,9 @@ export async function parseEventStream(
         break;
       }
     }
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -294,7 +319,8 @@ export async function streamChat(
   onText: (text: string) => void,
   onReasoning: (text: string) => void = () => {},
   onSample?: (sample: ResponseSample, receivedAt: number) => void,
-): Promise<void> {
+  tool?: ToolRequest,
+): Promise<ToolRound | undefined> {
   if (!config.model.trim())
     throw new Error("Choose or enter a model in Providers.");
   if (config.id !== "lmstudio" && !secret)
@@ -308,7 +334,7 @@ export async function streamChat(
     throw new Error(
       "Enable image support for this model in Providers before sending images.",
     );
-  const { path, body } = buildRequest(config, messages);
+  const { path, body } = buildRequest(config, messages, tool);
   const response = await request(config, path, secret, {
     method: "POST",
     body: JSON.stringify(body),
@@ -319,9 +345,13 @@ export async function streamChat(
   let received = false;
   let finished = false;
   let finishError: string | undefined;
+  const collector = tool && collectToolRound();
+  let roundText = "";
   const emitText = (text: string) => {
     if (text) {
       received = true;
+      if (collector && roundText.length <= maxToolReplayChars)
+        roundText += text.slice(0, maxToolReplayChars + 1 - roundText.length);
       onText(text);
     }
   };
@@ -351,6 +381,7 @@ export async function streamChat(
         if (config.id === "gemini") {
           const parts = chunk.candidates?.[0]?.content?.parts;
           if (Array.isArray(parts)) {
+            collector?.gemini(parts);
             for (const part of parts) {
               if (typeof part?.text !== "string" || !part.text) continue;
               if (part.thought === true) onReasoning(part.text);
@@ -359,6 +390,10 @@ export async function streamChat(
           }
         } else {
           const delta = chunk.choices?.[0]?.delta;
+          collector?.openAI(
+            delta?.tool_calls,
+            config.id === "openrouter" ? delta?.reasoning_details : undefined,
+          );
           const reasoning = delta?.reasoning_content ?? delta?.reasoning;
           if (typeof reasoning === "string" && reasoning) {
             onReasoning(reasoning);
@@ -400,13 +435,16 @@ export async function streamChat(
   } finally {
     localTags?.flush();
   }
+  signal.throwIfAborted();
   if (finishError) throw new Error(finishError);
-  if (!received)
-    throw new Error(
-      "The provider returned no text. Check model compatibility or safety filters.",
-    );
   if (!finished)
     throw new Error(
       "The response was interrupted before completion. Partial output was retained.",
     );
+  const round = collector?.finish(roundText);
+  if (!received && !round)
+    throw new Error(
+      "The provider returned no text. Check model compatibility or safety filters.",
+    );
+  return round;
 }

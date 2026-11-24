@@ -179,6 +179,16 @@ export function configurationRows(
       facts.usageMode,
       "Provider adapter",
     ),
+    ...(snapshot?.javascript !== undefined
+      ? [
+          fact(
+            "javascript",
+            "JavaScript tool enabled",
+            snapshot.javascript,
+            "Request snapshot",
+          ),
+        ]
+      : []),
   ];
 }
 

@@ -40,7 +40,9 @@ import {
   resolveTheme,
   systemThemeQuery,
 } from "./theme";
-import { mergeSettings, validBackup } from "./data-contracts";
+import { mergeSettings, recoverMessage, validBackup } from "./data-contracts";
+import { runToolTurn } from "./tool-turn";
+import type { ToolExecution } from "./javascript-tool";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { listModelOptions, streamChat } from "./providers";
 import { defaultSettings, id, providerIds as providers } from "./types";
@@ -103,6 +105,17 @@ export function useWorkspace({
   );
   const [searchMode, setSearchMode] = useState<SearchMode | null>(null);
   const [inspecting, setInspecting] = useState(false);
+  const [armedChat, setArmedChat] = useState<string>();
+  const javascriptEnabled = Boolean(active && active === armedChat);
+  const toggleJavaScript = () => {
+    if (!active || session.get().reply) return;
+    setArmedChat(javascriptEnabled ? undefined : active);
+    setNotice(
+      javascriptEnabled
+        ? "JavaScript tool disabled for the next reply."
+        : "JavaScript enabled for the next reply. Code runs locally; results go to the selected provider.",
+    );
+  };
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const [notice, setNotice] = useState("");
@@ -585,7 +598,7 @@ export function useWorkspace({
   };
   const prepareReply = (resolved: ResolvedConfig, history: Message[]) => {
     const target = Object.freeze({ ...resolved.config });
-    const request = captureRequest(resolved);
+    const request = captureRequest(resolved, Date.now(), javascriptEnabled);
     const telemetry = responseIdentity(target);
     const catalog = catalogs[target.id];
     const pricing =
@@ -623,14 +636,16 @@ export function useWorkspace({
     setNotice("");
     let content = "";
     let reasoning = "";
-    const tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
+    let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
+    let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
+    let executions: ToolExecution[] = [];
     let lastCheckpoint = performance.now();
     const publish = (
       status: NonNullable<Message["status"]>,
       persist: boolean,
     ) => {
       if (!isCurrentReply(abort)) return;
-      const telemetry = tracker.snapshot();
+      const telemetry = roundTelemetry ?? tracker.snapshot();
       void updateChat(
         chatId,
         (c) => ({
@@ -638,7 +653,14 @@ export function useWorkspace({
           ...(status === "complete" ? { updatedAt: Date.now() } : {}),
           messages: c.messages.map((m) =>
             m.id === prepared.message.id
-              ? { ...m, content, reasoning, status, telemetry }
+              ? {
+                  ...m,
+                  content,
+                  reasoning,
+                  status,
+                  telemetry,
+                  ...(executions.length ? { toolExecutions: executions } : {}),
+                }
               : m,
           ),
         }),
@@ -651,33 +673,59 @@ export function useWorkspace({
       if (checkpoint) lastCheckpoint = now;
       publish("streaming", checkpoint);
     };
-    const updateDelta = (kind: "content" | "reasoning", text: string) => {
-      if (!isCurrentReply(abort) || abort.signal.aborted) return;
-      if (kind === "content") {
-        tracker.visible(text);
-        content += text;
-      } else reasoning += text;
-      publishStream();
-    };
     const timer = window.setInterval(() => {
       if (!abort.signal.aborted) publish("streaming", false);
     }, 500);
     try {
-      await streamChat(
-        prepared.target,
-        prepared.secret,
-        history,
+      await runToolTurn(
+        async (tool) => {
+          tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
+          roundTelemetry = undefined;
+          let firstText = true;
+          let firstReasoning = true;
+          const round = await streamChat(
+            prepared.target,
+            prepared.secret,
+            history,
+            abort.signal,
+            (text) => {
+              if (!isCurrentReply(abort) || abort.signal.aborted) return;
+              tracker.visible(text);
+              if (firstText && content) content += "\n\n";
+              firstText = false;
+              content += text;
+              publishStream();
+            },
+            (text) => {
+              if (!isCurrentReply(abort) || abort.signal.aborted) return;
+              if (firstReasoning && reasoning) reasoning += "\n\n";
+              firstReasoning = false;
+              reasoning += text;
+              publishStream();
+            },
+            (sample, receivedAt) => {
+              if (
+                isCurrentReply(abort) &&
+                !abort.signal.aborted &&
+                tracker.receive(sample, receivedAt)
+              )
+                publishStream();
+            },
+            tool,
+          );
+          roundTelemetry = tracker.snapshot();
+          return round;
+        },
+        prepared.request.javascript === true,
         abort.signal,
-        (text) => updateDelta("content", text),
-        (text) => updateDelta("reasoning", text),
-        (sample, receivedAt) => {
-          if (
-            isCurrentReply(abort) &&
-            !abort.signal.aborted &&
-            tracker.receive(sample, receivedAt)
-          ) {
-            publishStream();
-          }
+        (record) => {
+          if (!isCurrentReply(abort)) return;
+          executions = executions.some(({ id }) => id === record.id)
+            ? executions.map((prior) =>
+                prior.id === record.id ? record : prior,
+              )
+            : [...executions, record];
+          publish("streaming", true);
         },
       );
       publish(abort.signal.aborted ? "interrupted" : "complete", true);
@@ -754,6 +802,7 @@ export function useWorkspace({
       );
       return;
     }
+    if (prepared.request.javascript) setArmedChat(undefined);
     await runReply(chatId, history, prepared, abort);
   };
   const retry = async (original?: RequestSnapshot) => {
@@ -802,6 +851,7 @@ export function useWorkspace({
       );
       return;
     }
+    if (prepared.request.javascript) setArmedChat(undefined);
     await runReply(chat.id, chat.messages, prepared, abort);
   };
   const testConnection = async () => {
@@ -938,11 +988,7 @@ export function useWorkspace({
         if (existing.has(c.id) && !overwrite) continue;
         const clean = {
           ...c,
-          messages: c.messages.map((m) =>
-            m.status === "streaming"
-              ? { ...m, status: "interrupted" as const }
-              : m,
-          ),
+          messages: c.messages.map(recoverMessage),
         };
         flushDraft(c.id);
         await writes.current[c.id]?.catch(() => {});
@@ -1115,6 +1161,8 @@ export function useWorkspace({
     setView,
     reasoningAvailable,
     reasoningLabel,
+    javascriptEnabled,
+    toggleJavaScript,
     setReasoning,
     editDraft,
     processFiles,

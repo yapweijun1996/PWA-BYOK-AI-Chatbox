@@ -13,6 +13,22 @@ import {
 } from "./workspace";
 import { validResponseTelemetry } from "./response-telemetry";
 import { validOverrides, validRequestSnapshot } from "./request-config";
+import { restoreToolExecutions, validToolExecutions } from "./javascript-tool";
+
+export function recoverMessage(message: Message): Message {
+  if (
+    message.status !== "streaming" &&
+    !message.toolExecutions?.some(({ result }) => !result)
+  )
+    return message;
+  return {
+    ...message,
+    status: message.status === "streaming" ? "interrupted" : message.status,
+    ...(message.toolExecutions
+      ? { toolExecutions: restoreToolExecutions(message.toolExecutions) }
+      : {}),
+  };
+}
 
 export function mergeSettings(input: Partial<Settings> | undefined): Settings {
   const provider =
@@ -114,6 +130,9 @@ export function validBackup(value: unknown): value is {
           typeof m.content !== "string" ||
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
           (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
+          (m.toolExecutions !== undefined &&
+            (m.role !== "assistant" ||
+              !validToolExecutions(m.toolExecutions))) ||
           (m.request !== undefined &&
             (m.role !== "assistant" || !validRequestSnapshot(m.request))) ||
           !Number.isFinite(m.createdAt)

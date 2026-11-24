@@ -15,6 +15,7 @@ const types = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
+  ".wasm": "application/wasm",
 };
 const server = createServer(async (req, res) => {
   try {
@@ -104,15 +105,50 @@ try {
     pngIcons.map(({ sizes }) => sizes),
   );
   const offlineFont = await page.evaluate(async () => {
-    const cache = await caches.open((await caches.keys()).find((key) => key.startsWith("luma-shell-")));
-    const font = (await cache.keys()).find(({ url }) => /KaTeX_Main-Regular-.*\.woff2$/.test(url));
+    const cache = await caches.open(
+      (await caches.keys()).find((key) => key.startsWith("luma-shell-")),
+    );
+    const font = (await cache.keys()).find(({ url }) =>
+      /KaTeX_Main-Regular-.*\.woff2$/.test(url),
+    );
     if (!font || !font.url.startsWith(location.href)) return false;
     const response = await fetch(font.url);
     return response.ok && (await response.arrayBuffer()).byteLength > 0;
   });
   assert.equal(offlineFont, true);
+  const offlineTool = await page.evaluate(async () => {
+    const cache = await caches.open(
+      (await caches.keys()).find((key) => key.startsWith("luma-shell-")),
+    );
+    const workerEntry = (await cache.keys()).find(({ url }) =>
+      /\/execute\.worker-.*\.js$/.test(url),
+    );
+    if (!workerEntry || !workerEntry.url.startsWith(location.href)) return null;
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(workerEntry.url, { type: "module" });
+      const cleanup = () => {
+        clearTimeout(timer);
+        worker.terminate();
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Cached JS worker did not respond"));
+      }, 12500);
+      worker.onerror = (event) => {
+        cleanup();
+        reject(new Error(event.message));
+      };
+      worker.onmessage = ({ data }) => {
+        if (data.type !== "result") return;
+        cleanup();
+        resolve(data.result.value?.text);
+      };
+      worker.postMessage({ code: "7 * 6" });
+    });
+  });
+  assert.equal(offlineTool, "42");
   console.log(
-    "PASS: GitHub Pages subpath, service-worker scope, offline icons and KaTeX font",
+    "PASS: GitHub Pages subpath, service-worker scope, offline icons, KaTeX font and QuickJS/WASM",
   );
   await context.close();
 } finally {

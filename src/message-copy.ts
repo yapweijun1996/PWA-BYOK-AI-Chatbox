@@ -38,7 +38,15 @@ export function copyConversationSelection(
     const reasoning = selected[0].querySelector(".reasoning .rich-message");
     const containsRange = (node: Element | null) =>
       node?.contains(range.startContainer) && node.contains(range.endContainer);
-    if (containsRange(answer) || containsRange(reasoning)) return;
+    const toolBlocks = Array.from(
+      selected[0].querySelectorAll(".tool-execution pre"),
+    );
+    if (
+      containsRange(answer) ||
+      containsRange(reasoning) ||
+      toolBlocks.some(containsRange)
+    )
+      return;
   }
   const byId = new Map(
     messages.map((message) => [message.id, message.content]),

@@ -11,10 +11,12 @@
     "test:browser": "node tests/run-browser.mjs"
   },
   "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "highlight.js": "~11.11.0",
     "katex": "^0.19.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.468.0",
+    "quickjs-emscripten-core": "0.32.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

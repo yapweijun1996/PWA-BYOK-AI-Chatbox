@@ -1,4 +1,4 @@
-import { mergeSettings } from "./data-contracts";
+import { mergeSettings, recoverMessage } from "./data-contracts";
 import { resolveConfig } from "./request-config";
 import { resolveLanguage, translate } from "./i18n";
 import { storage, StorageBlockedError } from "./storage";
@@ -30,11 +30,7 @@ export function restoreConversations(
   const threads = conversations
     .map((conversation) => ({
       ...conversation,
-      messages: conversation.messages.map((message) =>
-        message.status === "streaming"
-          ? { ...message, status: "interrupted" as const }
-          : message,
-      ),
+      messages: conversation.messages.map(recoverMessage),
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const active =

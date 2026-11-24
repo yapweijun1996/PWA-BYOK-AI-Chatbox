@@ -148,6 +148,13 @@ export const ResponseInspector = memo(function ResponseInspector({
       </summary>
       <div className="response-inspector-content">
         <h3>{title}</h3>
+        {Boolean(message.toolExecutions?.length) && (
+          <p>
+            {t(
+              "These metrics describe the most recent model request, not tool execution or earlier requests in this reply.",
+            )}
+          </p>
+        )}
         <dl>
           {fields.map(([label, value, source]) => (
             <div key={label}>

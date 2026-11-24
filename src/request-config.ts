@@ -123,6 +123,7 @@ export type RequestSnapshot = Readonly<{
   requestThoughts: boolean;
   target: (typeof targets)[number];
   usageMode: (typeof usageModes)[number];
+  javascript?: boolean;
   sources: ResolvedConfig["sources"];
 }>;
 
@@ -162,11 +163,13 @@ export function requestFacts({
 export function captureRequest(
   resolved: ResolvedConfig,
   capturedAt = Date.now(),
+  javascript = false,
 ): RequestSnapshot {
   const facts = requestFacts(resolved);
   return Object.freeze({
     ...facts,
     capturedAt,
+    javascript,
     sources: Object.freeze({ ...facts.sources }),
   });
 }
@@ -215,6 +218,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     "requestThoughts",
     "target",
     "usageMode",
+    "javascript",
     "sources",
   ];
   return (
@@ -227,6 +231,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     fields.slice(1).every((key) => typeof data[key] === "boolean") &&
     targets.includes(data.target as RequestSnapshot["target"]) &&
     usageModes.includes(data.usageMode as RequestSnapshot["usageMode"]) &&
+    (data.javascript === undefined || typeof data.javascript === "boolean") &&
     !!sources &&
     Object.keys(sources).length === sourceFields.length &&
     sourceFields.every((key) => layers.includes(sources[key] as ConfigSource))

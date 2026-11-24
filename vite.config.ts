@@ -35,7 +35,7 @@ export default defineConfig({
         // Modern browsers use the first KaTeX font source (WOFF2). Avoid caching
         // three copies of each font during the service worker install.
         const files = Object.keys(bundle).filter((name) =>
-          /\.(js|css|woff2)$/.test(name),
+          /\.(js|css|woff2|wasm)$/.test(name),
         );
         const publicFiles = [
           "manifest.webmanifest",
@@ -70,6 +70,7 @@ export default defineConfig({
       },
     },
   ],
+  worker: { format: "es" },
   build: {
     rollupOptions: {
       output: {
