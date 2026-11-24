@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
+import { stripVTControlCharacters } from "node:util";
 const probe = createServer();
 await new Promise((resolve, reject) => {
   probe.once("error", reject);
@@ -35,7 +36,7 @@ async function ready() {
       throw new Error(`Preview failed: ${serverOutput}`);
     try {
       const response = await fetch(baseUrl);
-      if (response.ok && serverOutput.includes(baseUrl)) return;
+      if (response.ok && stripVTControlCharacters(serverOutput).includes(baseUrl)) return;
     } catch {}
     await delay(200);
   }
