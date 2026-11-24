@@ -1,2 +1,243 @@
-﻿<!doctype html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" /><meta name="theme-color" content="#625bef" /><meta name="description" content="A local-first AI chat workspace." /><link rel="manifest" href="./manifest.webmanifest" /><link rel="icon" type="image/svg+xml" sizes="any" href="./icon.svg" /><link rel="apple-touch-icon" href="./icon-192.png" /><title>Luma Chat</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html>
+<html lang="en" data-startup="loading" data-startup-timeout="12000">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#f7f7f5" />
+    <meta name="description" content="A local-first AI chat workspace." />
+    <title>Luma Chat</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --startup-bg: #f7f7f5;
+        --startup-text: #202124;
+        --startup-muted: #60646f;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-synthesis: none;
+        background: var(--startup-bg);
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --startup-bg: #17181b;
+        --startup-text: #f4f4f5;
+        --startup-muted: #b7b8be;
+      }
+      body {
+        margin: 0;
+        background: var(--startup-bg);
+        color: var(--startup-text);
+      }
+      :root:not([data-startup="revealing"]):not([data-startup="ready"]) #root {
+        visibility: hidden;
+      }
+      #startup-splash {
+        box-sizing: border-box;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        grid-template-rows: minmax(min-content, 1fr);
+        overflow: auto;
+        padding: max(24px, env(safe-area-inset-top))
+          max(24px, env(safe-area-inset-right))
+          max(24px, env(safe-area-inset-bottom))
+          max(24px, env(safe-area-inset-left));
+        background: var(--startup-bg);
+        color: var(--startup-text);
+        text-align: center;
+        transition: opacity 160ms ease-out;
+      }
+      #startup-splash > div {
+        align-self: center;
+        justify-self: center;
+        width: min(100%, 24rem);
+      }
+      #startup-splash .startup-mark {
+        display: block;
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 16px;
+      }
+      #startup-splash .startup-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #startup-splash h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+      #startup-splash p {
+        margin: 12px 0 0;
+        color: var(--startup-muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      #startup-splash button {
+        box-sizing: border-box;
+        min-height: 44px;
+        margin-top: 16px;
+        padding: 8px 20px;
+        border: 1px solid currentColor;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--startup-text);
+        font: inherit;
+        cursor: pointer;
+      }
+      #startup-splash button:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 3px;
+      }
+      :root[data-startup="revealing"] #startup-splash {
+        opacity: 0;
+        pointer-events: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #startup-splash {
+          transition: none;
+        }
+      }
+    </style>
+    <script>
+      {
+        const html = document.documentElement;
+        let preference;
+        try {
+          preference = localStorage.getItem("luma:theme");
+        } catch {}
+        html.dataset.theme =
+          preference === "light" || preference === "dark"
+            ? preference
+            : matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        document.querySelector('meta[name="theme-color"]').content =
+          getComputedStyle(html).getPropertyValue("--startup-bg").trim();
+        html.lang = /^zh(?:-|$)/i.test(navigator.language) ? "zh-CN" : "en";
+        performance.mark("luma:startup:theme");
+
+        document.addEventListener(
+          "load",
+          ({ target }) => {
+            if (
+              target instanceof HTMLLinkElement &&
+              target.hasAttribute("data-startup-style")
+            ) {
+              target.media = "all";
+            }
+          },
+          true,
+        );
+        document.addEventListener(
+          "error",
+          ({ target }) => {
+            if (
+              target instanceof HTMLLinkElement &&
+              target.hasAttribute("data-startup-style")
+            ) {
+              target.dataset.startupStyle = "failed";
+            } else if (
+              target instanceof HTMLScriptElement &&
+              target.type === "module" &&
+              target.src
+            ) {
+              html.dataset.startupEntryError = "true";
+              window.dispatchEvent(new Event("luma:startup:entry-error"));
+            }
+          },
+          true,
+        );
+      }
+    </script>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+  </head>
+  <body>
+    <section id="startup-splash" aria-label="Luma Chat">
+      <div>
+        <span class="startup-mark" aria-hidden="true"
+          ><!-- startup-icon --></span
+        >
+        <h1>Luma Chat</h1>
+        <p id="startup-status" role="status">Starting Luma Chat…</p>
+        <div id="startup-recovery" hidden>
+          <p id="startup-error" role="alert"></p>
+          <button id="startup-retry" type="button">Retry</button>
+        </div>
+        <noscript>
+          <style>
+            #startup-status {
+              display: none;
+            }
+          </style>
+          <p>Enable JavaScript and reload to open Luma Chat.</p>
+        </noscript>
+      </div>
+    </section>
+    <div id="root" inert aria-hidden="true"></div>
+    <script>
+      {
+        const html = document.documentElement;
+        const status = document.getElementById("startup-status");
+        const retry = document.getElementById("startup-retry");
+        const chinese = html.lang === "zh-CN";
+        if (chinese) {
+          status.textContent = "正在启动 Luma Chat…";
+          retry.textContent = "重试";
+        }
+        performance.mark("luma:startup:shell");
+        const fail = (timedOut) => {
+          if (html.dataset.startup !== "loading") return;
+          html.dataset.startup = "entry-failed";
+          performance.mark("luma:startup:entry-failed");
+          status.hidden = true;
+          document.getElementById("startup-recovery").hidden = false;
+          document.getElementById("startup-error").textContent = timedOut
+            ? chinese
+              ? "应用文件加载超时。请重试。"
+              : "App files took too long to load. Please retry."
+            : chinese
+              ? "无法加载应用文件。请检查网络连接并重试。"
+              : "Could not load the app files. Check your connection and retry.";
+          if (!document.hidden) retry.focus({ preventScroll: true });
+        };
+        const watchdog = setTimeout(
+          () => fail(true),
+          Number(html.dataset.startupTimeout),
+        );
+        const onEntryError = () => fail(false);
+        window.addEventListener("luma:startup:entry-error", onEntryError, {
+          once: true,
+        });
+        window.addEventListener(
+          "luma:startup:entry",
+          () => {
+            clearTimeout(watchdog);
+            window.removeEventListener(
+              "luma:startup:entry-error",
+              onEntryError,
+            );
+          },
+          { once: true },
+        );
+        if (html.dataset.startupEntryError) fail(false);
+        retry.addEventListener("click", () => {
+          if (html.dataset.startup === "entry-failed") location.reload();
+        });
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

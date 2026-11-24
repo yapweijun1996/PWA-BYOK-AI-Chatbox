@@ -2,7 +2,7 @@
 
 Luma Chat is a local-first, installable BYOK AI chat application. It supports direct browser connections to Gemini, OpenAI, OpenRouter, and LM Studio. The design references in `DESIGN/` describe the intended visual direction; this is an independent implementation.
 
-The UI supports English and Simplified Chinese with a system-language option. Use the top-bar Language and theme menu or Appearance settings to switch languages or choose a light, dark, or system theme. Both use the same saved preferences. The desktop sidebar can be collapsed; on mobile it opens as a drawer. These preferences are saved on the current device.
+The UI supports English and Simplified Chinese. Use **Settings → Appearance** to choose a language and a light, dark, or system theme. **Settings** also contains AI providers and Local data.
 
 ## Run locally
 
@@ -14,6 +14,22 @@ npm run dev
 ```
 
 Open the address printed by Vite. To build the installable production version, run `npm run build` followed by `npm run preview`. PWA caching is enabled in the production build. A deployed PWA requires HTTPS; localhost is suitable for local development.
+
+## Startup and recovery
+
+The static HTML splash paints without waiting for the app bundle or stylesheet. An early script applies the saved theme hint (or the system preference); the splash and app share the same palette and system font stack. IndexedDB remains authoritative. On the first launch after upgrading from an older build, an explicit theme that was stored only in IndexedDB is applied under the splash and mirrored for subsequent first paints.
+
+Startup opens IndexedDB and waits for any outstanding schema creation or upgrade to finish. A single read restores settings, the last selected conversation, its draft and attachments, and the selected provider/model. Older data without a saved selection opens the most recent conversation. The app remains hidden and non-interactive until styles load, React commits, and the initial layout, model and composer draft pass verification. The splash then fades out, or disappears immediately with reduced motion. Service worker registration and update monitoring run after readiness, and provider catalogs are not fetched on startup.
+
+If startup takes more than 12 seconds or fails, the splash offers retry without clearing local data. Storage retries run in place; unavailable app files or a failed UI check offer a reload. Offline startup requires a previously cached production build. An installed PWA's native launch screen, if shown before HTML loads, is controlled by the browser/OS.
+
+Startup metrics stay local in the browser Performance timeline. `luma:startup:*` marks record the early shell and each attempt, with measured database open, restore, stylesheet wait, mount, verification and splash fade durations. `performance.getEntriesByName("luma:startup:interactive")` gives navigation-to-interaction time; browser Paint Timing separately reports first contentful paint where supported.
+
+## Workspace sidebar
+
+Use **New chat** or **Search conversations** in the sidebar, or press `Ctrl/⌘ + K` to search titles, message text, and project names locally. Conversation action buttons can rename, pin, archive, move, or delete chats. Archived conversations are hidden from the main groups and can be opened or restored from **Archived**. A pinned chat appears only under **Pinned**, even when it belongs to a project. Unpinning returns it to its project or to Recent. Projects can be created and renamed; move all assigned conversations out (including archived conversations) before deleting an empty project.
+
+On desktop, drag the sidebar's right edge, or focus the separator and use Left/Right (Home/End for limits). Width and collapsed state are restored before revealing the app. The mobile drawer opens over the chat rather than resizing it. Projects and conversation organization live in the existing IndexedDB stores and are included in version-1 backups; older backups still import. API keys are not exported.
 
 ## Configure a provider
 
@@ -54,7 +70,7 @@ npx --yes --package style-dictionary@5.5.3 style-dictionary build --config token
 npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/dark.config.json
 ```
 
-Commit the generated CSS in `src/generated/` alongside the token sources. CI rebuilds it and fails if the output differs. Translations are maintained in `src/i18n.ts`; chat and model content are not translated.
+Commit the generated CSS in `src/generated/` alongside the token sources. CI rebuilds it and fails if the output differs. If the background, text, or muted colors change, update the inline first-paint palette in `index.html` to match. Translations are maintained in `src/i18n.ts`; chat and model content are not translated.
 
 The browser tests use an installed Chrome or Chromium and mocked LM Studio and OpenRouter endpoints; set `CHROME_PATH` when the executable is not in a standard location. They do not call a real model or cloud API. The reasoning test checks that reasoning appears during streaming and survives reload. Actual phone-to-LM-Studio connectivity and provider behavior depend on the user's environment and require separate device testing.
 

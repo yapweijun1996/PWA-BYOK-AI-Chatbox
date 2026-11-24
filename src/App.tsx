@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import {
@@ -13,9 +13,16 @@ import {
   ChevronDown,
   RefreshCw,
   Brain,
+  Search,
+  Settings as SettingsIcon,
+  SquarePen,
 } from "lucide-react";
 import { version } from "../package.json";
 import { Sidebar } from "./components/Sidebar";
+import { WorkspaceSearch } from "./components/WorkspaceSearch";
+import type { SearchMode } from "./components/WorkspaceSearch";
+import type { ChatOrganization } from "./components/WorkspaceActions";
+import { mergeProjects, mostRecentVisible } from "./workspace";
 import { Composer } from "./components/Composer";
 import type { ReplyPhase } from "./components/Composer";
 import { ModelSelector } from "./components/ModelSelector";
@@ -23,7 +30,7 @@ import { canRequestReasoning, compactModelName, configureModel } from "./model-o
 import type { ModelOption } from "./model-options";
 import { formatSize } from "./format-size";
 import { readAttachment } from "./attachments";
-import { PreferenceFields, TopbarPreferences } from "./components/Preferences";
+import { PreferenceFields } from "./components/Preferences";
 import type { PreferenceProps } from "./components/Preferences";
 import { Toast } from "./components/Toast";
 import { ResponseInspector } from "./components/ResponseInspector";
@@ -37,6 +44,8 @@ import {
 } from "./i18n";
 import type { Locale } from "./i18n";
 import { storage } from "./storage";
+import type { InitialAppState } from "./startup";
+import { applyTheme, rememberTheme, systemThemeQuery } from "./theme";
 import { mergeSettings, validBackup } from "./data-contracts";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { listModelOptions, streamChat } from "./providers";
@@ -47,12 +56,19 @@ import type {
   Message,
   ProviderId,
   Settings as AppSettings,
+  WorkspaceProject,
 } from "./types";
 import "./generated/tokens-light.css";
 import "./generated/tokens-dark.css";
 import "./styles.css";
+import "./workspace.css";
 
-type View = "chat" | "providers" | "data" | "appearance";
+const settingsSections = [
+  ["providers", "AI providers"],
+  ["appearance", "Appearance"],
+  ["data", "Local data"],
+] as const;
+type View = "chat" | (typeof settingsSections)[number][0];
 type Secrets = Partial<Record<ProviderId, string>>;
 const emptyChat = (): Conversation => ({
   id: id(),
@@ -102,11 +118,17 @@ function Reasoning({
     </details>
   );
 }
-function App() {
-  const [threads, setThreads] = useState<Conversation[]>([]);
-  const threadsRef = useRef<Conversation[]>([]);
-  const [active, setActive] = useState("");
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+function App({
+  initial,
+  onInitialCommit,
+}: {
+  initial: InitialAppState;
+  onInitialCommit: () => void;
+}) {
+  const [threads, setThreads] = useState<Conversation[]>(initial.threads);
+  const threadsRef = useRef<Conversation[]>(initial.threads);
+  const [active, setActive] = useState(initial.active);
+  const [settings, setSettings] = useState(initial.settings);
   const [systemLanguage, setSystemLanguage] = useState(
     () => navigator.language,
   );
@@ -118,11 +140,12 @@ function App() {
   const [desktop, setDesktop] = useState(
     () => matchMedia("(min-width: 768px)").matches,
   );
-  const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<SearchMode | null>(null);
+  const drawerToggle = useRef<HTMLButtonElement>(null);
+  const settingsHeading = useRef<HTMLHeadingElement>(null);
   const [notice, setNotice] = useState("");
   const { checking, check } = useAppUpdate(setNotice);
   const updateLabel = `${t("Check for updates")} · v${version}`;
-  const [ready, setReady] = useState(false);
   const [phase, setPhase] = useState<ReplyPhase>("idle");
   const working = phase !== "idle";
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -134,9 +157,8 @@ function App() {
   const [showKey, setShowKey] = useState(false);
   const [usage, setUsage] = useState("Unavailable");
   const [importData, setImportData] = useState<Conversation[] | null>(null);
-  const [importSettings, setImportSettings] = useState<
-    Partial<AppSettings> | undefined
-  >();
+  const [importSettings, setImportSettings] = useState<Partial<AppSettings>>();
+  const [importProjects, setImportProjects] = useState<WorkspaceProject[]>([]);
   const controller = useRef<AbortController | null>(null);
   const submittedDraft = useRef<Conversation | null>(null);
   const attachmentJob = useRef(false);
@@ -209,51 +231,11 @@ function App() {
       flushDrafts();
     };
   }, [flushDrafts]);
-  useEffect(() => {
-    let alive = true;
-    Promise.all([storage.conversations(), storage.settings()])
-      .then(([stored, saved]) => {
-        if (!alive) return;
-        const recovered = stored.map((c) => ({
-          ...c,
-          messages: c.messages.map((m) =>
-            m.status === "streaming"
-              ? { ...m, status: "interrupted" as const }
-              : m,
-          ),
-        }));
-        recovered.sort((a, b) => b.updatedAt - a.updatedAt);
-        threadsRef.current = recovered;
-        setThreads(recovered);
-        setActive(recovered[0]?.id || "");
-        setSettings(mergeSettings(saved));
-        recovered.forEach((c) => {
-          if (c.messages.some((m) => m.status === "interrupted")) queueSave(c);
-        });
-      })
-      .catch(report)
-      .finally(() => {
-        if (alive) setReady(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [queueSave, report]);
-  useEffect(() => {
-    const theme =
-      settings.theme === "system"
-        ? matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light"
-        : settings.theme;
-    document.documentElement.dataset.theme = theme;
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    const change = () => {
-      if (settings.theme === "system")
-        document.documentElement.dataset.theme = media.matches
-          ? "dark"
-          : "light";
-    };
+  useLayoutEffect(() => {
+    const media = matchMedia(systemThemeQuery);
+    const change = () => applyTheme(settings.theme, media.matches);
+    change();
+    if (settings.theme !== "system") return;
     media.addEventListener("change", change);
     return () => media.removeEventListener("change", change);
   }, [settings.theme]);
@@ -268,18 +250,56 @@ function App() {
   }, [locale]);
   useEffect(() => {
     const media = matchMedia("(min-width: 768px)");
-    const update = () => setDesktop(media.matches);
+    const update = () => {
+      setDesktop(media.matches);
+      if (media.matches) setDrawer(false);
+    };
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+  const showingSettings = view !== "chat";
+  const mobileDrawer = !desktop && drawer;
+  useLayoutEffect(() => {
+    if (showingSettings) settingsHeading.current?.focus({ preventScroll: true });
+  }, [showingSettings]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (
+        document.documentElement.dataset.startup !== "ready" ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey || event.isComposing || event.key.toLowerCase() !== "k" ||
+        document.querySelector("dialog[open]")
+      ) return;
+      event.preventDefault();
+      setSearchMode("active");
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+  const closeDrawer = () => {
+    setDrawer(false);
+    // Focus after React makes the main view interactive again.
+    requestAnimationFrame(() => drawerToggle.current?.focus({ preventScroll: true }));
+  };
+  const openSettings = () => {
+    setDrawer(false);
+    setView("providers");
+  };
+  const queuePreferenceWrite = (save: () => Promise<void>) => {
+    const write = settingsWrite.current.then(save);
+    settingsWrite.current = write.catch(report);
+    return write.then(() => true, () => false);
+  };
   const saveSettings = (next: AppSettings) => {
     setSettings(next);
-    const write = settingsWrite.current.then(() => storage.saveSettings(next));
-    settingsWrite.current = write.catch(report);
-    return write.then(
-      () => true,
-      () => false,
-    );
+    return queuePreferenceWrite(async () => {
+      await storage.saveSettings(next);
+      rememberTheme(next.theme);
+    });
+  };
+  const selectActive = (chatId: string) => {
+    setActive(chatId);
+    void queuePreferenceWrite(() => storage.saveActiveConversation(chatId));
   };
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -315,7 +335,7 @@ function App() {
     : !config.vision && historyHasImages ? imageSupportNotice : undefined;
   const sendBlocked = replyBlocked || (!config.vision && hasImage(files) ? imageSupportNotice : undefined);
   const lastMessage = chat?.messages[chat.messages.length - 1];
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (view === "chat" && followReply.current) {
       bottom.current?.scrollIntoView({ block: "end" });
     }
@@ -327,6 +347,7 @@ function App() {
     active,
     view,
   ]);
+  useLayoutEffect(onInitialCommit, [onInitialCommit]);
   const isConfigured =
     !!config.model.trim() && (config.id === "lmstudio" || !!secrets[config.id]);
   const desktopInput = desktop && matchMedia("(pointer: fine)").matches;
@@ -346,20 +367,20 @@ function App() {
     const next = emptyChat();
     threadsRef.current = [next, ...threadsRef.current];
     setThreads(threadsRef.current);
-    setActive(next.id);
     queueSave(next);
+    selectActive(next.id);
     setView("chat");
-    setDrawer(false);
+    if (mobileDrawer) closeDrawer();
   };
   const choose = (chatId: string) => {
     flushDraft(active);
     followReply.current = true;
-    setActive(chatId);
+    selectActive(chatId);
     setView("chat");
-    setDrawer(false);
+    if (mobileDrawer) closeDrawer();
   };
   const remove = async (chatId: string) => {
-    if (!confirm(t("Delete this conversation and its saved attachments?")))
+    if (controller.current || attachmentJob.current || !confirm(t("Delete this conversation and its saved attachments?")))
       return;
     flushDraft(chatId);
     await writes.current[chatId]?.catch(() => {});
@@ -368,15 +389,28 @@ function App() {
       const next = threadsRef.current.filter((c) => c.id !== chatId);
       threadsRef.current = next;
       setThreads(next);
-      if (active === chatId) setActive(next[0]?.id || "");
+      if (active === chatId) selectActive(mostRecentVisible(next));
     } catch (e) {
       report(e);
     }
   };
-  const rename = (c: Conversation) => {
-    const title = prompt(t("Conversation name"), c.title)?.trim();
-    if (title)
-      updateChat(c.id, (x) => ({ ...x, title, updatedAt: Date.now() }));
+  const organizeChat = (chatId: string, patch: ChatOrganization) => {
+    void updateChat(chatId, (current) => ({ ...current, ...patch }));
+    if (patch.archived && active === chatId) {
+      followReply.current = true;
+      selectActive(mostRecentVisible(threadsRef.current, chatId));
+    }
+  };
+  const saveProject = async (name: string, projectId?: string, chatId?: string) => {
+    const key = projectId ?? id();
+    const projects = projectId
+      ? settings.projects.map((project) => project.id === key ? { ...project, name } : project)
+      : [...settings.projects, { id: key, name }];
+    if (await saveSettings({ ...settings, projects }) && chatId) organizeChat(chatId, { projectId: key });
+  };
+  const deleteProject = (projectId: string) => {
+    if (threadsRef.current.some((conversation) => conversation.projectId === projectId)) return;
+    void saveSettings({ ...settings, projects: settings.projects.filter((project) => project.id !== projectId) });
   };
   const resetProviderForm = () => {
     setKeyInput("");
@@ -740,7 +774,7 @@ function App() {
     if (view === "data") refreshUsage();
   }, [view]);
   const exportData = () => {
-    const { vaults: _vaults, ...safeSettings } = settings;
+    const { vaults: _vaults, projects, ...safeSettings } = settings;
     void _vaults;
     const blob = new Blob(
       [
@@ -749,6 +783,7 @@ function App() {
             version: 1,
             exportedAt: new Date().toISOString(),
             conversations: threadsRef.current,
+            projects,
             settings: safeSettings,
           },
           null,
@@ -773,8 +808,8 @@ function App() {
       if (!validBackup(value))
         throw new Error("Invalid or unsupported backup file.");
       setImportData(value.conversations);
-      const raw = value as { settings?: Partial<AppSettings> };
-      setImportSettings(raw.settings);
+      setImportProjects(value.projects ?? []);
+      setImportSettings(value.settings);
     } catch (e) {
       setNotice(errorText(e));
     }
@@ -806,22 +841,23 @@ function App() {
         imported++;
       }
       setThreads([...threadsRef.current]);
-      if (!active && threadsRef.current.length)
-        setActive(threadsRef.current[0].id);
-      if (
+      if (!active) selectActive(mostRecentVisible(threadsRef.current));
+      const projects = mergeProjects(settings.projects, importProjects);
+      const importPreferences =
         importSettings &&
         confirm(
           t(
             "Import appearance and provider settings? Saved keys will remain on this device.",
           ),
-        )
-      ) {
+        );
+      if (importPreferences || projects.length !== settings.projects.length) {
         const merged = mergeSettings({
           ...settings,
-          ...importSettings,
+          ...(importPreferences ? importSettings : {}),
+          projects,
           vaults: settings.vaults,
         });
-        saveSettings(merged);
+        if (!(await saveSettings(merged))) return;
       }
       setNotice(`Imported ${imported} conversations.`);
       setImportData(null);
@@ -850,20 +886,13 @@ function App() {
       setThreads([]);
       setActive("");
       setSettings(defaultSettings);
+      rememberTheme(defaultSettings.theme);
       setSecrets({});
       setNotice("Local data cleared.");
     } catch (e) {
       report(e);
     }
   };
-  const filtered = threads
-    .filter((c) =>
-      `${c.title} ${c.messages.map((m) => m.content).join(" ")}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-    )
-    .sort((a, b) => b.updatedAt - a.updatedAt);
-  if (!ready) return <div className="loading">{t("Loading Luma Chat…")}</div>;
   const preferences: PreferenceProps = {
     locale,
     theme: settings.theme,
@@ -875,31 +904,28 @@ function App() {
     <div className="app">
       <Sidebar
         locale={locale}
-        open={drawer}
-        collapsed={desktop && settings.sidebarCollapsed}
-        hiddenFromInput={desktop ? settings.sidebarCollapsed : !drawer}
+        open={mobileDrawer}
+        desktop={desktop}
+        collapsed={settings.sidebarCollapsed}
+        width={settings.sidebarWidth}
         active={active}
         chatView={view === "chat"}
-        query={query}
-        chats={filtered}
-        onQuery={setQuery}
-        onClose={() => setDrawer(false)}
+        chats={threads}
+        projects={settings.projects}
+        working={working || processingFiles}
+        onClose={closeDrawer}
         onCreate={create}
         onChoose={choose}
-        onRename={rename}
-        onNavigate={(next) => {
-          setView(next);
-          setDrawer(false);
-        }}
+        onSearch={setSearchMode}
+        onSettings={openSettings}
+        onWidthChange={(width) => void saveSettings({ ...settings, sidebarWidth: width })}
+        onChat={organizeChat}
+        onDeleteChat={(chatId) => void remove(chatId)}
+        onSaveProject={(name, projectId, chatId) => void saveProject(name, projectId, chatId)}
+        onDeleteProject={deleteProject}
       />
-      {drawer && (
-        <button
-          className="scrim"
-          aria-label={t("Close menu")}
-          onClick={() => setDrawer(false)}
-        />
-      )}
-      <main className="main">
+      {mobileDrawer && <button className="scrim" tabIndex={-1} aria-hidden="true" onClick={closeDrawer} />}
+      <main className="main" inert={mobileDrawer || undefined}>
         <header className="topbar">
           <button
             className="icon desktop-toggle"
@@ -921,7 +947,10 @@ function App() {
           </button>
           <button
             className="icon mobile"
+            ref={drawerToggle}
             aria-label={t("Open menu")}
+            aria-expanded={mobileDrawer}
+            aria-controls="chat-sidebar"
             onClick={() => setDrawer(true)}
           >
             <Menu size={22} />
@@ -931,11 +960,7 @@ function App() {
               ? !chat || chat.title === "New chat"
                 ? t("New chat")
                 : chat.title
-              : view === "providers"
-                ? t("AI providers")
-                : view === "data"
-                  ? t("Local data")
-                  : t("Appearance")}
+              : t("Settings")}
           </strong>
           <div className="top-actions">
             {view === "chat" && (
@@ -960,7 +985,11 @@ function App() {
               <span className="dot" />
               {t(" Local storage")}
             </span>
-            <TopbarPreferences {...preferences} />
+            {desktop && settings.sidebarCollapsed && <>
+              <button className="icon workspace-shortcut" aria-label={t("New chat")} title={t("New chat")} onClick={create}><SquarePen size={18} aria-hidden="true" /></button>
+              <button className="icon workspace-shortcut" aria-label={t("Search conversations")} title={t("Search conversations")} aria-haspopup="dialog" onClick={() => setSearchMode("active")}><Search size={18} aria-hidden="true" /></button>
+              <button className="icon workspace-shortcut" aria-label={t("Settings")} title={t("Settings")} onClick={openSettings}><SettingsIcon size={18} aria-hidden="true" /></button>
+            </>}
             <button
               className="icon update-control"
               type="button"
@@ -984,6 +1013,7 @@ function App() {
           <>
             <section
               className="conversation"
+              data-conversation-id={active}
               aria-label={t("Conversation")}
               ref={conversation}
               onScroll={() => {
@@ -1148,13 +1178,17 @@ function App() {
             />
           </>
         )}
-        {view === "providers" && (
-          <section className="page">
-            <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} />
-              {t(" Back to chat")}
-            </button>
-            <h1>{t("AI providers")}</h1>
+        {showingSettings && <section className="page settings-page" aria-labelledby="settings-title">
+          <button className="back" onClick={() => setView("chat")}>
+            <ArrowLeft size={16} aria-hidden="true" />{t(" Back to chat")}
+          </button>
+          <h1 id="settings-title" tabIndex={-1} ref={settingsHeading}>{t("Settings")}</h1>
+          <nav className="settings-nav" aria-label={t("Settings sections")}>
+            {settingsSections.map(([section, label]) => <button type="button" className="tab" aria-current={view === section ? "page" : undefined} key={section} onClick={() => setView(section)}>{t(label)}</button>)}
+          </nav>
+          {view === "providers" && (
+          <section className="settings-section" aria-labelledby="providers-title">
+            <h2 id="providers-title">{t("AI providers")}</h2>
             <p className="subtitle">
               {t(
                 "Connect your own model. Requests go directly from this browser to the selected provider.",
@@ -1371,12 +1405,8 @@ function App() {
           </section>
         )}
         {view === "data" && (
-          <section className="page">
-            <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} />
-              {t(" Back to chat")}
-            </button>
-            <h1>{t("Local data")}</h1>
+          <section className="settings-section" aria-labelledby="local-data-title">
+            <h2 id="local-data-title">{t("Local data")}</h2>
             <p className="subtitle">
               {t("Manage your chats, attachments, and browser storage.")}
             </p>
@@ -1554,12 +1584,8 @@ function App() {
           </section>
         )}
         {view === "appearance" && (
-          <section className="page">
-            <button className="back" onClick={() => setView("chat")}>
-              <ArrowLeft size={16} />
-              {t(" Back to chat")}
-            </button>
-            <h1>{t("Appearance")}</h1>
+          <section className="settings-section" aria-labelledby="appearance-title">
+            <h2 id="appearance-title">{t("Appearance")}</h2>
             <p className="subtitle">
               {t("Choose how Luma Chat looks on this device.")}
             </p>
@@ -1568,7 +1594,19 @@ function App() {
             </div>
           </section>
         )}
+        </section>}
       </main>
+      {searchMode && (
+        <WorkspaceSearch
+          locale={locale}
+          initialMode={searchMode}
+          chats={threads}
+          projects={settings.projects}
+          onClose={() => setSearchMode(null)}
+          onChoose={choose}
+          onRestore={(chatId) => organizeChat(chatId, { archived: false })}
+        />
+      )}
     </div>
   );
 }

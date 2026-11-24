@@ -6,6 +6,30 @@ export default defineConfig({
   plugins: [
     react(),
     {
+      name: "startup-mark",
+      transformIndexHtml: {
+        order: "pre",
+        handler(html) {
+          return html.replace("<!-- startup-icon -->", () =>
+            readFileSync("public/icon.svg", "utf8").trim(),
+          );
+        },
+      },
+    },
+    {
+      name: "startup-nonblocking-styles",
+      apply: "build",
+      transformIndexHtml: {
+        order: "post",
+        handler(html) {
+          // Paint the inline shell while the gate waits for the app stylesheet.
+          return html.replace(/<link\b[^>]*\brel="stylesheet"[^>]*>/g, (tag) =>
+            tag.replace(/>$/, ' media="print" data-startup-style>'),
+          );
+        },
+      },
+    },
+    {
       name: "precache-manifest",
       generateBundle(_, bundle) {
         const files = Object.keys(bundle).filter((name) =>
@@ -22,7 +46,9 @@ export default defineConfig({
           ...publicFiles.map((file) => "./" + file),
           ...files.map((file) => "./" + file),
         ]);
-        const hash = createHash("sha256").update(manifest);
+        const hash = createHash("sha256")
+          .update(manifest)
+          .update(readFileSync("index.html"));
         // Public assets keep the same filenames when their contents change.
         for (const file of publicFiles) {
           const content = readFileSync(`public/${file}`);

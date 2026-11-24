@@ -1,6 +1,7 @@
 export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
 import type { Language } from "./i18n";
 import type { ResponseTelemetry } from "./response-telemetry";
+import { sidebarWidth } from "./workspace";
 export const providerIds: ProviderId[] = [
   "gemini",
   "openai",
@@ -31,7 +32,11 @@ export type Conversation = {
   messages: Message[];
   draft: string;
   draftAttachments?: Attachment[];
+  pinned?: boolean;
+  archived?: boolean;
+  projectId?: string;
 };
+export type WorkspaceProject = { id: string; name: string };
 export type ProviderConfig = {
   id: ProviderId;
   model: string;
@@ -51,6 +56,8 @@ export type Settings = {
   provider: ProviderId;
   theme: "light" | "dark" | "system";
   sidebarCollapsed: boolean;
+  sidebarWidth: number;
+  projects: WorkspaceProject[];
   language: Language;
   providers: Record<ProviderId, ProviderConfig>;
   vaults: Partial<Record<ProviderId, Cipher>>;
@@ -59,6 +66,8 @@ export const defaultSettings: Settings = {
   provider: "gemini",
   theme: "system",
   sidebarCollapsed: false,
+  sidebarWidth: sidebarWidth.default,
+  projects: [],
   language: "system",
   providers: {
     gemini: {

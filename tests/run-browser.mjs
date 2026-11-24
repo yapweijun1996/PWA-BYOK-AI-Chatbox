@@ -57,12 +57,14 @@ async function run(file) {
 try {
   await ready();
   for (const file of [
+    "tests/startup-smoke.mjs",
     "tests/browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
     "tests/composer-smoke.mjs",
     "tests/pages-subpath.mjs",
     "tests/update-smoke.mjs",
     "tests/ui-preferences.mjs",
+    "tests/workspace-smoke.mjs",
   ])
     await run(file);
 } finally {

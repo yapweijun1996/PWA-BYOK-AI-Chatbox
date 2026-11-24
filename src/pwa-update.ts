@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { afterStartupIdle } from "./startup";
 
 const readyNotice =
   "An update is ready. Finish any reply, close all Luma Chat tabs and app windows, then reopen. You may need to unlock your key again.";
@@ -51,10 +52,13 @@ export function useAppUpdate(notify: (message: string) => void) {
       found.addEventListener("updatefound", onUpdate);
       onUpdate();
     };
-    void attach();
-    window.addEventListener("luma:worker-registered", attach);
+    const cancel = afterStartupIdle(() => {
+      void attach();
+      window.addEventListener("luma:worker-registered", attach);
+    });
     return () => {
       disposed = true;
+      cancel();
       window.removeEventListener("luma:worker-registered", attach);
       registration?.removeEventListener("updatefound", onUpdate);
       installing?.removeEventListener("statechange", announceReady);
