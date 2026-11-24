@@ -162,7 +162,7 @@ try {
   await actions("Release notes").click();
   await menu.getByRole("button", { name: "Archive conversation" }).click();
   await folder
-    .getByRole("button", { name: "Release notes" })
+    .getByRole("button", { name: "Release notes", exact: true })
     .waitFor({ state: "hidden" });
   assert.equal(await draft.inputValue(), "Second draft stays isolated");
   await waitForSavedConversation(page, {
