@@ -1,5 +1,7 @@
 ﻿import type { Attachment, Message, ProviderConfig } from "./types";
 import { defaultSettings } from "./types";
+import { parseModelOptions } from "./model-options";
+import type { ModelOption } from "./model-options";
 function baseUrl(config: ProviderConfig): string {
   const endpoint =
     config.id === "lmstudio"
@@ -79,12 +81,12 @@ async function request(
   }
   return response;
 }
-export async function listModels(
+export async function listModelOptions(
   config: ProviderConfig,
   secret: string,
-): Promise<string[]> {
+): Promise<ModelOption[]> {
   const response = await request(config, "/models", secret);
-  let data: { models?: unknown; data?: unknown };
+  let data: unknown;
   try {
     data = await response.json();
   } catch {
@@ -92,25 +94,11 @@ export async function listModels(
   }
   if (!data || typeof data !== "object")
     throw new Error("Provider returned an invalid model list.");
-  const values =
-    config.id === "gemini"
-      ? (Array.isArray(data.models) ? data.models : [])
-          .filter(
-            (m: { supportedGenerationMethods?: string[] }) =>
-              Array.isArray(m?.supportedGenerationMethods) &&
-              m.supportedGenerationMethods.includes("generateContent"),
-          )
-          .map((m: { name?: unknown }) =>
-            typeof m.name === "string"
-              ? m.name.replace(/^models\//, "")
-              : undefined,
-          )
-      : (Array.isArray(data.data) ? data.data : []).map(
-          (m: { id?: unknown }) => m?.id,
-        );
-  return Array.isArray(values)
-    ? values.filter((x: unknown): x is string => typeof x === "string")
-    : [];
+  return parseModelOptions(config.id, data);
+}
+
+export async function listModels(config: ProviderConfig, secret: string): Promise<string[]> {
+  return (await listModelOptions(config, secret)).map(({ id }) => id);
 }
 function textAttachment(a: Attachment): string {
   return `\n\nFile: ${a.name}\n${a.data}`;

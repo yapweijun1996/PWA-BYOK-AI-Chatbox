@@ -37,6 +37,17 @@ const zh: Record<string, string> = {
   "AI providers": "AI 服务商",
   "Choose a model": "选择模型",
   "Choose model": "选择模型",
+  "Search models": "搜索模型",
+  "Close model selector": "关闭模型选择器",
+  "Load models": "加载模型",
+  "Loading models…": "正在加载模型…",
+  "No models were listed. Enter the model ID in Providers.":
+    "没有找到模型，请在服务商设置中输入模型 ID。",
+  "No matching models. Clear the search to load another catalog.":
+    "没有匹配的模型。清除搜索后可加载其他目录。",
+  "Refine your search to see more models.": "请缩小搜索范围以查看更多模型。",
+  "Open provider settings": "打开服务商设置",
+  "Image input": "图片输入",
   "Ready to send": "可以发送",
   "Setup needed": "需要设置",
   "Local storage": "本地存储",
@@ -52,6 +63,16 @@ const zh: Record<string, string> = {
   Retry: "重试",
   Copy: "复制",
   "Preparing attachments…": "正在准备附件…",
+  "Image attachment": "图片",
+  "Text attachment": "文本",
+  "Saving message…": "正在保存消息…",
+  "Stopping…": "正在停止…",
+  "This model does not support images in the draft or conversation. Choose an image-capable model or remove draft images.":
+    "当前模型无法处理草稿或对话中的图片。请选择支持图片的模型，或移除草稿中的图片。",
+  "You are offline. You can keep drafting; reconnect to send to this provider.":
+    "当前离线。你可以继续编辑草稿，重新联网后才能发送给该服务商。",
+  "Set up a model and provider credentials before sending.":
+    "请先设置模型和服务商凭据，再发送消息。",
   "Ask anything...": "输入您的问题…",
   Message: "消息",
   "Attach image or text": "添加图片或文本",
@@ -261,6 +282,8 @@ export function translateNotice(locale: Locale, text: string): string {
   if (fileType) return `${fileType[1]}：请选择图片或纯文本文件。`;
   const fileSize = text.match(/^(.*): files must be 5 MB or smaller\.$/);
   if (fileSize) return `${fileSize[1]}：文件不能超过 5 MB。`;
+  const unreadableImage = text.match(/^(.*): this image could not be read\.$/);
+  if (unreadableImage) return `${unreadableImage[1]}：无法读取此图片。`;
   if (text.startsWith("Connection failed."))
     return text.includes("LM Studio")
       ? "连接失败。请检查 LM Studio 地址、网络、浏览器权限、CORS 和防火墙设置。手机上的 localhost 指手机本身。"

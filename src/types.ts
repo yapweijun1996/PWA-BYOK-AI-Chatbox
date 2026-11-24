@@ -35,6 +35,7 @@ export type ProviderConfig = {
   model: string;
   endpoint: string;
   vision: boolean;
+  reasoningSupported?: boolean;
   requestThoughts?: boolean;
 };
 export type Cipher = {

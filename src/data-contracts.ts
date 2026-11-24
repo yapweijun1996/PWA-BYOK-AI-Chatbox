@@ -17,6 +17,7 @@ export function mergeSettings(input: Partial<Settings> | undefined): Settings {
       ...defaultSettings.providers[providerId],
       model: typeof saved?.model === "string" ? saved.model : "",
       vision: saved?.vision === true,
+      reasoningSupported: saved?.reasoningSupported === true,
       requestThoughts: saved?.requestThoughts === true,
       endpoint:
         providerId === "lmstudio" && typeof saved?.endpoint === "string"

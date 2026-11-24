@@ -1,24 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import {
   Menu,
-  Send,
-  Square,
   Paperclip,
   Sparkles,
   ArrowLeft,
   Trash2,
   Download,
   Upload,
-  Lock,
   Copy,
-  X,
   ChevronDown,
   RefreshCw,
+  Brain,
 } from "lucide-react";
 import { version } from "../package.json";
 import { Sidebar } from "./components/Sidebar";
+import { Composer } from "./components/Composer";
+import type { ReplyPhase } from "./components/Composer";
+import { ModelSelector } from "./components/ModelSelector";
+import { canRequestReasoning, compactModelName, configureModel } from "./model-options";
+import type { ModelOption } from "./model-options";
+import { formatSize } from "./format-size";
+import { readAttachment } from "./attachments";
 import { PreferenceFields, TopbarPreferences } from "./components/Preferences";
 import type { PreferenceProps } from "./components/Preferences";
 import { Toast } from "./components/Toast";
@@ -33,7 +37,7 @@ import type { Locale } from "./i18n";
 import { storage } from "./storage";
 import { mergeSettings, validBackup } from "./data-contracts";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { listModels, streamChat } from "./providers";
+import { listModelOptions, streamChat } from "./providers";
 import { defaultSettings, id, labels, providerIds as providers } from "./types";
 import type {
   Attachment,
@@ -55,10 +59,11 @@ const emptyChat = (): Conversation => ({
   messages: [],
   draft: "",
 });
-const formatSize = (size: number) =>
-  size >= 1048576
-    ? `${(size / 1048576).toFixed(1)} MB`
-    : `${(size / 1024).toFixed(1)} KB`;
+const imageSupportNotice =
+  "This model does not support images in the draft or conversation. Choose an image-capable model or remove draft images.";
+const offlineNotice =
+  "You are offline. You can keep drafting; reconnect to send to this provider.";
+const setupNotice = "Set up a model and provider credentials before sending.";
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
 function Markdown({ text }: { text: string }) {
@@ -116,9 +121,11 @@ function App() {
   const { checking, check } = useAppUpdate(setNotice);
   const updateLabel = `${t("Check for updates")} · v${version}`;
   const [ready, setReady] = useState(false);
-  const [working, setWorking] = useState(false);
+  const [phase, setPhase] = useState<ReplyPhase>("idle");
+  const working = phase !== "idle";
+  const [online, setOnline] = useState(() => navigator.onLine);
   const [processingFiles, setProcessingFiles] = useState(false);
-  const [models, setModels] = useState<string[]>([]);
+  const [catalogs, setCatalogs] = useState<Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>>({});
   const [password, setPassword] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [saveKey, setSaveKey] = useState(false);
@@ -129,11 +136,13 @@ function App() {
     Partial<AppSettings> | undefined
   >();
   const controller = useRef<AbortController | null>(null);
+  const submittedDraft = useRef<Conversation | null>(null);
+  const attachmentJob = useRef(false);
+  const draftTimers = useRef(new Map<string, number>());
   const writes = useRef<Record<string, Promise<void>>>({});
   const bottom = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
   const followReply = useRef(true);
-  const fileInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const report = useCallback(
     (error: unknown) =>
@@ -144,6 +153,11 @@ function App() {
   );
   const queueSave = useCallback(
     (chat: Conversation) => {
+      const timer = draftTimers.current.get(chat.id);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        draftTimers.current.delete(chat.id);
+      }
       const previous = writes.current[chat.id] || Promise.resolve();
       const write = previous
         .catch(() => {})
@@ -170,6 +184,29 @@ function App() {
     },
     [queueSave],
   );
+  const flushDraft = useCallback((chatId: string) => {
+    const timer = draftTimers.current.get(chatId);
+    if (timer === undefined) return;
+    window.clearTimeout(timer);
+    draftTimers.current.delete(chatId);
+    const latest = threadsRef.current.find((chat) => chat.id === chatId);
+    if (latest) void queueSave(latest);
+  }, [queueSave]);
+  const flushDrafts = useCallback(() => {
+    for (const chatId of draftTimers.current.keys()) flushDraft(chatId);
+  }, [flushDraft]);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushDrafts();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flushDrafts);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flushDrafts);
+      flushDrafts();
+    };
+  }, [flushDrafts]);
   useEffect(() => {
     let alive = true;
     Promise.all([storage.conversations(), storage.settings()])
@@ -242,17 +279,59 @@ function App() {
       () => false,
     );
   };
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const config = settings.providers[settings.provider];
+  const modelGroups = useMemo(() => providers.map((provider) => {
+    const { model, endpoint } = settings.providers[provider];
+    const catalog = catalogs[provider];
+    const options = catalog?.endpoint === endpoint ? catalog.options : [];
+    return { provider, options: model && !options.some(({ id }) => id === model) ? [{ id: model }, ...options] : options };
+  }), [catalogs, settings.providers]);
+  const models = modelGroups.find(({ provider }) => provider === config.id)?.options || [];
+  const selectedModel = models.find(({ id }) => id === config.model);
+  const reasoningAvailable = Boolean(selectedModel) && canRequestReasoning(config.id) && (
+    selectedModel?.reasoning === true || config.reasoningSupported === true || config.requestThoughts === true
+  );
+  const reasoningLabel = t(config.id === "gemini" ? "Request thought summaries" : "Request reasoning");
   const chat = threads.find((c) => c.id === active);
+  const displayedDraft = phase === "saving" && submittedDraft.current?.id === active
+    ? submittedDraft.current
+    : chat;
   const files = chat?.draftAttachments || [];
+  const hasImage = (attachments?: Attachment[]) =>
+    attachments?.some((file) => file.mime.startsWith("image/"));
+  const historyHasImages = chat?.messages.some((message) => hasImage(message.attachments));
+  const replyBlocked = !online && config.id !== "lmstudio" ? offlineNotice
+    : !config.vision && historyHasImages ? imageSupportNotice : undefined;
+  const sendBlocked = replyBlocked || (!config.vision && hasImage(files) ? imageSupportNotice : undefined);
   useEffect(() => {
     if (view === "chat" && followReply.current) {
       bottom.current?.scrollIntoView({ block: "end" });
     }
   }, [chat?.messages, active, view]);
   const isConfigured =
-    !!config.model && (config.id === "lmstudio" || !!secrets[config.id]);
+    !!config.model.trim() && (config.id === "lmstudio" || !!secrets[config.id]);
+  const desktopInput = desktop && matchMedia("(pointer: fine)").matches;
+  const hasDraft = Boolean(chat?.draft.trim() || files.length);
+  const composerBlocked = sendBlocked || (hasDraft && !isConfigured ? setupNotice : undefined);
+  const editDraft = (draft: string) => {
+    if (!chat || phase === "saving") return;
+    const chatId = chat.id;
+    void updateChat(chatId, (current) => ({ ...current, draft }), false);
+    const pending = draftTimers.current.get(chatId);
+    if (pending !== undefined) window.clearTimeout(pending);
+    draftTimers.current.set(chatId, window.setTimeout(() => flushDraft(chatId), 350));
+  };
   const create = () => {
+    flushDraft(active);
     followReply.current = true;
     const next = emptyChat();
     threadsRef.current = [next, ...threadsRef.current];
@@ -263,6 +342,7 @@ function App() {
     setDrawer(false);
   };
   const choose = (chatId: string) => {
+    flushDraft(active);
     followReply.current = true;
     setActive(chatId);
     setView("chat");
@@ -271,6 +351,7 @@ function App() {
   const remove = async (chatId: string) => {
     if (!confirm(t("Delete this conversation and its saved attachments?")))
       return;
+    flushDraft(chatId);
     await writes.current[chatId]?.catch(() => {});
     try {
       await storage.removeConversation(chatId);
@@ -287,11 +368,14 @@ function App() {
     if (title)
       updateChat(c.id, (x) => ({ ...x, title, updatedAt: Date.now() }));
   };
-  const setProvider = (provider: ProviderId) => {
+  const resetProviderForm = () => {
     setKeyInput("");
     setPassword("");
-    setModels([]);
     setSaveKey(false);
+    setShowKey(false);
+  };
+  const setProvider = (provider: ProviderId) => {
+    resetProviderForm();
     saveSettings({ ...settings, provider });
   };
   const updateConfig = (patch: Partial<typeof config>) =>
@@ -299,61 +383,83 @@ function App() {
       ...settings,
       providers: {
         ...settings.providers,
-        [settings.provider]: { ...config, ...patch },
+        [config.id]: { ...config, ...patch },
       },
     });
-  const processFiles = async (selected: FileList | null) => {
-    if (!selected || !chat) return;
+  const selectModel = (provider: ProviderId, option: ModelOption) => {
+    if (provider !== settings.provider) resetProviderForm();
+    saveSettings({
+      ...settings,
+      provider,
+      providers: {
+        ...settings.providers,
+        [provider]: configureModel(settings.providers[provider], option),
+      },
+    });
+  };
+  const loadCatalog = async (provider: ProviderId, keyOverride?: string) => {
+    const target = settings.providers[provider];
+    const options = await listModelOptions(target, keyOverride || secrets[provider] || "");
+    setCatalogs((current) => ({ ...current, [provider]: { endpoint: target.endpoint, options } }));
+    return options;
+  };
+  const setReasoning = (enabled: boolean) => updateConfig({
+    reasoningSupported: true,
+    requestThoughts: enabled,
+  });
+  const processFiles = async (selected: File[]) => {
+    if (!selected.length || !chat || controller.current || attachmentJob.current) return;
     const chatId = chat.id;
+    attachmentJob.current = true;
     setProcessingFiles(true);
     const result: Attachment[] = [];
     try {
-      for (const file of Array.from(selected)) {
-        const mime =
-          file.type === "application/json" ||
-          (!file.type && /\.(txt|md|csv|json)$/i.test(file.name))
-            ? "text/plain"
-            : file.type;
-        if (
-          !mime.startsWith("text/") &&
-          !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(mime)
-        )
-          throw new Error(`${file.name}: use an image or plain text file.`);
-        if (file.size > 5 * 1024 * 1024)
-          throw new Error(`${file.name}: files must be 5 MB or smaller.`);
-        const data = mime.startsWith("text/")
-          ? await file.text()
-          : await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(String(reader.result));
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(file);
-            });
-        result.push({ id: id(), name: file.name, mime, size: file.size, data });
-      }
-      updateChat(chatId, (current) => ({
+      for (const file of selected) result.push(await readAttachment(file));
+      await updateChat(chatId, (current) => ({
         ...current,
         draftAttachments: [...(current.draftAttachments || []), ...result],
       }));
     } catch (e) {
       setNotice(errorText(e));
+    } finally {
+      attachmentJob.current = false;
+      setProcessingFiles(false);
     }
-    if (fileInput.current) fileInput.current.value = "";
-    setProcessingFiles(false);
+  };
+  const beginReply = (draft: Conversation | null) => {
+    const abort = new AbortController();
+    controller.current = abort;
+    submittedDraft.current = draft;
+    setPhase("saving");
+    return abort;
+  };
+  const finishReply = (abort: AbortController) => {
+    if (controller.current !== abort) return;
+    controller.current = null;
+    submittedDraft.current = null;
+    setPhase("idle");
+  };
+  const stopReply = () => {
+    const abort = controller.current;
+    if (phase !== "streaming" || !abort || abort.signal.aborted) return;
+    setPhase("stopping");
+    abort.abort();
   };
   const runReply = async (
     chatId: string,
     history: Message[],
     reply: Message,
+    abort: AbortController,
   ) => {
-    setWorking(true);
+    if (controller.current !== abort) return;
+    submittedDraft.current = null;
+    setPhase("streaming");
     setNotice("");
-    const abort = new AbortController();
-    controller.current = abort;
     let content = "";
     let reasoning = "";
     let lastCheckpoint = Date.now();
     const updateDelta = (kind: "content" | "reasoning", text: string) => {
+      if (controller.current !== abort || abort.signal.aborted) return;
       if (kind === "content") content += text;
       else reasoning += text;
       const checkpoint = Date.now() - lastCheckpoint >= 500;
@@ -378,16 +484,18 @@ function App() {
         (text) => updateDelta("content", text),
         (text) => updateDelta("reasoning", text),
       );
+      if (controller.current !== abort) return;
       updateChat(chatId, (c) => ({
         ...c,
         updatedAt: Date.now(),
         messages: c.messages.map((m) =>
           m.id === reply.id
-            ? { ...m, content, reasoning, status: "complete" }
+            ? { ...m, content, reasoning, status: abort.signal.aborted ? "interrupted" : "complete" }
             : m,
         ),
       }));
     } catch (e) {
+      if (controller.current !== abort) return;
       const stopped = abort.signal.aborted;
       updateChat(chatId, (c) => ({
         ...c,
@@ -404,12 +512,11 @@ function App() {
       }));
       if (!stopped) setNotice(errorText(e));
     } finally {
-      controller.current = null;
-      setWorking(false);
+      finishReply(abort);
     }
   };
   const send = async () => {
-    if (working || processingFiles) return;
+    if (controller.current || attachmentJob.current) return;
     if (!chat) {
       setNotice("Start a new chat first.");
       return;
@@ -422,10 +529,8 @@ function App() {
       setView("providers");
       return;
     }
-    if (!config.vision && files.some((f) => f.mime.startsWith("image/"))) {
-      setNotice(
-        "Enable image support for this model in Providers before sending images.",
-      );
+    if (sendBlocked) {
+      setNotice(sendBlocked);
       return;
     }
     followReply.current = true;
@@ -450,7 +555,7 @@ function App() {
       chat.title === "New chat"
         ? chat.draft.trim().slice(0, 60) || files[0]?.name || "New chat"
         : chat.title;
-    setWorking(true);
+    const abort = beginReply(chat);
     const saved = await updateChat(chatId, (c) => ({
       ...c,
       title: nextTitle,
@@ -462,6 +567,7 @@ function App() {
     if (!saved) {
       updateChat(chatId, (c) => ({
         ...c,
+        title: c.title === nextTitle ? chat.title : c.title,
         draft: c.draft ? `${user.content}\n${c.draft}` : user.content,
         draftAttachments: [
           ...(user.attachments || []),
@@ -471,16 +577,20 @@ function App() {
           (m) => m.id !== user.id && m.id !== reply.id,
         ),
       }));
-      setWorking(false);
+      finishReply(abort);
       setNotice(
         "Message was not sent because local storage failed. Your draft and attachments are still visible.",
       );
       return;
     }
-    await runReply(chatId, history, reply);
+    await runReply(chatId, history, reply, abort);
   };
   const retry = async () => {
-    if (!chat || working || processingFiles) return;
+    if (!chat || controller.current || attachmentJob.current) return;
+    if (replyBlocked) {
+      setNotice(replyBlocked);
+      return;
+    }
     if (!isConfigured) {
       setNotice("Choose a model and unlock its key in Providers.");
       setView("providers");
@@ -501,7 +611,7 @@ function App() {
       createdAt: Date.now(),
       status: "streaming",
     };
-    setWorking(true);
+    const abort = beginReply(null);
     const saved = await updateChat(chat.id, (c) => ({
       ...c,
       messages: [...c.messages, reply],
@@ -512,22 +622,18 @@ function App() {
         ...c,
         messages: c.messages.filter((m) => m.id !== reply.id),
       }));
-      setWorking(false);
+      finishReply(abort);
       setNotice(
         "Retry was not sent because local storage failed. The conversation remains visible.",
       );
       return;
     }
-    await runReply(chat.id, chat.messages, reply);
+    await runReply(chat.id, chat.messages, reply, abort);
   };
   const testConnection = async () => {
     try {
       setNotice("Connecting…");
-      const result = await listModels(
-        config,
-        keyInput || secrets[config.id] || "",
-      );
-      setModels(result);
+      const result = await loadCatalog(config.id, keyInput);
       setNotice(
         result.length
           ? `Model list loaded (${result.length}). This does not verify your key or chat access. Select one or enter its ID.`
@@ -664,6 +770,7 @@ function App() {
               : m,
           ),
         };
+        flushDraft(c.id);
         await writes.current[c.id]?.catch(() => {});
         await storage.saveConversation(clean);
         threadsRef.current = [
@@ -708,6 +815,7 @@ function App() {
     )
       return;
     try {
+      flushDrafts();
       await Promise.all([
         ...Object.values(writes.current),
         settingsWrite.current,
@@ -808,11 +916,12 @@ function App() {
             {view === "chat" && (
               <button
                 className="model-pill"
+                title={config.model || undefined}
                 onClick={() => setView("providers")}
               >
                 <Sparkles size={17} />
                 <span>
-                  {labels[config.id]} · {config.model || t("Choose a model")}
+                  {labels[config.id]} · {selectedModel ? compactModelName(selectedModel) : t("Choose a model")}
                 </span>
                 <ChevronDown size={16} />
               </button>
@@ -964,113 +1073,51 @@ function App() {
                 </div>
               )}
             </section>
-            <div className="composer-wrap">
-              {processingFiles && (
-                <p className="hint" role="status">
-                  {t("Preparing attachments…")}
-                </p>
-              )}
-              {files.length > 0 && (
-                <div className="file-list">
-                  {files.map((f) => (
-                    <span className="file-chip" key={f.id}>
-                      {f.name}
-                      <button
-                        className="icon"
-                        aria-label={interpolate(t("Remove {name}"), f.name)}
-                        onClick={() =>
-                          chat &&
-                          updateChat(chat.id, (c) => ({
-                            ...c,
-                            draftAttachments: (c.draftAttachments || []).filter(
-                              (x) => x.id !== f.id,
-                            ),
-                          }))
-                        }
-                      >
-                        <X size={14} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="composer">
-                <textarea
-                  rows={1}
-                  placeholder={t("Ask anything...")}
-                  aria-label={t("Message")}
-                  value={chat?.draft || ""}
-                  disabled={!chat}
-                  onChange={(e) =>
-                    chat &&
-                    updateChat(chat.id, (c) => ({
-                      ...c,
-                      draft: e.target.value,
-                    }))
-                  }
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                />
-                <div className="composer-actions">
-                  <button
-                    className="icon outlined"
-                    aria-label={t("Attach image or text")}
-                    onClick={() => fileInput.current?.click()}
-                    disabled={!chat || working || processingFiles}
-                  >
-                    <Paperclip size={20} />
-                  </button>
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.csv,.json"
-                    multiple
-                    hidden
-                    onChange={(e) => void processFiles(e.target.files)}
+            <Composer
+              locale={locale}
+              enabled={Boolean(chat)}
+              enterSends={desktopInput}
+              draft={displayedDraft?.draft || ""}
+              files={displayedDraft?.draftAttachments || []}
+              processingFiles={processingFiles}
+              phase={phase}
+              blockedReason={chat ? composerBlocked : undefined}
+              modelControl={
+                <>
+                  <ModelSelector
+                    locale={locale}
+                    autoFocusSearch={desktopInput}
+                    provider={config.id}
+                    selected={selectedModel}
+                    groups={modelGroups}
+                    onLoad={loadCatalog}
+                    onSelect={selectModel}
+                    onSettings={() => setView("providers")}
                   />
-                  <button
-                    className="model-pill"
-                    onClick={() => setView("providers")}
-                  >
-                    <Sparkles size={17} />
-                    {config.model || t("Choose model")}
-                  </button>
-                  <span className="spacer" />
-                  {working ? (
+                  {reasoningAvailable && (
                     <button
-                      className="send"
-                      aria-label={t("Stop generating")}
-                      onClick={() => controller.current?.abort()}
+                      className="icon composer-reasoning"
+                      type="button"
+                      title={reasoningLabel}
+                      aria-label={reasoningLabel}
+                      aria-pressed={config.requestThoughts === true}
+                      onClick={() => setReasoning(!config.requestThoughts)}
                     >
-                      <Square size={18} />
-                    </button>
-                  ) : (
-                    <button
-                      className="send"
-                      aria-label={t("Send message")}
-                      onClick={() => void send()}
-                      disabled={!chat || processingFiles}
-                    >
-                      <Send size={20} />
+                      <Brain size={18} aria-hidden="true" />
+                      <span>{t("Reasoning")}</span>
                     </button>
                   )}
-                </div>
-              </div>
-              <p className="privacy">
-                <Lock size={13} />
-                {t(
-                  " Chats are stored on this device. Content is sent to your selected provider.",
-                )}
-              </p>
-            </div>
+                </>
+              }
+              onDraft={editDraft}
+              onFiles={processFiles}
+              onRemove={(fileId) => chat && updateChat(chat.id, (c) => ({
+                ...c,
+                draftAttachments: c.draftAttachments?.filter((file) => file.id !== fileId),
+              }))}
+              onSend={() => void send()}
+              onStop={stopReply}
+            />
           </>
         )}
         {view === "providers" && (
@@ -1121,7 +1168,7 @@ function App() {
                     <input
                       value={config.endpoint}
                       onChange={(e) =>
-                        updateConfig({ endpoint: e.target.value })
+                        updateConfig({ endpoint: e.target.value, vision: false })
                       }
                       placeholder="http://localhost:1234/v1"
                     />
@@ -1138,13 +1185,16 @@ function App() {
                 <input
                   list="model-list"
                   value={config.model}
-                  onChange={(e) => updateConfig({ model: e.target.value })}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    selectModel(config.id, models.find((option) => option.id === id) || { id });
+                  }}
                   placeholder={t("Enter a model ID or test connection")}
                 />
               </label>
               <datalist id="model-list">
-                {models.map((m) => (
-                  <option key={m} value={m} />
+                {models.map(({ id }) => (
+                  <option key={id} value={id} />
                 ))}
               </datalist>
               <label className="check">
@@ -1160,19 +1210,16 @@ function App() {
                   "Enable only when your selected model supports images. Plain text attachments are sent as text.",
                 )}
               </p>
-              {(config.id === "gemini" || config.id === "openrouter") && (
+              {canRequestReasoning(config.id) && (
                 <>
                   <label className="check">
                     <input
                       type="checkbox"
                       checked={config.requestThoughts === true}
-                      onChange={(e) =>
-                        updateConfig({ requestThoughts: e.target.checked })
-                      }
+                      disabled={!config.model.trim()}
+                      onChange={(e) => setReasoning(e.target.checked)}
                     />{" "}
-                    {config.id === "gemini"
-                      ? t("Request thought summaries")
-                      : t("Request reasoning")}
+                    {reasoningLabel}
                   </label>
                   <p className="hint">
                     {config.id === "gemini"

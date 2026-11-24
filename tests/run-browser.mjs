@@ -59,6 +59,7 @@ try {
   for (const file of [
     "tests/browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
+    "tests/composer-smoke.mjs",
     "tests/pages-subpath.mjs",
     "tests/update-smoke.mjs",
     "tests/ui-preferences.mjs",

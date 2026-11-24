@@ -68,7 +68,7 @@ try {
   const check = page.getByRole("button", {
     name: `Check for updates · v${appVersion}`,
   });
-  const toast = page.getByRole("status");
+  const toast = page.locator(".toast").getByRole("status");
   const animation = () =>
     check
       .locator("svg")
