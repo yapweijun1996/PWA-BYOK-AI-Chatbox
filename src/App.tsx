@@ -67,6 +67,7 @@ function mergeSettings(input: Partial<AppSettings> | undefined): AppSettings {
       ...defaultSettings.providers[providerId],
       model: typeof saved?.model === "string" ? saved.model : "",
       vision: saved?.vision === true,
+      requestThoughts: saved?.requestThoughts === true,
       endpoint:
         providerId === "lmstudio" && typeof saved?.endpoint === "string"
           ? saved.endpoint
@@ -101,6 +102,7 @@ function validBackup(
           typeof m.id !== "string" ||
           !["user", "assistant"].includes(m.role) ||
           typeof m.content !== "string" ||
+          (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
           !Number.isFinite(m.createdAt)
         )
           return false;
@@ -133,6 +135,19 @@ function Markdown({ text }: { text: string }) {
   );
   return (
     <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />
+  );
+}
+function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <details
+      className="reasoning"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>{streaming ? "Thinking…" : "Reasoning"}</summary>
+      <Markdown text={text} />
+    </details>
   );
 }
 function App() {
@@ -355,34 +370,40 @@ function App() {
     const abort = new AbortController();
     controller.current = abort;
     let content = "";
+    let reasoning = "";
     let lastCheckpoint = Date.now();
+    const updateDelta = (kind: "content" | "reasoning", text: string) => {
+      if (kind === "content") content += text;
+      else reasoning += text;
+      const checkpoint = Date.now() - lastCheckpoint >= 500;
+      if (checkpoint) lastCheckpoint = Date.now();
+      updateChat(
+        chatId,
+        (c) => ({
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === reply.id ? { ...m, content, reasoning } : m,
+          ),
+        }),
+        checkpoint,
+      );
+    };
     try {
       await streamChat(
         config,
         secrets[config.id] || "",
         history,
         abort.signal,
-        (text) => {
-          content += text;
-          const checkpoint = Date.now() - lastCheckpoint >= 500;
-          if (checkpoint) lastCheckpoint = Date.now();
-          updateChat(
-            chatId,
-            (c) => ({
-              ...c,
-              messages: c.messages.map((m) =>
-                m.id === reply.id ? { ...m, content } : m,
-              ),
-            }),
-            checkpoint,
-          );
-        },
+        (text) => updateDelta("content", text),
+        (text) => updateDelta("reasoning", text),
       );
       updateChat(chatId, (c) => ({
         ...c,
         updatedAt: Date.now(),
         messages: c.messages.map((m) =>
-          m.id === reply.id ? { ...m, content, status: "complete" } : m,
+          m.id === reply.id
+            ? { ...m, content, reasoning, status: "complete" }
+            : m,
         ),
       }));
     } catch (e) {
@@ -391,7 +412,12 @@ function App() {
         ...c,
         messages: c.messages.map((m) =>
           m.id === reply.id
-            ? { ...m, content, status: stopped ? "interrupted" : "error" }
+            ? {
+                ...m,
+                content,
+                reasoning,
+                status: stopped ? "interrupted" : "error",
+              }
             : m,
         ),
       }));
@@ -869,10 +895,18 @@ function App() {
                             })}
                           </time>
                         </div>
+                        {m.reasoning && (
+                          <Reasoning
+                            text={m.reasoning}
+                            streaming={m.status === "streaming"}
+                          />
+                        )}
                         <Markdown
                           text={
                             m.content ||
-                            (m.status === "streaming" ? "Thinking…" : "")
+                            (m.status === "streaming" && !m.reasoning
+                              ? "Thinking…"
+                              : "")
                           }
                         />
                         {m.attachments?.map((a) => (
@@ -1098,6 +1132,24 @@ function App() {
                 Enable only when your selected model supports images. Plain text
                 attachments are sent as text.
               </p>
+              {config.id === "gemini" && (
+                <>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={config.requestThoughts === true}
+                      onChange={(e) =>
+                        updateConfig({ requestThoughts: e.target.checked })
+                      }
+                    />{" "}
+                    Request thought summaries
+                  </label>
+                  <p className="hint">
+                    Enable for Gemini models that support thought summaries.
+                    Some requests or models return no summary.
+                  </p>
+                </>
+              )}
               <div className="divider" />
               <h3>
                 {config.id === "lmstudio" ? "API token (optional)" : "API key"}

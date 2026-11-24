@@ -21,6 +21,8 @@ For LM Studio, start its server and enable CORS. The default base URL is `http:/
 
 The app keeps session keys in memory until lock, reload, or close. Opt-in encrypted storage uses a password-derived AES-GCM key. Losing the password prevents recovery. Encryption protects stored ciphertext from some device-storage exposure; it does not protect a key while the app is unlocked from malicious page scripts or a compromised device. API keys are excluded from backups and are never intentionally logged. Cloud providers receive submitted messages and attachments. Direct browser key use is a deliberate user-selected tradeoff and does not meet OpenAI's recommendation to keep API keys on a server.
 
+When a provider supplies reasoning text in its stream, Luma Chat displays it separately from the final answer and saves it with the conversation and backups. LM Studio supports structured reasoning fields and leading `<think>` tags. For Gemini, enable **Request thought summaries** only for a supported model; a summary is not guaranteed. OpenAI Chat Completions does not expose raw reasoning, so it may show no reasoning text. Reasoning displayed in the app is not sent back in later chat requests.
+
 ## Data and offline behavior
 
 Conversations, drafts, attachments, settings, and any encrypted saved keys are stored in IndexedDB on the current browser/device. Data is not automatically synchronized. Browser storage may be cleared or evicted; export backups regularly. Backups include conversations, attachments, and provider settings but never keys. Imports require a preview and explicit conflict handling.
@@ -34,9 +36,11 @@ npm test
 npm run build
 npm run preview -- --port 55167 --strictPort
 node tests/browser-smoke.mjs
+node tests/reasoning-smoke.mjs
+node tests/pages-subpath.mjs
 ```
 
-The browser smoke test uses installed Chrome at its standard Windows path and a mocked LM Studio endpoint; it does not call a real model or cloud API. Actual phone-to-LM-Studio connectivity and provider behavior depend on the user's environment and require separate device testing.
+The browser smoke tests use installed Chrome at its standard Windows path and mocked LM Studio endpoints; they do not call a real model or cloud API. The reasoning test checks that reasoning appears during streaming and survives reload. Actual phone-to-LM-Studio connectivity and provider behavior depend on the user's environment and require separate device testing.
 
 ## GitHub Pages deployment
 

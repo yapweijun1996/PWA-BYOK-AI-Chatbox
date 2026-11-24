@@ -120,6 +120,9 @@ export function buildRequest(
     return {
       path: `/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`,
       body: {
+        ...(config.requestThoughts
+          ? { generationConfig: { thinkingConfig: { includeThoughts: true } } }
+          : {}),
         contents: completed.map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [
@@ -187,12 +190,73 @@ export async function parseEventStream(
     reader.releaseLock();
   }
 }
+
+// Some local models include their reasoning in leading <think> tags rather than
+// using the structured reasoning field. Tags can be split across SSE chunks.
+function localThinkRouter(
+  onText: (text: string) => void,
+  onReasoning: (text: string) => void,
+) {
+  let mode: "start" | "thinking" | "answer" = "start";
+  let pending = "";
+  const open = "<think>";
+  const close = "</think>";
+  const push = (text: string) => {
+    if (mode === "answer") {
+      onText(text);
+      return;
+    }
+    pending += text;
+    if (mode === "start") {
+      const leading = pending.trimStart();
+      if (
+        leading.length < open.length &&
+        open.startsWith(leading) &&
+        pending.length <= 128
+      )
+        return;
+      if (!leading.startsWith(open)) {
+        mode = "answer";
+        onText(pending);
+        pending = "";
+        return;
+      }
+      pending = leading.slice(open.length);
+      mode = "thinking";
+    }
+    const end = pending.indexOf(close);
+    if (end !== -1) {
+      if (end) onReasoning(pending.slice(0, end));
+      const answer = pending.slice(end + close.length);
+      pending = "";
+      mode = "answer";
+      if (answer) onText(answer);
+      return;
+    }
+    let keep = Math.min(pending.length, close.length - 1);
+    while (keep > 0 && !close.startsWith(pending.slice(-keep))) keep--;
+    const ready = pending.slice(0, pending.length - keep);
+    pending = pending.slice(pending.length - keep);
+    if (ready) onReasoning(ready);
+  };
+  return {
+    push,
+    flush: () => {
+      if (pending) {
+        if (mode === "thinking") onReasoning(pending);
+        else onText(pending);
+        pending = "";
+      }
+    },
+  };
+}
 export async function streamChat(
   config: ProviderConfig,
   secret: string,
   messages: Message[],
   signal: AbortSignal,
   onText: (text: string) => void,
+  onReasoning: (text: string) => void = () => {},
 ): Promise<void> {
   if (!config.model.trim())
     throw new Error("Choose or enter a model in Providers.");
@@ -217,32 +281,55 @@ export async function streamChat(
     throw new Error("The provider returned an empty response.");
   let received = false;
   let finished = false;
-  await parseEventStream(
-    response.body,
-    (data) => {
-      const chunk = JSON.parse(data);
-      if (chunk.error)
-        throw new Error("The provider reported an error while generating.");
-      if (
-        chunk.candidates?.[0]?.finishReason ||
-        chunk.choices?.[0]?.finish_reason
-      )
+  const emitText = (text: string) => {
+    if (text) {
+      received = true;
+      onText(text);
+    }
+  };
+  const localTags =
+    config.id === "lmstudio"
+      ? localThinkRouter(emitText, onReasoning)
+      : undefined;
+  try {
+    await parseEventStream(
+      response.body,
+      (data) => {
+        const chunk = JSON.parse(data);
+        if (chunk.error)
+          throw new Error("The provider reported an error while generating.");
+        if (
+          chunk.candidates?.[0]?.finishReason ||
+          chunk.choices?.[0]?.finish_reason
+        )
+          finished = true;
+        if (config.id === "gemini") {
+          const parts = chunk.candidates?.[0]?.content?.parts;
+          if (Array.isArray(parts)) {
+            for (const part of parts) {
+              if (typeof part.text !== "string" || !part.text) continue;
+              if (part.thought === true) onReasoning(part.text);
+              else emitText(part.text);
+            }
+          }
+        } else {
+          const delta = chunk.choices?.[0]?.delta;
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+          if (typeof reasoning === "string" && reasoning)
+            onReasoning(reasoning);
+          if (typeof delta?.content === "string" && delta.content) {
+            if (localTags) localTags.push(delta.content);
+            else emitText(delta.content);
+          }
+        }
+      },
+      () => {
         finished = true;
-      const text =
-        config.id === "gemini"
-          ? chunk.candidates?.[0]?.content?.parts
-              ?.map((p: { text?: string }) => p.text || "")
-              .join("")
-          : chunk.choices?.[0]?.delta?.content;
-      if (typeof text === "string" && text) {
-        received = true;
-        onText(text);
-      }
-    },
-    () => {
-      finished = true;
-    },
-  );
+      },
+    );
+  } finally {
+    localTags?.flush();
+  }
   if (!received)
     throw new Error(
       "The provider returned no text. Check model compatibility or safety filters.",

@@ -352,6 +352,24 @@ select:focus-visible {
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
+
+.reasoning {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--border);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14px;
+}
+.reasoning summary {
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 600;
+}
+.reasoning .markdown {
+  margin-top: 10px;
+}
 .markdown > :first-child {
   margin-top: 0;
 }

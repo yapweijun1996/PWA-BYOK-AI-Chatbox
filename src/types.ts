@@ -10,6 +10,7 @@ export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
   createdAt: number;
   status?: "complete" | "streaming" | "interrupted" | "error";
   attachments?: Attachment[];
@@ -26,6 +27,7 @@ export type ProviderConfig = {
   model: string;
   endpoint: string;
   vision: boolean;
+  requestThoughts?: boolean;
 };
 export type Cipher = {
   version: 1;

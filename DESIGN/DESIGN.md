@@ -65,6 +65,7 @@ Breakpoints are starting guidance; verify content and controls at real widths ra
 - The user can choose the provider and model; show which are active before sending. Switching models does not silently rewrite existing messages.
 - Send with a visible button and an accessible keyboard shortcut. Preserve a newline option; do not interfere with input method composition.
 - Stream the response when the provider supports it. Show a stop action while generating. Preserve clearly marked partial output if stopped or interrupted.
+- Display provider-supplied reasoning or thought summaries as a separate expandable section while streaming. Store them with the conversation, but do not include them in later model requests. Availability depends on the provider and model.
 - Provide copy, retry and message actions where appropriate. Retry must make any new API request and possible cost clear; don't silently duplicate requests.
 - Attachment controls are shown only for supported workflows. Indicate selected files, size and upload progress, and provide removal before sending. Inform the user that submitted attachments are sent to the selected provider.
 - Markdown and code should be readable and safe; support tables and math where available. Do not render untrusted content as executable markup.

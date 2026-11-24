@@ -121,6 +121,127 @@ describe("provider contracts", () => {
     expect(output).toBe("Partial");
     fetchMock.mockRestore();
   });
+  it("streams LM Studio reasoning fields without adding them to the answer", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          stream([
+            'data: {"choices":[{"delta":{"reasoning_content":"First "}}]}\n\n',
+            'data: {"choices":[{"delta":{"reasoning":"second"}}]}\n\n',
+            'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
+            "data: [DONE]\n\n",
+          ]),
+          { status: 200 },
+        ),
+      );
+    let answer = "",
+      reasoning = "";
+    await streamChat(
+      { ...defaultSettings.providers.lmstudio, model: "local" },
+      "",
+      [message],
+      new AbortController().signal,
+      (text) => {
+        answer += text;
+      },
+      (text) => {
+        reasoning += text;
+      },
+    );
+    expect(reasoning).toBe("First second");
+    expect(answer).toBe("Answer");
+    fetchMock.mockRestore();
+  });
+  it("handles local think tags split across chunks and preserves plain text", async () => {
+    const chunks = ["<th", "ink>Plan", " carefully</th", "ink>Final"];
+    const events = chunks.map(
+      (text) =>
+        `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(stream([...events, "data: [DONE]\n\n"]), { status: 200 }),
+      );
+    let answer = "",
+      reasoning = "";
+    await streamChat(
+      { ...defaultSettings.providers.lmstudio, model: "local" },
+      "",
+      [message],
+      new AbortController().signal,
+      (text) => {
+        answer += text;
+      },
+      (text) => {
+        reasoning += text;
+      },
+    );
+    expect(reasoning).toBe("Plan carefully");
+    expect(answer).toBe("Final");
+    fetchMock.mockRestore();
+  });
+  it("requests Gemini summaries only when enabled and separates thought parts", async () => {
+    const config = {
+      ...defaultSettings.providers.gemini,
+      model: "model",
+      requestThoughts: true,
+    };
+    expect(JSON.stringify(buildRequest(config, [message]).body)).toContain(
+      '"includeThoughts":true',
+    );
+    expect(
+      JSON.stringify(
+        buildRequest({ ...config, requestThoughts: false }, [message]).body,
+      ),
+    ).not.toContain("includeThoughts");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          stream([
+            'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Summary"},{"text":"Answer"}]},"finishReason":"STOP"}]}\n\n',
+          ]),
+          { status: 200 },
+        ),
+      );
+    let answer = "",
+      reasoning = "";
+    await streamChat(
+      config,
+      "mock-key",
+      [message],
+      new AbortController().signal,
+      (text) => {
+        answer += text;
+      },
+      (text) => {
+        reasoning += text;
+      },
+    );
+    expect(reasoning).toBe("Summary");
+    expect(answer).toBe("Answer");
+    fetchMock.mockRestore();
+  });
+  it("does not include stored reasoning in subsequent model requests", () => {
+    const prior: Message = {
+      id: "a",
+      role: "assistant",
+      content: "Visible answer",
+      reasoning: "Private reasoning",
+      status: "complete",
+      createdAt: 1,
+    };
+    for (const config of [
+      defaultSettings.providers.lmstudio,
+      defaultSettings.providers.gemini,
+    ]) {
+      const body = JSON.stringify(buildRequest(config, [message, prior]).body);
+      expect(body).toContain("Visible answer");
+      expect(body).not.toContain("Private reasoning");
+    }
+  });
 });
 describe("encrypted keys", () => {
   it("round trips with the right password and rejects the wrong password", async () => {
