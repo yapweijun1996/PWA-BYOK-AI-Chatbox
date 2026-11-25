@@ -136,7 +136,10 @@ try {
     const worker = (await navigator.serviceWorker.ready).active;
     return new Promise((resolve, reject) => {
       const channel = new MessageChannel();
-      const timer = setTimeout(() => reject(new Error("Worker version timed out")), 5000);
+      const timer = setTimeout(
+        () => reject(new Error("Worker version timed out")),
+        5000,
+      );
       channel.port1.onmessage = ({ data }) => {
         clearTimeout(timer);
         channel.port1.close();
@@ -157,7 +160,10 @@ try {
   await check.click();
   await toast.getByText("Checking for updates…").waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "checking");
-  assert.equal(await page.locator(".update-state-label").innerText(), "Checking");
+  assert.equal(
+    await page.locator(".update-state-label").innerText(),
+    "Checking",
+  );
   assert.equal(await check.getAttribute("aria-busy"), "true");
   assert.equal(await animation(), "update-spin");
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -167,7 +173,10 @@ try {
   updateGate = undefined;
   await toast.getByText("Luma Chat is up to date.").waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "current");
-  assert.equal(await page.locator(".update-state-label").innerText(), "Up to date");
+  assert.equal(
+    await page.locator(".update-state-label").innerText(),
+    "Up to date",
+  );
   assert.equal(await check.getAttribute("aria-busy"), "false");
   await button(page, "Dismiss message").click();
   assert.equal(await toast.textContent(), "");
@@ -177,7 +186,10 @@ try {
     .getByText("You are offline. Reconnect to check for updates.")
     .waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "offline");
-  assert.equal(await page.locator(".update-state-label").innerText(), "Offline");
+  assert.equal(
+    await page.locator(".update-state-label").innerText(),
+    "Offline",
+  );
   await context.setOffline(false);
   failUpdate = true;
   await check.click();
@@ -186,7 +198,10 @@ try {
   );
   await failed.waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "failed");
-  assert.equal(await page.locator(".update-state-label").innerText(), "Update failed");
+  assert.equal(
+    await page.locator(".update-state-label").innerText(),
+    "Update failed",
+  );
   failUpdate = false;
 
   live = worker = "B";
@@ -244,23 +259,32 @@ try {
   );
   worker = "B";
   await check.click();
-  const waiting = toast.getByText("An update is ready.", { exact: false });
-  await waiting.waitFor();
+  await toast
+    .getByText(
+      "Update paused. Finish the current task and save your work, then try again.",
+    )
+    .waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "available");
   await page.getByText("v0.2.1 · Update available", { exact: true }).waitFor();
   assert.match(await check.getAttribute("title"), /v0\.2\.1/);
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: 1101, height: 800 });
   assert.equal(
-    await page.locator(".top-actions").evaluate((element) =>
-      element.scrollWidth <= element.clientWidth &&
-      element.getBoundingClientRect().right <= innerWidth,
-    ),
+    await page
+      .locator(".top-actions")
+      .evaluate(
+        (element) =>
+          element.scrollWidth <= element.clientWidth &&
+          element.getBoundingClientRect().right <= innerWidth,
+      ),
     true,
   );
   await page.setViewportSize({ width: 320, height: 800 });
   await page.getByLabel("More actions").click();
-  await page.locator(".topbar-menu").getByText("An update is ready · v0.2.1", { exact: true }).waitFor();
+  await page
+    .locator(".topbar-menu")
+    .getByText("An update is ready · v0.2.1", { exact: true })
+    .waitFor();
   await page.getByLabel("More actions").click();
   await page.setViewportSize(originalViewport);
   const legacyViewer = await context.newPage();
@@ -273,9 +297,15 @@ try {
   });
   await legacyViewer.goto(url);
   await assertRelease(legacyViewer, "A");
-  const legacyCheck = button(legacyViewer, `Check for updates · v${appVersion}`);
+  const legacyCheck = button(
+    legacyViewer,
+    `Check for updates · v${appVersion}`,
+  );
   await legacyViewer.waitForFunction(
-    () => document.querySelector(".update-control")?.getAttribute("data-update-state") === "available",
+    () =>
+      document
+        .querySelector(".update-control")
+        ?.getAttribute("data-update-state") === "available",
   );
   await legacyViewer.waitForTimeout(1300);
   assert.match(await legacyCheck.getAttribute("title"), /An update is ready/);
@@ -292,13 +322,31 @@ try {
   );
   finishReply.resolve();
   await page.getByText("Saved locally", { exact: true }).waitFor();
-  await page.reload();
-  await assertRelease(page, "A");
-  await waiting.waitFor();
+  await check.click();
+  await toast
+    .getByText(
+      "Update paused. Close other Luma Chat tabs and windows, then try again.",
+    )
+    .waitFor();
   assert.equal(await draft.inputValue(), unsent);
-
-  await context.setOffline(true);
-  await Promise.all([page.close(), keeper.close()]);
+  await keeper.close();
+  await page.evaluate(() => {
+    const original = ServiceWorker.prototype.postMessage;
+    ServiceWorker.prototype.postMessage = function (message, ...args) {
+      if (message?.type === "LUMA_ACTIVATE_UPDATE") {
+        setTimeout(() => original.call(this, message, ...args), 300);
+      } else original.call(this, message, ...args);
+    };
+  });
+  await check.click();
+  await page.getByText("Installing update…").waitFor();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('meta[name="update-fixture"]')?.content === "B",
+  );
+  await assertRelease(page, "B");
+  assert.equal(await composer(page).inputValue(), unsent);
+  await page.getByText("Mock reply in progress", { exact: true }).waitFor();
   const activationDeadline = Date.now() + 10_000;
   let installed;
   do {
@@ -313,15 +361,10 @@ try {
     await sibling.evaluate((name) => caches.has(name), legacy),
     true,
   );
-  const updated = await context.newPage();
-  await updated.goto(url);
-  await assertRelease(updated, "B");
-  assert.equal(await composer(updated).inputValue(), unsent);
-  await updated.getByText("Mock reply in progress", { exact: true }).waitFor();
   await sibling.reload();
   await assertRelease(sibling, "A");
   console.log(
-    "PASS: update controls, interrupted/mismatched install, paired offline releases, scope isolation and natural activation after a mocked reply",
+    "PASS: update controls, interrupted install, active-reply and multi-window protection, automatic activation, preserved draft and scope isolation",
   );
 } finally {
   updateGate?.resolve();

@@ -24,6 +24,29 @@ self.addEventListener("message", (event) => {
     event.ports[0].postMessage({ version: APP_VERSION });
     event.ports[0].close();
   }
+  if (event.data?.type === "LUMA_ACTIVATE_UPDATE" && event.ports[0]) {
+    event.waitUntil(
+      (async () => {
+        const clients = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        const inScope = clients.filter((client) =>
+          client.url.startsWith(scope),
+        );
+        if (inScope.length !== 1 || inScope[0].id !== event.source?.id) {
+          event.ports[0].postMessage({
+            accepted: false,
+            reason: "other-clients",
+          });
+        } else {
+          event.ports[0].postMessage({ accepted: true });
+          await self.skipWaiting();
+        }
+        event.ports[0].close();
+      })(),
+    );
+  }
 });
 
 async function installShell() {

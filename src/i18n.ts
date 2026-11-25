@@ -11,6 +11,13 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Installing update…": "正在安装更新…",
+  "Saving your work and restarting Luma Chat…": "正在保存内容并重新启动 Luma Chat…",
+  "An update is ready. Select the update button to install it.": "更新已准备好。点击更新按钮进行安装。",
+  "Update paused. Finish the current task and save your work, then try again.": "更新已暂停。请先完成当前任务并保存内容，然后重试。",
+  "Update paused. Close other Luma Chat tabs and windows, then try again.": "更新已暂停。请关闭其他 Luma Chat 标签页和窗口，然后重试。",
+  "This older update cannot be activated automatically. Close all Luma Chat tabs and windows, then reopen.": "此旧版更新无法自动激活。请关闭所有 Luma Chat 标签页和窗口，然后重新打开。",
+  "Could not activate the update. Try again later.": "无法激活更新，请稍后重试。",
   Status: "状态",
   Actions: "操作",
   Update: "更新",

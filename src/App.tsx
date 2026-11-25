@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   Paperclip,
   Sparkles,
@@ -179,6 +179,15 @@ function App({
     pwa,
     redact,
   } = workspace;
+  useLayoutEffect(() => {
+    if (!pwa.applying) return;
+    const blockInput = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    document.addEventListener("keydown", blockInput, true);
+    return () => document.removeEventListener("keydown", blockInput, true);
+  }, [pwa.applying]);
   const modelTrigger = useRef<HTMLButtonElement>(null);
   const runCommand = (command: SlashCommand) => {
     switch (command) {
@@ -201,6 +210,13 @@ function App({
   };
   return (
     <div className="app">
+      {(pwa.applying || (pwa.checking && !working && !processingFiles && !navigating)) && (
+        <div className="update-overlay" role="status" aria-live="polite">
+          <span className="update-overlay-spinner" aria-hidden="true" />
+          <strong>{t(pwa.applying ? "Installing update…" : "Checking for updates…")}</strong>
+          {pwa.applying && <span>{t("Saving your work and restarting Luma Chat…")}</span>}
+        </div>
+      )}
       <Sidebar
         locale={locale}
         open={mobileDrawer}

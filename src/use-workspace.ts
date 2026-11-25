@@ -154,7 +154,8 @@ export function useWorkspace({
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const [notice, setNotice] = useState("");
-  const pwa = useAppUpdate(setNotice);
+  const prepareUpdate = useRef<() => Promise<boolean>>(async () => false);
+  const pwa = useAppUpdate(setNotice, () => prepareUpdate.current());
   const { checking, check } = pwa;
   const updateLabel = `${t("Check for updates")} · v${version}`;
   const working = activeReply !== null;
@@ -308,6 +309,13 @@ export function useWorkspace({
   const flushDrafts = useCallback(() => {
     for (const chatId of draftTimers.current.keys()) flushDraft(chatId);
   }, [flushDraft]);
+  prepareUpdate.current = async () => {
+    const current = session.get();
+    if (current.reply || current.processingFiles || current.navigating || current.conflicts.size || [...current.replySaves.values()].some((save) => save.status === "failed")) return false;
+    flushDrafts();
+    const saved = await Promise.all(Object.values(writes.current));
+    return saved.every(Boolean) && storage.getWriteStatus().pending === 0 && storage.getWriteStatus().lastOutcome !== "failed";
+  };
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flushDrafts();

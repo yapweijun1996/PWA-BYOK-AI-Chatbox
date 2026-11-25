@@ -1,8 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { afterStartupIdle } from "./startup";
 
-const readyNotice =
-  "An update is ready. Finish any reply, close all Luma Chat tabs and app windows, then reopen. You may need to unlock your key again.";
+function requestActivation(
+  worker: ServiceWorker,
+): Promise<"accepted" | "other-clients" | "unsupported"> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => finish("unsupported"), 3000);
+    const finish = (result: "accepted" | "other-clients" | "unsupported") => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(result);
+    };
+    channel.port1.onmessage = ({ data }) =>
+      finish(
+        data?.accepted
+          ? "accepted"
+          : data?.reason === "other-clients"
+            ? "other-clients"
+            : "unsupported",
+      );
+    try {
+      worker.postMessage({ type: "LUMA_ACTIVATE_UPDATE" }, [channel.port2]);
+    } catch {
+      channel.port2.close();
+      finish("unsupported");
+    }
+  });
+}
 
 function waitForInstall(worker: ServiceWorker): Promise<boolean> {
   return new Promise((resolve) => {
@@ -34,7 +59,9 @@ function readWorkerVersion(worker: ServiceWorker): Promise<string | undefined> {
       const version = data?.version;
       finish(
         typeof version === "string" &&
-          /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version) &&
+          /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+            version,
+          ) &&
           version.length <= 64
           ? version
           : undefined,
@@ -58,9 +85,12 @@ export type WorkerStatus =
   | "controlled";
 const supported = () => import.meta.env.PROD && "serviceWorker" in navigator;
 
-// Let waiting workers activate naturally so open drafts and replies are safe.
-export function useAppUpdate(notify: (message: string) => void) {
+export function useAppUpdate(
+  notify: (message: string) => void,
+  prepare: () => Promise<boolean>,
+) {
   const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [checkState, setCheckState] = useState<
     | "idle"
     | "checking"
@@ -120,12 +150,6 @@ export function useAppUpdate(notify: (message: string) => void) {
                 ? "registered"
                 : "unregistered",
       );
-      if (
-        !inFlight.current &&
-        registration?.waiting &&
-        navigator.serviceWorker.controller
-      )
-        notify(readyNotice);
     };
     const onUpdate = () => {
       installing?.removeEventListener("statechange", announceReady);
@@ -177,12 +201,61 @@ export function useAppUpdate(notify: (message: string) => void) {
       return;
     }
     inFlight.current = true;
+    const apply = async (worker: ServiceWorker) => {
+      observeWaiting(worker);
+      setCheckState("available");
+      setApplying(true);
+      if (!(await prepare())) {
+        setApplying(false);
+        notify(
+          "Update paused. Finish the current task and save your work, then try again.",
+        );
+        return;
+      }
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let onChange: () => void = () => {};
+      const changed = new Promise<boolean>((resolve) => {
+        onChange = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        navigator.serviceWorker.addEventListener("controllerchange", onChange, {
+          once: true,
+        });
+        timeout = setTimeout(() => {
+          navigator.serviceWorker.removeEventListener(
+            "controllerchange",
+            onChange,
+          );
+          resolve(false);
+        }, 10000);
+      });
+      const result = await requestActivation(worker);
+      if (result !== "accepted") {
+        clearTimeout(timeout);
+        navigator.serviceWorker.removeEventListener(
+          "controllerchange",
+          onChange,
+        );
+        setApplying(false);
+        notify(
+          result === "other-clients"
+            ? "Update paused. Close other Luma Chat tabs and windows, then try again."
+            : "This older update cannot be activated automatically. Close all Luma Chat tabs and windows, then reopen.",
+        );
+        return;
+      }
+      if (await changed) window.location.reload();
+      else {
+        setApplying(false);
+        setCheckState("failed");
+        notify("Could not activate the update. Try again later.");
+      }
+    };
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration?.waiting && navigator.serviceWorker.controller) {
-        observeWaiting(registration.waiting);
-        setCheckState("available");
-        notify(readyNotice);
+        await apply(registration.waiting);
         return;
       }
       if (!navigator.onLine) {
@@ -205,9 +278,13 @@ export function useAppUpdate(notify: (message: string) => void) {
       if (installing && !(await waitForInstall(installing)))
         throw new Error("Update installation failed");
       observeWaiting(registration.waiting);
-      setCheckState(registration.waiting ? "available" : "current");
-      notify(registration.waiting ? readyNotice : "Luma Chat is up to date.");
+      if (registration.waiting) await apply(registration.waiting);
+      else {
+        setCheckState("current");
+        notify("Luma Chat is up to date.");
+      }
     } catch {
+      setApplying(false);
       setCheckState("failed");
       notify("Could not check for updates. Try again later.");
     } finally {
@@ -216,5 +293,13 @@ export function useAppUpdate(notify: (message: string) => void) {
     }
   };
 
-  return { checking, check, status, controlled, checkState, availableVersion };
+  return {
+    checking,
+    applying,
+    check,
+    status,
+    controlled,
+    checkState,
+    availableVersion,
+  };
 }
