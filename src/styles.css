@@ -730,7 +730,7 @@ select:focus-visible {
   min-width: 0;
   width: 132px;
   max-width: 132px;
-  flex: 0 1 132px;
+  flex: 0 0 132px;
 }
 .composer-actions .composer-effort-wrap > svg {
   position: absolute;

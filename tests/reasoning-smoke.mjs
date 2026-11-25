@@ -257,6 +257,18 @@ try {
     .getByRole("button", { name: "Use this model for the current chat" })
     .click();
   await page.getByLabel("Model ID").fill("changed-global-profile");
+  // The settings form updates optimistically; wait for the transaction before reload.
+  await page.waitForFunction((expected) => new Promise((resolve, reject) => {
+    const open = indexedDB.open("luma-chat");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction("settings", "readonly");
+      const request = tx.objectStore("settings").get("settings");
+      tx.oncomplete = () => { db.close(); resolve(request.result?.providers?.lmstudio?.model === expected); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }), "changed-global-profile");
   await page.getByRole("button", { name: "Back to chat" }).click();
   assert.match(await topModel.getAttribute("title"), /reasoning-model/);
   await page.reload();

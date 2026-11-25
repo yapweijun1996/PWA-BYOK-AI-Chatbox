@@ -75,15 +75,17 @@ try {
       return {
         scroll: row.scrollWidth, client: row.clientWidth,
         modelWidth: model.getBoundingClientRect().width,
+        effortWidth: select.getBoundingClientRect().width,
         labelWidth: canvas.measureText(select.selectedOptions[0].textContent).width,
         labelSpace: select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
       };
     });
     assert.ok(layout.scroll <= layout.client + 1, `tablet ${width}: toolbar overflow`);
     assert.ok(layout.modelWidth >= 90, `tablet ${width}: model label too narrow`);
+    assert.ok(layout.effortWidth >= 132, `tablet ${width}: effort selector shrank`);
     assert.ok(layout.labelWidth <= layout.labelSpace + 1, `tablet ${width}: selected effort label clipped`);
   };
-  for (const width of [768, 800, 900, 1024]) await checkTablet(width);
+  for (const width of [768, 800, 850, 899, 900, 901, 950, 1024]) await checkTablet(width);
   await page.getByRole("separator", { name: "Resize sidebar" }).press("End");
   await page.waitForFunction(() => document.querySelector('[role="separator"][aria-label="Resize sidebar"]')?.getAttribute("aria-valuenow") === "440");
   await checkTablet(1024);
