@@ -6,7 +6,7 @@ import {
   streamChat,
 } from "../src/providers";
 import { mergeSettings, validBackup } from "../src/data-contracts";
-import { encryptSecret, decryptSecret } from "../src/crypto";
+import { encryptDeviceSecret, decryptDeviceSecret } from "../src/crypto";
 import { defaultSettings } from "../src/types";
 import type { Message, Settings } from "../src/types";
 const message: Message = {
@@ -455,17 +455,10 @@ describe("provider contracts", () => {
   });
 });
 describe("encrypted keys", () => {
-  it("round trips with the right password and rejects the wrong password", async () => {
-    const encrypted = await encryptSecret(
-      "private-test-key",
-      "correct horse battery staple",
-    );
+  it("round trips with a non-extractable device key", async () => {
+    const encrypted = await encryptDeviceSecret("private-test-key");
     expect(JSON.stringify(encrypted)).not.toContain("private-test-key");
-    await expect(decryptSecret(encrypted, "wrong")).rejects.toThrow(
-      "Could not unlock",
-    );
-    expect(await decryptSecret(encrypted, "correct horse battery staple")).toBe(
-      "private-test-key",
-    );
+    expect(encrypted.key.extractable).toBe(false);
+    expect(await decryptDeviceSecret(encrypted)).toBe("private-test-key");
   });
 });

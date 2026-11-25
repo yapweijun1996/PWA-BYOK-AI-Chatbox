@@ -40,7 +40,7 @@ type Props = {
   processingFiles: boolean;
   online: boolean;
   effectiveTheme: "light" | "dark";
-  credentialState: "Available for session" | "Saved and locked" | "Not set";
+  credentialState: "Available for session" | "Saved key unavailable" | "Not set";
   originStorage: OriginStorage;
   conversationCount: number;
   getBufferedDrafts: () => number;

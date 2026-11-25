@@ -1,5 +1,15 @@
 // Malay translations for interface, provider and diagnostic messages.
 export const msExtra: Record<string, string> = {
+  "Saved key unavailable": "Kunci tersimpan tidak tersedia",
+  "Enter API key or token": "Masukkan kunci API atau token",
+  "Key saved on this device.": "Kunci disimpan pada peranti ini.",
+  "Could not restore the saved key. Enter it again in Providers.": "Tidak dapat memulihkan kunci yang disimpan. Masukkannya semula dalam tetapan penyedia.",
+  "Saved keys are available automatically on this device. Anyone with access to this browser profile or malicious scripts may be able to use them.": "Kunci yang disimpan tersedia secara automatik pada peranti ini. Sesiapa yang boleh mengakses profil pelayar ini atau skrip berniat jahat mungkin dapat menggunakannya.",
+  "A key was saved with the old password system. Enter the API key again to replace it with password-free storage, or delete the old saved key.": "Kunci disimpan dengan sistem kata laluan lama. Masukkan semula kunci API untuk menggunakan storan tanpa kata laluan, atau padamkan kunci lama.",
+  "Keys are accessible to this app. Device storage does not protect against malicious scripts or a compromised device. Your provider receives your messages.": "Kunci boleh diakses oleh aplikasi ini. Storan peranti tidak melindungi daripada skrip berniat jahat atau peranti terjejas. Penyedia anda menerima mesej anda.",
+  "A legacy key requires replacement.": "Kunci lama perlu diganti.",
+  "Restoring saved key…": "Sedang memulihkan kunci yang disimpan…",
+
   "Model default": "Lalai model",
   "none": "Tiada",
   "minimal": "Minimum",

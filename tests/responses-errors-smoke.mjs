@@ -18,7 +18,7 @@ try {
   await page.getByLabel("Model ID").fill("gpt-6-luna");
   await page.getByLabel("OpenAI API mode").selectOption("responses");
   await page.getByRole("button", { name: "Set as default provider" }).click();
-  await page.getByPlaceholder("Enter key for this session").fill("test-only-key");
+  await page.getByPlaceholder("Enter API key or token").fill("test-only-key");
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Test error");

@@ -64,7 +64,9 @@ export type ProviderConfig = {
   reasoningEffort?: import("./reasoning-effort").ReasoningEffort;
   reasoningEfforts?: Record<string, import("./reasoning-effort").ReasoningEffort>;
 };
-export type Cipher = {
+export type Cipher = LegacyCipher | DeviceCipher;
+export type DeviceCipher = { version: 2; iv: string; data: string; key: CryptoKey; destination?: string };
+export type LegacyCipher = {
   destination?: string; // LM Studio only; older vaults require explicit binding on unlock.
   version: 1;
   salt: string;

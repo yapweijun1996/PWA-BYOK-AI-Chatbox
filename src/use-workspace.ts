@@ -1,3 +1,4 @@
+import { effortFor } from "./reasoning-effort";
 import {
   useCallback,
   useEffect,
@@ -55,7 +56,7 @@ import {
   type HistoryChoice,
 } from "./history-sharing";
 import type { ToolExecution } from "./javascript-tool";
-import { decryptSecret, encryptSecret } from "./crypto";
+import { decryptDeviceSecret, encryptDeviceSecret } from "./crypto";
 import { listModelOptions, requestHistory, streamChat } from "./providers";
 import {
   checkedLmStudioAddress,
@@ -120,6 +121,22 @@ export function useWorkspace({
   const locale = resolveLanguage(settings.language, systemLanguage);
   const t = (text: string) => translate(locale, text);
   const [secrets, setSecrets] = useState<Secrets>({});
+  // Device keys can be restored without a password; legacy password vaults remain untouched.
+  useEffect(() => {
+    let cancelled = false;
+    for (const [provider, vault] of Object.entries(settings.vaults)) {
+      if (!vault || vault.version !== 2) continue;
+      const target = settings.providers[provider as ProviderId];
+      const destination = credentialDestination(target);
+      if (!destination || (target.id === "lmstudio" && vault.destination !== destination)) continue;
+      void decryptDeviceSecret(vault).then((value) => {
+        const current = session.get().settings;
+        if (cancelled || workspaceSignal.aborted || current.vaults[target.id]?.data !== vault.data || credentialDestination(current.providers[target.id]) !== destination) return;
+        setSecrets((previous) => previous[target.id] ? previous : { ...previous, [target.id]: { destination, value } });
+      }).catch(() => { if (!cancelled) setNotice("Could not restore the saved key. Enter it again in Providers."); });
+    }
+    return () => { cancelled = true; };
+  }, [settings.vaults, settings.providers, session, workspaceSignal]);
   const credentialRevision = useRef(0);
   const previousSecrets = useRef(secrets);
   if (previousSecrets.current !== secrets) {
@@ -176,9 +193,8 @@ export function useWorkspace({
   const [catalogs, setCatalogs] = useState<
     Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
   >({});
-  const [password, setPassword] = useState("");
   const [credentialInput, setCredentialInput] = useState<SessionCredential & { provider: ProviderId }>();
-  const [saveKey, setSaveKey] = useState(false);
+  const [saveKey, setSaveKey] = useState(true);
   const [showKey, setShowKey] = useState(false);
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
     view === "data" || inspecting,
@@ -772,8 +788,7 @@ export function useWorkspace({
   };
   const resetProviderForm = () => {
     setCredentialInput(undefined);
-    setPassword("");
-    setSaveKey(false);
+    setSaveKey(true);
     setShowKey(false);
   };
   const browseProvider = (provider: ProviderId) => {
@@ -840,6 +855,24 @@ export function useWorkspace({
       [provider]: { endpoint: target.endpoint, options },
     }));
     return options;
+  };
+  const setModelEffort = (value: string) => {
+    const selected = effortFor(config.id, value);
+    const provider = config.id;
+    const model = config.model;
+    if (!model || session.get().reply || session.get().navigating) return;
+    if (chat?.configOverride)
+      setConversationConfig(profileOverride({ ...config, reasoningEffort: selected }));
+    void saveSettings((current) => ({
+      providers: {
+        ...current.providers,
+        [provider]: {
+          ...current.providers[provider],
+          reasoningEfforts: { ...current.providers[provider].reasoningEfforts, [model]: selected },
+          ...(current.providers[provider].model === model ? { reasoningEffort: selected } : {}),
+        },
+      },
+    }));
   };
   const setReasoning = (enabled: boolean) => {
     const patch = { reasoningSupported: true, requestThoughts: enabled };
@@ -1213,7 +1246,7 @@ export function useWorkspace({
       return;
     }
     if (!configured(resolved.config)) {
-      setNotice("Choose a model and unlock its key in Providers.");
+      setNotice("Set up a model and provider credentials before sending.");
       openProvider(resolved.config.id);
       return;
     }
@@ -1336,8 +1369,7 @@ export function useWorkspace({
           "Enter a valid server address before using a credential.",
         );
       if (saveKey) {
-        if (!password) throw new Error("Enter an unlock password.");
-        const cipher = await encryptSecret(keyInput, password);
+        const cipher = await encryptDeviceSecret(keyInput);
         if (workspaceSignal.aborted) return;
         if (config.id === "lmstudio") cipher.destination = destination;
         const saved = await saveSettings((current) => ({
@@ -1350,58 +1382,11 @@ export function useWorkspace({
         [config.id]: { destination, value: keyInput },
       }));
       setKeyInput("");
-      setPassword("");
       setNotice(
         saveKey
-          ? "Key encrypted and unlocked on this device."
+          ? "Key saved on this device."
           : "Key available for this session only.",
       );
-    } catch (e) {
-      if (!workspaceSignal.aborted) setNotice(errorText(e));
-    }
-  };
-  const unlock = async () => {
-    const vault = settings.vaults[config.id];
-    if (!vault || workspaceSignal.aborted) return;
-    try {
-      const destination = credentialDestination(config);
-      if (!destination)
-        throw new Error(
-          "Enter a valid server address before using a credential.",
-        );
-      if (
-        config.id === "lmstudio" &&
-        vault.destination !== undefined &&
-        vault.destination !== destination
-      )
-        throw new Error(
-          "This token belongs to another server. Restore its address or enter a new token.",
-        );
-      const bindLegacy =
-        config.id === "lmstudio" && vault.destination === undefined;
-      if (
-        bindLegacy &&
-        !confirm(
-          `${t("Authorize this previously saved token for this server?")}\n${destination}`,
-        )
-      )
-        return;
-      const secret = await decryptSecret(vault, password);
-      if (workspaceSignal.aborted) return;
-      if (
-        bindLegacy &&
-        !(await saveSettings((current) => ({
-          vaults: { ...current.vaults, [config.id]: { ...vault, destination } },
-        })))
-      )
-        return;
-      if (workspaceSignal.aborted) return;
-      setSecrets((previous) => ({
-        ...previous,
-        [config.id]: { destination, value: secret },
-      }));
-      setPassword("");
-      setNotice("Key unlocked for this session.");
     } catch (e) {
       if (!workspaceSignal.aborted) setNotice(errorText(e));
     }
@@ -1415,7 +1400,6 @@ export function useWorkspace({
     if (!saved || workspaceSignal.aborted) return;
     setSecrets((previous) => ({ ...previous, [config.id]: undefined }));
     setKeyInput("");
-    setPassword("");
     setNotice("Saved key removed and session locked.");
   };
   const usage =
@@ -1423,23 +1407,23 @@ export function useWorkspace({
       ? `${formatSize(originStorage.usage)} used${originStorage.quota === undefined ? "" : ` of approximately ${formatSize(originStorage.quota)}`}`
       : "Unavailable";
   const credentialState:
-    "Available for session" | "Saved and locked" | "Not set" = credentialFor(
+    "Available for session" | "Saved key unavailable" | "Not set" = credentialFor(
     effective.config,
     secrets[effective.config.id],
   )
     ? "Available for session"
     : settings.vaults[effective.config.id]
-      ? "Saved and locked"
+      ? "Saved key unavailable"
       : "Not set";
   const hasSessionCredential = Boolean(
     credentialFor(config, secrets[config.id]),
   );
   const hasVault = Boolean(settings.vaults[config.id]);
+  const hasLegacyVault = settings.vaults[config.id]?.version === 1;
   const redact = (value?: string) =>
     safeDiagnosticLabel(value, [
       ...Object.values(secrets).map((credential) => credential?.value ?? ""),
       credentialInput?.value ?? "",
-      password,
     ]);
   const exportData = () => {
     setExportPlan(null);
@@ -1697,10 +1681,6 @@ export function useWorkspace({
         ),
       }));
   };
-  const lockKey = () => {
-    setSecrets((current) => ({ ...current, [config.id]: undefined }));
-    setNotice("Key locked for this session.");
-  };
   const requestPersistence = async () => {
     if (workspaceSignal.aborted) return;
     if (!navigator.storage?.persist) {
@@ -1819,6 +1799,7 @@ export function useWorkspace({
     javascriptEnabled,
     toggleJavaScript,
     setReasoning,
+    setModelEffort,
     editDraft,
     processFiles,
     removeDraftFile,
@@ -1837,14 +1818,11 @@ export function useWorkspace({
     setShowKey,
     saveKey,
     setSaveKey,
-    password,
-    setPassword,
     storeKey,
-    unlock,
     deleteKey,
     hasSessionCredential,
     hasVault,
-    lockKey,
+    hasLegacyVault,
     testConnection,
     usage,
     requestPersistence,

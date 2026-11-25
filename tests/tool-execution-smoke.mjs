@@ -117,7 +117,7 @@ try {
   );
   await page.getByLabel("Model ID").fill("tool-model");
   await page.getByRole("button", { name: "Set as default provider" }).click();
-  await page.getByPlaceholder("Enter key for this session").fill(secret);
+  await page.getByPlaceholder("Enter API key or token").fill(secret);
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
   const toggle = page.getByRole("button", {

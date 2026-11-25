@@ -487,7 +487,7 @@ try {
   await selector.click();
   await dialog.getByRole("button", { name: "Open provider settings" }).click();
   await page
-    .getByPlaceholder("Enter key for this session")
+    .getByPlaceholder("Enter API key or token")
     .fill("mock-composer-key");
   await page.getByRole("button", { name: "Use key" }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();

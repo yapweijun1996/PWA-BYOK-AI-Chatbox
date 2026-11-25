@@ -57,7 +57,7 @@ try {
   await page.getByRole("button", { name: "Anthropic", exact: true }).click();
   await page.getByLabel("Model ID").fill("claude-test");
   await page
-    .getByPlaceholder("Enter key for this session")
+    .getByPlaceholder("Enter API key or token")
     .fill("mock-anthropic-key");
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Set as default provider" }).click();

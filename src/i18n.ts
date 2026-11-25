@@ -12,6 +12,16 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Saved key unavailable": "已保存的密钥不可用",
+  "Enter API key or token": "输入 API 密钥或令牌",
+  "Key saved on this device.": "密钥已保存在此设备。",
+  "Could not restore the saved key. Enter it again in Providers.": "无法恢复已保存的密钥，请在服务商设置中重新输入。",
+  "Saved keys are available automatically on this device. Anyone with access to this browser profile or malicious scripts may be able to use them.": "已保存的密钥会在此设备自动恢复。能够访问此浏览器配置文件的人或恶意脚本可能使用这些密钥。",
+  "A key was saved with the old password system. Enter the API key again to replace it with password-free storage, or delete the old saved key.": "检测到旧版密码加密密钥。请重新输入 API 密钥以改用免密码存储，或删除旧密钥。",
+  "Keys are accessible to this app. Device storage does not protect against malicious scripts or a compromised device. Your provider receives your messages.": "此应用可以使用密钥。设备存储无法抵御恶意脚本或已被入侵的设备。你的消息会发送给所选服务商。",
+  "A legacy key requires replacement.": "旧密钥需要重新输入。",
+  "Restoring saved key…": "正在恢复已保存的密钥…",
+
   "Model default": "模型默认",
   "none": "无",
   "minimal": "最低",

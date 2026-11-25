@@ -268,7 +268,7 @@ try {
     "changed-global-profile",
   );
   await page
-    .getByPlaceholder("Enter key for this session")
+    .getByPlaceholder("Enter API key or token")
     .fill("credential-export-test-marker");
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();

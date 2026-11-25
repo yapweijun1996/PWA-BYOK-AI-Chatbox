@@ -91,19 +91,16 @@ export async function exerciseClearData(browser, url) {
     const prefs = page.getByLabel(
       "Also import appearance and provider settings",
     );
-    const key = page.getByPlaceholder("Enter key for this session");
+    const key = page.getByPlaceholder("Enter API key or token");
     const save = page.getByLabel("Save encrypted on this device");
-    const password = page.getByLabel("Unlock password", { exact: true });
     await button(page, "Settings").click();
     await key.fill("fixture-vault-key");
     await save.check();
-    await password.fill("fixture password");
     await button(page, "Use key").click();
     await page
-      .getByText("Key encrypted and unlocked on this device.")
+      .getByText("Key saved on this device.")
       .waitFor();
     await key.fill("fixture-unsubmitted-key");
-    await password.fill("fixture password");
     await button(page, "Show").click();
     await section(page, "Local data");
     await chooseFile("preview.json");
@@ -135,7 +132,6 @@ export async function exerciseClearData(browser, url) {
     assert.equal(await prefs.isChecked(), true);
     await section(page, "AI providers");
     assert.equal(await key.inputValue(), "fixture-unsubmitted-key");
-    assert.equal(await password.inputValue(), "fixture password");
     assert.equal(await key.getAttribute("type"), "text");
 
     await page.evaluate(() => {
@@ -191,7 +187,7 @@ export async function exerciseClearData(browser, url) {
         return req;
       };
     });
-    await button(page, "Unlock saved key").click();
+    await page.getByLabel("Model ID").fill("trigger-device-key-restore");
     await held(page, "decrypt");
     await button(page, "Use key").click();
     await held(page, "encrypt");
@@ -214,7 +210,7 @@ export async function exerciseClearData(browser, url) {
     assert.equal(await page.evaluate(() => window.catalogSignal.aborted), true);
     assert.equal(await key.inputValue(), "");
     assert.equal(await key.getAttribute("type"), "password");
-    assert.equal(await save.isChecked(), false);
+    assert.equal(await save.isChecked(), true);
     assert.equal(await button(page, "Lock").count(), 0);
     assert.equal(await button(page, "Unlock saved key").count(), 0);
     assert.equal(
@@ -227,7 +223,6 @@ export async function exerciseClearData(browser, url) {
     );
     await button(page, "Dismiss message").click();
     await save.check();
-    assert.equal(await password.inputValue(), "");
     await section(page, "Local data");
 
     // A still-reading backup must not recreate a preview after another clear.

@@ -112,7 +112,8 @@ try {
   await page.getByRole("button", { name: "LM Studio" }).click();
   await page.getByLabel("Model ID").fill("local-test");
   await page.getByRole("button", { name: "Set as default provider" }).click();
-  await page.getByPlaceholder("Enter key for this session").fill("dummy-for-first-base");
+  await page.getByPlaceholder("Enter API key or token").fill("dummy-for-first-base");
+  await page.getByLabel("Save encrypted on this device").uncheck();
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   const checkCatalogAuth = async (base, expected) => {
     const seen = page.waitForRequest(r => r.method() === "GET" && r.url() === `${base}/models`);
@@ -253,7 +254,7 @@ try {
     })
     .waitFor();
   await page
-    .getByPlaceholder("Enter key for this session")
+    .getByPlaceholder("Enter API key or token")
     .fill("mock-router-key");
   await page.getByRole("button", { name: "Use key" }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
@@ -322,12 +323,11 @@ try {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "OpenAI", exact: true }).click();
   await page
-    .getByPlaceholder("Enter key for this session")
+    .getByPlaceholder("Enter API key or token")
     .fill("mock-test-key");
   await page.getByLabel("Save encrypted on this device").check();
-  await page.getByLabel("Unlock password").fill("test password");
   await page.getByRole("button", { name: "Use key" }).click();
-  await page.getByText("Key encrypted and unlocked on this device.").waitFor();
+  await page.getByText("Key saved on this device.").waitFor();
   const stored = await page.evaluate(
     () =>
       new Promise((resolve, reject) => {
@@ -344,13 +344,10 @@ try {
       }),
   );
   assert.ok(!stored.includes("mock-test-key"));
-  await page.getByRole("button", { name: "Lock", exact: true }).click();
-  await page.getByLabel("Unlock password").fill("wrong password");
-  await page.getByRole("button", { name: "Unlock saved key" }).click();
-  await page.getByText("Could not unlock key.", { exact: false }).waitFor();
-  await page.getByLabel("Unlock password").fill("test password");
-  await page.getByRole("button", { name: "Unlock saved key" }).click();
-  await page.getByText("Key unlocked for this session.").waitFor();
+  await page.reload();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "OpenAI", exact: true }).click();
+  await page.getByText("A key or token is available for this session.").waitFor();
   await page.getByRole("button", { name: "Local data" }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export backup" }).click();

@@ -164,6 +164,7 @@ function App({
     javascriptEnabled,
     toggleJavaScript,
     setReasoning,
+    setModelEffort,
     editDraft,
     processFiles,
     removeDraftFile,
@@ -182,14 +183,11 @@ function App({
     setShowKey,
     saveKey,
     setSaveKey,
-    password,
-    setPassword,
     storeKey,
-    unlock,
     deleteKey,
     hasSessionCredential,
     hasVault,
-    lockKey,
+    hasLegacyVault,
     testConnection,
     usage,
     requestPersistence,
@@ -607,6 +605,16 @@ function App({
                     onSelect={selectModel}
                     onSettings={openSettings}
                   />
+                  <select
+                    className="composer-effort"
+                    aria-label={t("Reasoning effort")}
+                    title={t("Reasoning effort")}
+                    value={effortFor(config.id, config.reasoningEffort)}
+                    disabled={!chat || !config.model.trim() || working || navigating || processingFiles}
+                    onChange={(event) => setModelEffort(event.target.value)}
+                  >
+                    {effortOptions(config.id).map((effort) => <option key={effort} value={effort}>{t(effort === "default" ? "Model default" : effort)}</option>)}
+                  </select>
                 </>
               }
               onDraft={editDraft}
@@ -816,7 +824,7 @@ function App({
                   </h3>
                   <p className="hint">
                     {t(
-                      "Keys are accessible to this app while unlocked. Encrypted storage does not protect against malicious scripts or a compromised device. Your provider receives your messages.",
+                      "Keys are accessible to this app. Device storage does not protect against malicious scripts or a compromised device. Your provider receives your messages.",
                     )}
                   </p>
                   <label className="field">
@@ -827,7 +835,7 @@ function App({
                         autoComplete="off"
                         value={keyInput}
                         onChange={(e) => setKeyInput(e.target.value)}
-                        placeholder={t("Enter key for this session")}
+                        placeholder={t("Enter API key or token")}
                       />
                       <button
                         className="secondary"
@@ -845,23 +853,8 @@ function App({
                     />{" "}
                     {t("Save encrypted on this device")}
                   </label>
-                  {(saveKey || hasVault) && (
-                    <label className="field">
-                      {t("Unlock password")}
-                      <input
-                        type="password"
-                        autoComplete="off"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder={t("Enter your password")}
-                      />
-                    </label>
-                  )}
-                  <p className="hint">
-                    {t(
-                      "If you forget the password, the saved key cannot be recovered. Session keys are cleared on reload.",
-                    )}
-                  </p>
+                  <p className="hint">{t("Saved keys are available automatically on this device. Anyone with access to this browser profile or malicious scripts may be able to use them.")}</p>
+                  {hasLegacyVault && <p className="hint">{t("A key was saved with the old password system. Enter the API key again to replace it with password-free storage, or delete the old saved key.")}</p>}
                   <div className="button-row">
                     <button className="primary" onClick={() => void storeKey()}>
                       {t("Use key")}
@@ -870,22 +863,11 @@ function App({
                       <>
                         <button
                           className="secondary"
-                          onClick={() => void unlock()}
-                        >
-                          {t("Unlock saved key")}
-                        </button>
-                        <button
-                          className="secondary"
                           onClick={() => void deleteKey()}
                         >
                           {t("Delete saved key")}
                         </button>
                       </>
-                    )}
-                    {hasSessionCredential && (
-                      <button className="secondary" onClick={lockKey}>
-                        {t("Lock")}
-                      </button>
                     )}
                     <button
                       className="secondary"
@@ -898,7 +880,7 @@ function App({
                     {hasSessionCredential
                       ? t("A key or token is available for this session.")
                       : hasVault
-                        ? t("A saved key is locked.")
+                        ? t(hasLegacyVault ? "A legacy key requires replacement." : "Restoring saved key…")
                         : t("No key is saved.")}{" "}
                     {t(
                       "Testing requests the model list and may use network resources. A model list does not confirm the key or chat access.",
