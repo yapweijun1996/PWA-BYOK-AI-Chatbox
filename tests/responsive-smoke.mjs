@@ -152,7 +152,9 @@ try {
     });
     assert.ok(await conversation.evaluate((el) => el.scrollTop > 0));
     await page.locator(".reasoning summary").click();
-    await page.getByText("Private reasoning details").waitFor();
+    await page.locator(".reasoning .rich-message").getByText("Private reasoning details").waitFor();
+    assert.equal(await page.locator(".message.assistant .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
+    assert.notEqual(await page.locator(".message.user .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
 
     assert.ok(
       await page

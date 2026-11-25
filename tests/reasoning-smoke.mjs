@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import assert from "node:assert/strict";
 const requests = [];
 const firstAnswer = Promise.withResolvers();
+const moreReasoning = Promise.withResolvers();
 const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -31,7 +32,11 @@ const server = createServer((req, res) => {
     res.write(
       'data: {"choices":[{"delta":{"reasoning_content":"Planning the answer."}}]}\n\n',
     );
-    if (isFirst) await firstAnswer.promise;
+    if (isFirst) {
+      await moreReasoning.promise;
+      if (!res.destroyed) res.write('data: {"choices":[{"delta":{"reasoning_content":" Latest reasoning update."}}]}\n\n');
+      await firstAnswer.promise;
+    }
     if (!res.destroyed) {
       const events = [
         {
@@ -95,14 +100,25 @@ try {
     .fill("First message");
   await page.getByRole("button", { name: "Send message" }).click();
   await page.locator("details.reasoning summary").waitFor();
-  assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
+  const reasoning = page.locator("details.reasoning").first();
+  const preview = reasoning.locator(".reasoning-preview");
+  await preview.getByText("Planning the answer.").waitFor();
+  assert.equal(await reasoning.locator(".rich-message").getByText("Planning the answer.").isVisible(), false);
   assert.equal(await page.getByText("The final answer.").count(), 0);
   await page
     .locator("details.reasoning summary")
-    .getByText("Thinking…")
+    .getByText("Generating")
     .waitFor();
+  assert.match(await reasoning.locator("summary").getAttribute("aria-label"), /Response in progress/);
+  assert.equal(await reasoning.locator(".reasoning-dots span").first().evaluate((element) => getComputedStyle(element).animationName), "reasoning-dot");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(await reasoning.locator(".reasoning-dots span").first().evaluate((element) => getComputedStyle(element).animationName), "none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  moreReasoning.resolve();
+  await preview.getByText("Latest reasoning update.").waitFor();
   await page.locator("details.reasoning summary").click();
-  assert.equal(await page.getByText("Planning the answer.").isVisible(), true);
+  assert.equal(await reasoning.locator(".rich-message").getByText("Planning the answer.").isVisible(), true);
+  assert.equal(await preview.isVisible(), false);
   const inspector = page.locator(".response-inspector").first();
   const field = (name) =>
     inspector
@@ -160,13 +176,15 @@ try {
     "Local inference — no API charge",
   );
   const completedDuration = await field("Total duration").innerText();
-  await page.getByText("Planning the answer.").waitFor();
+  await reasoning.locator(".rich-message").getByText("Planning the answer.").waitFor();
+  assert.equal(await reasoning.locator(".reasoning-progress").count(), 0);
   await page.waitForTimeout(500);
   await page.reload();
   await page.locator("details.reasoning summary").waitFor();
-  assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
+  assert.equal(await page.locator("details.reasoning .rich-message").getByText("Planning the answer.").isVisible(), false);
+  await page.locator("details.reasoning .reasoning-preview").getByText("Latest reasoning update.").waitFor();
   await page.locator("details.reasoning summary").click();
-  await page.getByText("Planning the answer.").waitFor();
+  await page.locator("details.reasoning .rich-message").getByText("Planning the answer.").waitFor();
   await page.getByText("The final answer.").waitFor();
   await inspector.locator("summary").click();
   assert.equal(await field("Total duration").innerText(), completedDuration);
@@ -315,6 +333,7 @@ try {
     "PASS: reasoning and trailing usage, raw message copy, effective and historical configuration after reload, six inspector tabs and sanitized export at 320px",
   );
 } finally {
+  moreReasoning.resolve();
   firstAnswer.resolve();
   await browser.close();
   server.closeAllConnections();
