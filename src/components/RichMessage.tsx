@@ -33,6 +33,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import { remarkStreamingTail, safeMessageUrl } from "../rich-markdown";
+import { normalizeLatexDelimiters } from "../latex-delimiters";
 import "katex/dist/katex.min.css";
 import "../rich-message.css";
 
@@ -380,6 +381,7 @@ export const RichMessage = memo(function RichMessage({
   const context = useMemo(() => ({ locale, onNotice }), [locale, onNotice]);
   const shown = streaming ? deferred : text;
   const plugins = streaming ? streamingPlugins : markdownPlugins;
+  const renderedText = useMemo(() => streaming ? shown : normalizeLatexDelimiters(shown), [shown, streaming]);
   const markdown = useMemo(
     () => (
       <ReactMarkdown
@@ -397,10 +399,10 @@ export const RichMessage = memo(function RichMessage({
           )
         }
       >
-        {shown}
+        {renderedText}
       </ReactMarkdown>
     ),
-    [shown, plugins],
+    [renderedText, plugins],
   );
   if (!shown) return null;
   return (

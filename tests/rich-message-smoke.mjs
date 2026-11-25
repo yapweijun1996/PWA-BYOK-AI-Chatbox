@@ -14,6 +14,10 @@ const final = [
   "\n$$\n",
   "Inline math $x^2$ and **final emphasis**.",
   "",
+  String.raw`Inline \(\frac{1}{2}\) formula.`,
+  "",
+  String.raw`\[ (1+1+1)! \times \frac{1}{1} = 6 \]`,
+  "",
   "- [x] Done",
   "- [ ] Open",
   "",
@@ -140,8 +144,9 @@ try {
   await atBottom();
   finish.resolve();
   await page.getByRole("button", { name: "Send message" }).waitFor();
-  await reply.locator(".katex-display").waitFor();
-  assert.equal(await reply.locator(".katex-mathml math").count(), 2);
+  await reply.locator(".katex-display").first().waitFor();
+  await page.waitForFunction(() => document.querySelectorAll(".message.assistant .katex-mathml math").length === 4);
+  assert.equal(await reply.locator(".katex-display").count(), 2);
   assert.equal(await reply.locator(".rich-stream-tail").count(), 0);
   assert.equal(await copy.getAttribute("data-preserved"), "yes");
   assert.equal(await reply.getByRole("table").count(), 1);
@@ -159,6 +164,8 @@ try {
   await copy.click();
   await page.getByText("Code copied.").waitFor();
   assert.equal(await page.evaluate(() => window.testClipboard), code);
+  await reply.getByRole("button", { name: "Copy", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.testClipboard), source);
   const wrap = reply.getByRole("button", { name: "Wrap", exact: true });
   const codeScroll = reply.locator(".rich-code pre");
   assert.equal(await wrap.getAttribute("aria-pressed"), "false");
@@ -229,7 +236,7 @@ try {
   await page.context().setOffline(true);
   await page.reload();
   await page.locator('html[data-startup="ready"]').waitFor();
-  await reply.locator(".katex-display").waitFor();
+  await reply.locator(".katex-display").first().waitFor();
   assert.ok(
     await page.evaluate(
       async (name) => {

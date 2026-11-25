@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { RichMessage } from "../src/components/RichMessage";
 import { safeMessageUrl } from "../src/rich-markdown";
+import { normalizeLatexDelimiters } from "../src/latex-delimiters";
 
 const render = (text: string, streaming = false) =>
   renderToStaticMarkup(
@@ -51,6 +52,50 @@ describe("rich messages", () => {
     );
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain('class="katex-display"');
+  });
+
+  it("renders common backslash LaTeX delimiters from completed messages", () => {
+    const text = String.raw`Inline \(\frac{1}{2}\) and \(x_1^2\).
+
+\[ (1+1+1)! \times \frac{1}{1} = 6 \]`;
+    const html = render(text);
+    expect((html.match(/class="katex"/g) || []).length).toBeGreaterThanOrEqual(3);
+    expect(html).toContain('class="katex-display"');
+    expect(html).toContain("mfrac");
+    expect(text).toContain(String.raw`\[ (1+1+1)!`);
+  });
+
+  it("supports multiline display math and equations inside lists", () => {
+    const source = [
+      "A list:",
+      String.raw`- Convert \(x_1 + x_2\).`,
+      "",
+      String.raw`\[`,
+      String.raw`\frac{a}{b}`,
+      String.raw`\]`,
+    ].join("\n");
+    const html = render(source);
+    expect(html).toContain("<li>");
+    expect(html).toContain('class="katex-display"');
+    expect((html.match(/class="katex"/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not alter code, escaped delimiters, links, existing math or incomplete formulas", () => {
+    const source = [
+      "Code: `\\(x\\)`",
+      "",
+      "```tex",
+      String.raw`\[\frac{1}{2}\]`,
+      "```",
+      "",
+      String.raw`Escaped \\(not math\\) and unmatched \(x`,
+      "",
+      String.raw`[link](https://example.com/\(path\))`,
+      "",
+      String.raw`$\text{\(literal\)}$`,
+    ].join("\n");
+    expect(normalizeLatexDelimiters(source)).toBe(source);
+    expect(render(source)).toContain("Code block");
   });
 
   it("leaves provisional Markdown, code, and LaTeX literal until stable", () => {
