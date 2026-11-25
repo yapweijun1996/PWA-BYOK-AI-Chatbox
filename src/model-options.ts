@@ -56,7 +56,10 @@ export function parseModelOptions(
     if (typeof rawId !== "string" || !rawId.trim()) continue;
     const id = gemini ? rawId.replace(/^models\//, "") : rawId;
     if (!id || models.has(id)) continue;
-    const rawName = gemini ? entry.displayName : entry.name;
+    const rawName =
+      gemini || provider === "anthropic"
+        ? (entry.display_name ?? entry.displayName)
+        : entry.name;
     const name = typeof rawName === "string" ? rawName.trim() : undefined;
     const option: ModelOption = { id, name: name || undefined };
     if (provider === "openrouter") {

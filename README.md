@@ -1,6 +1,6 @@
 # Luma Chat
 
-Luma Chat is a local-first, installable BYOK AI chat application. It supports direct browser connections to Gemini, OpenAI, OpenRouter, and LM Studio. The design references in `DESIGN/` describe the intended visual direction; this is an independent implementation.
+Luma Chat is a local-first, installable BYOK AI chat application. It supports direct browser connections to Gemini, OpenAI, Anthropic, OpenRouter, and LM Studio. The design references in `DESIGN/` describe the intended visual direction; this is an independent implementation.
 
 The UI supports English and Simplified Chinese. Use **Settings → Appearance** to choose a language and a light, dark, or system theme. **Settings** also contains AI providers and Local data.
 
@@ -9,6 +9,8 @@ The top bar provides model selection, conversation actions, language and theme c
 The composer grows with the draft and can be expanded for longer prompts. The expanded editor uses the same locally saved draft and attachments; close it with its button or Escape. While expanded, background controls are inactive and notifications remain available inside the editor. The model selector and local tools control remain available in either size. Desktop Enter sends and Shift+Enter adds a line; mobile Enter adds a line. The local tools control enables browser-side tools whose results are sent to the selected provider.
 
 Draft attachments show their count, file names, type and size, with image thumbnails where available. The attachment list scrolls when needed; keyboard focus moves to the next attachment or the message field after removal. Image and plain text files are limited to 5 MB each.
+
+Message bubbles display their local time, with a full date and time on hover. The latest assistant reply can be retried with confirmation; previous answers remain visible and later requests use the latest answer. **Edit as new message** copies a user message and its attachments to the composer without altering history or sending automatically. Replacing an existing draft requires confirmation.
 
 Use the [feature map](FEATURE-MAP.md) to find a capability, its implementation, and its limits. For the source review, prioritized bugs, implementation tasks, and release criteria, see the [engineering roadmap](ROADMAP.md). It distinguishes committed functionality from work in progress; it is not a release announcement.
 
@@ -40,6 +42,8 @@ Use **New chat** or **Search conversations** in the sidebar, or press `Ctrl/⌘ 
 On desktop, drag the sidebar's right edge, or focus the separator and use Left/Right (Home/End for limits). Width and collapsed state are restored before revealing the app. The mobile drawer opens over the chat rather than resizing it. Projects and conversation organization live in the existing IndexedDB stores and are included in version-1 backups; older backups still import. API keys are not exported.
 
 ## Configure a provider
+
+Anthropic uses its Messages API directly from the browser, including its direct-browser opt-in header. Requests use a 4,096-token output limit and support text, images on enabled models, streaming, and local tool calls. The API key is accessible to the running page; use a trusted device and browser environment. Provider browser access and account limits may change, and requests can incur charges.
 
 Open **Settings → AI providers** to configure a provider's model and credentials. Browsing a provider tab does not switch the chat recipient. Choose **Set as default provider** for chats that inherit the global model, or choose a model explicitly in the composer. The model list does not prove a key or chat request is authorized; some providers expose a public catalog. The app connects directly from the browser; it has no proxy or backend. A provider can reject browser requests because of CORS or other restrictions. OpenRouter uses its own key and model IDs, such as `thinkingmachines/inkling-2-mini`; listing the model does not guarantee access or available credits.
 
@@ -77,7 +81,7 @@ Usage and finish reasons come from the response stream when provided. OpenRouter
 
 ## Built-in JavaScript tool
 
-Local tools, including `javascript.execute`, are enabled by default. Click **Tools** in the composer or use `/js` to turn them off or back on. The setting applies across chats and persists across replies and reloads. Use a model that supports native function calling. Luma uses the same internal tool contract with OpenAI, OpenRouter, LM Studio's OpenAI-compatible API, and Gemini's native `functionCall` / `functionResponse` format. Provider and model support can vary.
+Local tools, including `javascript.execute`, are enabled by default. Click **Tools** in the composer or use `/js` to turn them off or back on. The setting applies across chats and persists across replies and reloads. Use a model that supports native function calling. Luma uses the same internal tool contract with OpenAI, Anthropic, OpenRouter, LM Studio's OpenAI-compatible API, and Gemini's native `functionCall` / `functionResponse` format. Provider and model support can vary.
 
 The same control enables five additional local tools. `time_tool` gets the current time, converts an instant to an IANA time zone, or computes a date interval. `calculate` evaluates JavaScript in the sandbox. `analyze_file` summarizes or reads text, CSV, and JSON attachments already present in the current conversation. `text_tool` searches, replaces, sorts, deduplicates, or extracts regex matches. `memory_tool` lists keys and reads, saves, or deletes named local memories. File names must identify one attachment unambiguously. Model tool use and the existing round and output limits apply to all six tools.
 

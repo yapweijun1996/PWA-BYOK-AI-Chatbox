@@ -66,6 +66,7 @@ try {
     "tests/topbar-smoke.mjs",
     "tests/scrollbar-smoke.mjs",
     "tests/browser-smoke.mjs",
+    "tests/anthropic-browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
     "tests/tool-execution-smoke.mjs",
     "tests/local-tools-smoke.mjs",

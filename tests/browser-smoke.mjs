@@ -304,7 +304,7 @@ try {
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByText("OpenRouter answer").waitFor();
   const response = page.locator(".message.assistant").filter({ hasText: "OpenRouter answer" });
-  await response.locator("summary").click();
+  await response.locator(".response-inspector > summary").click();
   await response.getByText("$0.0012", { exact: true }).last().waitFor();
   const cost = response.locator("dl > div").filter({ hasText: "API cost (USD)" });
   assert.equal(await cost.locator("dd").first().innerText(), "$0.0012");
@@ -317,7 +317,7 @@ try {
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Estimate a reply");
   await page.getByRole("button", { name: "Send message" }).click();
   const estimated = page.locator(".message.assistant").filter({ hasText: "Answer with catalog estimate" });
-  const estimateFooter = estimated.locator("summary");
+  const estimateFooter = estimated.locator(".response-inspector > summary");
   await estimateFooter.getByText("≈$0.0021", { exact: true }).waitFor();
   await estimateFooter.click();
   await estimated.getByText("Catalog estimate", { exact: true }).waitFor();

@@ -1165,7 +1165,9 @@ export function useWorkspace({
       )
     )
       return;
-    const prepared = prepareReply(resolved, chat.messages);
+    const userIndex = chat.messages.map((message) => message.role).lastIndexOf("user");
+    const history = userIndex >= 0 ? chat.messages.slice(0, userIndex + 1) : chat.messages;
+    const prepared = prepareReply(resolved, history);
     const reply = prepared.message;
     const abort = beginReply(chat.id, prepared.request, null);
     const saved = await updateChat(chat.id, (c) => ({
@@ -1187,7 +1189,17 @@ export function useWorkspace({
       );
       return;
     }
-    await runReply(chat.id, chat.messages, prepared, abort);
+    await runReply(chat.id, history, prepared, abort);
+  };
+  const editMessage = async (message: Message) => {
+    if (!chat || message.role !== "user" || !canStartReply(chat)) return;
+    if ((chat.draft.length || chat.draftAttachments?.length) && !confirm(t("Replace the current draft and attachments with this message?"))) return;
+    const saved = await updateChat(chat.id, (current) => ({
+      ...current,
+      draft: message.content,
+      draftAttachments: [...(message.attachments || [])],
+    }));
+    if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   };
   const testConnection = async () => {
     if (workspaceSignal.aborted) return;
@@ -1705,6 +1717,7 @@ export function useWorkspace({
     setNotice,
     onMessageScroll,
     retry,
+    editMessage,
     desktopInput,
     displayedDraft,
     phase,

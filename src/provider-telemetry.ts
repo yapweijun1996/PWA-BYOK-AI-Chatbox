@@ -13,6 +13,21 @@ export function normalizeResponseSample(
 ): ResponseSample {
   const chunk = asRecord(value);
   if (!chunk) return {};
+  if (provider === "anthropic") {
+    const message = asRecord(chunk.message);
+    const delta = asRecord(chunk.delta);
+    const stats = asRecord(message?.usage) ?? asRecord(chunk.usage);
+    return {
+      generated: hasText(delta?.text) || hasText(delta?.thinking),
+      servedModel: asLabel(message?.model),
+      finishReason: asLabel(delta?.stop_reason),
+      usage: stats && {
+        input: asCount(stats.input_tokens),
+        output: asCount(stats.output_tokens),
+        cached: asCount(stats.cache_read_input_tokens),
+      },
+    };
+  }
   const candidate = first(chunk.candidates);
   const choice = first(chunk.choices);
   const finishReason =

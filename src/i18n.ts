@@ -11,6 +11,9 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Anthropic requests use your API key directly in this browser. Use only on a trusted device and network. Your API usage may incur charges.": "Anthropic 请求会在浏览器中直接使用你的 API 密钥。请仅在受信任的设备和网络上使用；API 调用可能产生费用。",
+  "Edit as new message": "编辑并作为新消息发送",
+  "Replace the current draft and attachments with this message?": "用这条消息替换当前草稿和附件吗？",
   "No attachments": "没有附件",
   "Attach images or text files · 5 MB per file": "添加图片或文本文件 · 每个文件不超过 5 MB",
   "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.": "选择每个不超过 5 MB 的图片或文本文件，也可拖放文件或粘贴图片。",

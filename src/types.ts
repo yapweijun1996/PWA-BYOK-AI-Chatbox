@@ -1,4 +1,4 @@
-export type ProviderId = "gemini" | "openai" | "openrouter" | "lmstudio";
+export type ProviderId = "gemini" | "openai" | "anthropic" | "openrouter" | "lmstudio";
 import type { Language } from "./i18n";
 import type { RequestOverrides, RequestSnapshot } from "./request-config";
 import type { ResponseTelemetry } from "./response-telemetry";
@@ -7,6 +7,7 @@ import { sidebarWidth } from "./workspace";
 export const providerIds: ProviderId[] = [
   "gemini",
   "openai",
+  "anthropic",
   "openrouter",
   "lmstudio",
 ];
@@ -93,6 +94,12 @@ export const defaultSettings: Settings = {
       endpoint: "https://api.openai.com/v1",
       vision: false,
     },
+    anthropic: {
+      id: "anthropic",
+      model: "",
+      endpoint: "https://api.anthropic.com/v1",
+      vision: false,
+    },
     openrouter: {
       id: "openrouter",
       model: "",
@@ -111,6 +118,7 @@ export const defaultSettings: Settings = {
 export const labels: Record<ProviderId, string> = {
   gemini: "Gemini",
   openai: "OpenAI",
+  anthropic: "Anthropic",
   openrouter: "OpenRouter",
   lmstudio: "LM Studio",
 };

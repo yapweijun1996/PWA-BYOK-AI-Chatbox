@@ -38,6 +38,44 @@ export type ToolRequest = Readonly<{
   exchanges: readonly ToolExchange[];
 }>;
 
+export function anthropicToolFields(tool: ToolRequest | undefined) {
+  if (!tool) return { options: {}, tail: [] };
+  return {
+    options: {
+      tools: [definition, ...localToolDefinitions].map(
+        ({ name, description, parameters }) => ({
+          name,
+          description,
+          input_schema: parameters,
+        }),
+      ),
+      tool_choice: { type: tool.allowCalls ? "auto" : "none" },
+    },
+    tail: tool.exchanges.flatMap(({ round, results }) => [
+      {
+        role: "assistant",
+        content: [
+          ...(round.text ? [{ type: "text", text: round.text }] : []),
+          ...round.calls.map((call) => ({
+            type: "tool_use",
+            id: call.id,
+            name: call.name,
+            input: JSON.parse(call.arguments || "{}"),
+          })),
+        ],
+      },
+      {
+        role: "user",
+        content: round.calls.map((call, index) => ({
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: JSON.stringify(results[index]),
+        })),
+      },
+    ]),
+  };
+}
+
 export function openAIToolFields(
   tool: ToolRequest | undefined,
   openRouter: boolean,
@@ -45,7 +83,10 @@ export function openAIToolFields(
   if (!tool) return { options: {}, tail: [] };
   return {
     options: {
-      tools: [definition, ...localToolDefinitions].map((fn) => ({ type: "function", function: fn })),
+      tools: [definition, ...localToolDefinitions].map((fn) => ({
+        type: "function",
+        function: fn,
+      })),
       tool_choice: tool.allowCalls ? "auto" : "none",
     },
     tail: tool.exchanges.flatMap(({ round, results }) => [
@@ -227,7 +268,10 @@ export function collectToolRound() {
         ? geminiCalls
         : [...openAI.entries()]
             .sort(([a], [b]) => a - b)
-            .map(([, call]) => call);
+            .map(([, call]) => ({
+              ...call,
+              arguments: call.arguments || "{}",
+            }));
       if (!calls.length) return;
       if (
         overflow ||

@@ -10,6 +10,7 @@ import {
   Brain,
   Code2,
   UserRound,
+  SquarePen,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
@@ -117,6 +118,7 @@ function App({
     setNotice,
     onMessageScroll,
     retry,
+    editMessage,
     desktopInput,
     displayedDraft,
     phase,
@@ -331,7 +333,7 @@ function App({
                           <strong>
                             {m.role === "assistant" ? t("Luma Chat") : t("You")}
                           </strong>
-                          <time>
+                          <time dateTime={Number.isFinite(new Date(m.createdAt).getTime()) ? new Date(m.createdAt).toISOString() : undefined} title={new Date(m.createdAt).toLocaleString(locale)}>
                             {new Date(m.createdAt).toLocaleTimeString(locale, {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -420,7 +422,7 @@ function App({
                               )}
                             </div>
                           )}
-                        {(m.status === "error" || m.status === "interrupted") &&
+                        {m.role === "assistant" && m.status !== "streaming" &&
                           replySave?.message !== m &&
                           m.id ===
                             chat.messages[chat.messages.length - 1]?.id && (
@@ -446,6 +448,11 @@ function App({
                               )}
                             </div>
                           )}
+                        {m.role === "user" && (
+                          <button type="button" className="copy" disabled={working || navigating || processingFiles || conflicts.has(chat.id)} onClick={() => void editMessage(m)}>
+                            <SquarePen size={14} aria-hidden="true" /> {t("Edit as new message")}
+                          </button>
+                        )}
                         {m.content && (
                           <button
                             className="copy"
@@ -599,6 +606,9 @@ function App({
                       </p>
                     </div>
                   </div>
+                  {config.id === "anthropic" && (
+                    <p className="hint">{t("Anthropic requests use your API key directly in this browser. Use only on a trusted device and network. Your API usage may incur charges.")}</p>
+                  )}
                   <div className="button-row">
                     <button
                       className="secondary"

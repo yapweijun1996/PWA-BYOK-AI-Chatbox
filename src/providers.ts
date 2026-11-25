@@ -6,6 +6,7 @@ import { normalizeResponseSample } from "./provider-telemetry";
 import type { ResponseSample } from "./response-telemetry";
 import {
   collectToolRound,
+  anthropicToolFields,
   geminiToolFields,
   maxToolReplayChars,
   openAIToolFields,
@@ -35,7 +36,11 @@ function headers(
   secret: string,
 ): Record<string, string> {
   const result: Record<string, string> = { "Content-Type": "application/json" };
-  if (secret)
+  if (config.id === "anthropic") {
+    result["anthropic-version"] = "2023-06-01";
+    result["anthropic-dangerous-direct-browser-access"] = "true";
+    if (secret) result["x-api-key"] = secret;
+  } else if (secret)
     result[config.id === "gemini" ? "x-goog-api-key" : "Authorization"] =
       config.id === "gemini" ? secret : `Bearer ${secret}`;
   return result;
@@ -138,10 +143,14 @@ export const requestsStreamUsage = (id: ProviderConfig["id"]) =>
   id === "openai" || id === "lmstudio";
 
 export function requestHistory(messages: readonly Message[]) {
-  return messages.filter(
-    (m) =>
-      m.role === "user" || (m.role === "assistant" && m.status === "complete"),
-  );
+  const history: Message[] = [];
+  for (const message of messages) {
+    if (message.role !== "user" && message.status !== "complete") continue;
+    if (message.role === "assistant" && history.at(-1)?.role === "assistant")
+      history[history.length - 1] = message;
+    else history.push(message);
+  }
+  return history;
 }
 
 export function buildRequest(
@@ -150,6 +159,45 @@ export function buildRequest(
   tool?: ToolRequest,
 ): { path: string; body: object } {
   const completed = requestHistory(messages);
+  if (config.id === "anthropic") {
+    const { options, tail } = anthropicToolFields(tool);
+    return {
+      path: "/messages",
+      body: {
+        model: config.model,
+        max_tokens: 4096,
+        stream: true,
+        ...options,
+        messages: [
+          ...completed.map((message) => ({
+            role: message.role,
+            content: [
+              {
+                type: "text",
+                text:
+                  message.content +
+                  (message.attachments || [])
+                    .filter((a) => a.mime.startsWith("text/"))
+                    .map(textAttachment)
+                    .join(""),
+              },
+              ...(message.attachments || [])
+                .filter((a) => a.mime.startsWith("image/"))
+                .map((a) => ({
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: a.mime,
+                    data: a.data.split(",")[1],
+                  },
+                })),
+            ].filter((part) => !("text" in part) || part.text),
+          })),
+          ...tail,
+        ],
+      },
+    };
+  }
   if (config.id === "gemini") {
     const { options, tail } = geminiToolFields(tool);
     return {
@@ -347,6 +395,7 @@ export async function streamChat(
   let finishError: string | undefined;
   const collector = tool && collectToolRound();
   let roundText = "";
+  const anthropicBlocks = new Map<number, number>();
   const emitText = (text: string) => {
     if (text) {
       received = true;
@@ -378,7 +427,51 @@ export async function streamChat(
         if (chunk.error)
           throw new Error("The provider reported an error while generating.");
         const finishReason = sample.finishReason;
-        if (config.id === "gemini") {
+        if (config.id === "anthropic") {
+          if (
+            chunk.type === "content_block_start" &&
+            chunk.content_block?.type === "text" &&
+            typeof chunk.content_block.text === "string"
+          )
+            emitText(chunk.content_block.text);
+          if (
+            chunk.type === "content_block_start" &&
+            chunk.content_block?.type === "tool_use"
+          ) {
+            const index = anthropicBlocks.size;
+            anthropicBlocks.set(chunk.index, index);
+            collector?.openAI([
+              {
+                index,
+                id: chunk.content_block.id,
+                type: "function",
+                function: { name: chunk.content_block.name },
+              },
+            ]);
+          } else if (chunk.type === "content_block_delta") {
+            if (
+              chunk.delta?.type === "text_delta" &&
+              typeof chunk.delta.text === "string"
+            )
+              emitText(chunk.delta.text);
+            if (
+              chunk.delta?.type === "input_json_delta" &&
+              anthropicBlocks.has(chunk.index)
+            )
+              collector?.openAI([
+                {
+                  index: anthropicBlocks.get(chunk.index),
+                  function: { arguments: chunk.delta.partial_json },
+                },
+              ]);
+            if (
+              chunk.delta?.type === "thinking_delta" &&
+              typeof chunk.delta.thinking === "string"
+            )
+              onReasoning(chunk.delta.thinking);
+          }
+          if (chunk.type === "message_stop") finished = true;
+        } else if (config.id === "gemini") {
           const parts = chunk.candidates?.[0]?.content?.parts;
           if (Array.isArray(parts)) {
             collector?.gemini(parts);
@@ -420,7 +513,11 @@ export async function streamChat(
         if (finishReason === "error")
           finishError =
             "The provider reported an error while generating. Partial output was retained.";
-        if (finishReason === "length" || finishReason === "MAX_TOKENS")
+        if (
+          finishReason === "length" ||
+          finishReason === "MAX_TOKENS" ||
+          finishReason === "max_tokens"
+        )
           finishError =
             "The model reached its output limit. Partial output was retained.";
         if (finishReason === "content_filter" || finishReason === "SAFETY")
