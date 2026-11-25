@@ -135,16 +135,15 @@ export function useWorkspace({
   );
   const [searchMode, setSearchMode] = useState<SearchMode | null>(null);
   const [inspecting, setInspecting] = useState(false);
-  const [armedChat, setArmedChat] = useState<string>();
-  const javascriptEnabled = Boolean(active && active === armedChat);
+  const javascriptEnabled = settings.localToolsEnabled;
   const toggleJavaScript = () => {
     if (!active || session.get().reply) return;
-    setArmedChat(javascriptEnabled ? undefined : active);
-    setNotice(
-      javascriptEnabled
-        ? "Local tools disabled for the next reply."
-        : "Local tools enabled for the next reply. Results go to the selected provider.",
-    );
+    const enabled = !session.get().settings.localToolsEnabled;
+    void saveSettings({ localToolsEnabled: enabled }).then((saved) => {
+      if (saved) setNotice(enabled
+        ? "Local tools enabled. Results go to the selected provider."
+        : "Local tools disabled.");
+    });
   };
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
@@ -1089,7 +1088,6 @@ export function useWorkspace({
       );
       return;
     }
-    if (prepared.request.javascript) setArmedChat(undefined);
     await runReply(chatId, history, prepared, abort);
   };
   const retry = async (original?: RequestSnapshot) => {
@@ -1143,7 +1141,6 @@ export function useWorkspace({
       );
       return;
     }
-    if (prepared.request.javascript) setArmedChat(undefined);
     await runReply(chat.id, chat.messages, prepared, abort);
   };
   const testConnection = async () => {
@@ -1498,7 +1495,6 @@ export function useWorkspace({
       setImportPreferences(false);
       if (importInput.current) importInput.current.value = "";
       setExportPlan(null);
-      setArmedChat(undefined);
       finishHistoryChoice("cancel");
       setSearchMode(null);
       setInspecting(false);

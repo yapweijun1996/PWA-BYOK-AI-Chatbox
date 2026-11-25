@@ -64,7 +64,7 @@ export async function exerciseClearData(browser, url) {
     await waitForSavedConversation(page, {
       draft: "Keep until deletion commits",
     });
-    await button(page, "Local tools for next reply").click();
+    await button(page, "Local tools").click();
     const id = await page
       .locator("section.conversation")
       .getAttribute("data-conversation-id");
@@ -252,10 +252,10 @@ export async function exerciseClearData(browser, url) {
     await page.getByText("Imported 1 conversations.").waitFor();
     await button(page, "Back to chat").click();
     assert.equal(
-      await button(page, "Local tools for next reply").getAttribute(
+      await button(page, "Local tools").getAttribute(
         "aria-pressed",
       ),
-      "false",
+      "true",
     );
   } finally {
     await page.close();

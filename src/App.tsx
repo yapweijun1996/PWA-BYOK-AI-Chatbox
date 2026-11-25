@@ -603,11 +603,11 @@ function App({
                   <button
                     className="icon composer-reasoning"
                     type="button"
-                    aria-label={t("Local tools for next reply")}
+                    aria-label={t("Local tools")}
                     aria-pressed={javascriptEnabled}
                     disabled={!chat || working}
                     title={t(
-                      "Enable local JavaScript, time, calculation, file, text and memory tools for this reply. Results are sent to the selected model.",
+                      "Enable local JavaScript, time, calculation, file, text and memory tools. Results are sent to the selected model.",
                     )}
                     onClick={toggleJavaScript}
                   >

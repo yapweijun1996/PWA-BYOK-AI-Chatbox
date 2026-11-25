@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeSettings } from "../src/data-contracts";
+import { backupPreferences, mergeSettings } from "../src/data-contracts";
 import { portableConversation } from "../src/history-sharing";
 import { applySettingsEdit, SettingsConflictError } from "../src/settings-edit";
 import type { Cipher } from "../src/types";
@@ -12,6 +12,17 @@ const cipher: Cipher = {
   iterations: 1,
 };
 describe("transactional preference edits", () => {
+  it("defaults local tools on for older settings and preserves explicit choices", () => {
+    const initial = mergeSettings(undefined);
+    expect(initial.localToolsEnabled).toBe(true);
+    const disabled = applySettingsEdit(initial, initial, {
+      ...initial,
+      localToolsEnabled: false,
+    });
+    expect(mergeSettings(disabled).localToolsEnabled).toBe(false);
+    expect(mergeSettings(backupPreferences(disabled).preferences).localToolsEnabled).toBe(false);
+    expect(applySettingsEdit(disabled, initial, { ...initial, theme: "dark" }).localToolsEnabled).toBe(false);
+  });
   it("changes a theme without restoring another tab's prior provider, vault or projects", () => {
     const old = mergeSettings(undefined);
     old.vaults.openai = cipher;

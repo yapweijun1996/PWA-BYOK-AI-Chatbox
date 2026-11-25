@@ -121,7 +121,7 @@ try {
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
   const toggle = page.getByRole("button", {
-    name: "Local tools for next reply",
+    name: "Local tools",
   });
   const send = async (text) => {
     await page
@@ -129,8 +129,7 @@ try {
       .fill(text);
     await page.getByRole("button", { name: "Send message" }).click();
   };
-  assert.equal(await toggle.getAttribute("aria-pressed"), "false");
-  await toggle.click();
+  assert.equal(await toggle.getAttribute("aria-pressed"), "true");
   await send("tool request");
   const tool = page.locator(".tool-execution").first();
   await tool.locator("summary").waitFor();
@@ -169,6 +168,10 @@ try {
       (element) => element.scrollWidth <= element.clientWidth,
     ),
   );
+  assert.equal(await toggle.getAttribute("aria-pressed"), "true");
+  await toggle.click();
+  await page.getByText("Local tools disabled.", { exact: true }).waitFor();
+  await page.reload();
   assert.equal(await toggle.getAttribute("aria-pressed"), "false");
   await send("plain request");
   await page.getByText("No tools for this reply.", { exact: true }).waitFor();
@@ -185,6 +188,7 @@ try {
   assert.equal(requests.length, 4);
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await page.reload();
+  assert.equal(await toggle.getAttribute("aria-pressed"), "true");
   await page.locator('.tool-execution[data-status="success"]').waitFor();
   await page.locator('.tool-execution[data-status="cancelled"]').waitFor();
 

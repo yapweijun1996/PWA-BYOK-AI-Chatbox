@@ -68,6 +68,7 @@ export type Settings = {
   sidebarWidth: number;
   projects: WorkspaceProject[];
   language: Language;
+  localToolsEnabled: boolean;
   providers: Record<ProviderId, ProviderConfig>;
   vaults: Partial<Record<ProviderId, Cipher>>;
 };
@@ -78,6 +79,7 @@ export const defaultSettings: Settings = {
   sidebarWidth: sidebarWidth.default,
   projects: [],
   language: "system",
+  localToolsEnabled: true,
   providers: {
     gemini: {
       id: "gemini",

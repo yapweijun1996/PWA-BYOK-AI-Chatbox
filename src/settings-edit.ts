@@ -39,7 +39,8 @@ export function applySettingsEdit(
       | "sidebarCollapsed"
       | "sidebarWidth"
       | "provider"
-      | "projects",
+      | "projects"
+      | "localToolsEnabled",
   >(key: K) {
     if (changed(previous[key], desired[key], current[key]))
       next[key] = desired[key];
@@ -50,6 +51,7 @@ export function applySettingsEdit(
   apply("sidebarWidth");
   apply("provider");
   apply("projects");
+  apply("localToolsEnabled");
   for (const id of providerIds) {
     if (
       changed(

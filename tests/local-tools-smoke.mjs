@@ -105,9 +105,6 @@ try {
   const input = page.getByRole("textbox", { name: "Message", exact: true });
   async function send(prompt) {
     const index = results.length;
-    await page
-      .getByRole("button", { name: "Local tools for next reply" })
-      .click();
     await input.fill(prompt);
     await page.getByRole("button", { name: "Send message" }).click();
     await page.getByText("Tool finished", { exact: true }).nth(index).waitFor();

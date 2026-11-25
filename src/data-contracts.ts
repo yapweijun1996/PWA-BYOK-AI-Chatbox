@@ -71,6 +71,7 @@ export function mergeSettings(
   return {
     provider,
     theme,
+    localToolsEnabled: input?.localToolsEnabled !== false,
     sidebarCollapsed: input?.sidebarCollapsed === true,
     sidebarWidth: normalizeSidebarWidth(input?.sidebarWidth),
     projects: mergeProjects(
@@ -117,6 +118,7 @@ export function backupPreferences(settings: Settings) {
       provider: settings.provider,
       theme: settings.theme,
       language: settings.language,
+      localToolsEnabled: settings.localToolsEnabled,
       sidebarWidth: settings.sidebarWidth,
       sidebarCollapsed: settings.sidebarCollapsed,
       providers,

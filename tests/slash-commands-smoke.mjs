@@ -43,17 +43,23 @@ try {
   await input.press("Enter");
   assert.equal(
     await page
-      .getByRole("button", { name: "Local tools for next reply" })
+      .getByRole("button", { name: "Local tools" })
       .getAttribute("aria-pressed"),
-    "true",
+    "false",
+  );
+  await page.getByText("Local tools disabled.", { exact: true }).waitFor();
+  await page.reload();
+  assert.equal(
+    await page.getByRole("button", { name: "Local tools" }).getAttribute("aria-pressed"),
+    "false",
   );
   await input.fill("/js");
   await input.press("Enter");
   assert.equal(
     await page
-      .getByRole("button", { name: "Local tools for next reply" })
+      .getByRole("button", { name: "Local tools" })
       .getAttribute("aria-pressed"),
-    "false",
+    "true",
   );
 
   await input.fill("/settings");
@@ -157,6 +163,21 @@ try {
     .tap();
   await phone.getByRole("heading", { name: "AI providers" }).waitFor();
   await mobile.close();
+  const isolated = await browser.newPage({ locale: "en-US", viewport: { width: 1200, height: 800 } });
+  await isolated.goto(base);
+  await isolated.getByRole("button", { name: "Start a new chat" }).click();
+  const toolsToggle = isolated.getByRole("button", { name: "Local tools" });
+  assert.equal(await toolsToggle.getAttribute("aria-pressed"), "true");
+  await toolsToggle.click();
+  await isolated.getByText("Local tools disabled.", { exact: true }).waitFor();
+  await isolated.getByRole("button", { name: "New chat", exact: true }).first().click();
+  await isolated.waitForFunction(
+    () => document.querySelectorAll('.history-name[title="New chat"]').length === 2,
+  );
+  assert.equal(await toolsToggle.getAttribute("aria-pressed"), "false");
+  await isolated.reload();
+  assert.equal(await toolsToggle.getAttribute("aria-pressed"), "false");
+  await isolated.close();
   console.log(
     "PASS: slash command keyboard and touch actions, filtering, dismissal, and draft persistence",
   );
