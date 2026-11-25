@@ -365,48 +365,91 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
             <MoreVertical size={18} aria-hidden="true" />
           </summary>
           <div className="topbar-menu">
-            <p>{t(providerStatus)}</p>
-            <p>{updateText}</p>
-            <button
-              className="topbar-menu-inspector"
-              type="button"
-              onClick={() =>
-                closeMenu(() => {
-                  workspace.setInspecting(true);
-                })
-              }
-            >
-              <ScanLine size={18} aria-hidden="true" />
-              {t("Workspace Inspector")}
-            </button>
-            <button type="button" onClick={() => closeMenu(openData)}>
-              <Database size={18} aria-hidden="true" />
-              {t(storageStatus)}
-            </button>
-            <button type="button" onClick={() => closeMenu(cycleLanguage)}>
-              <Languages size={18} aria-hidden="true" />
-              {t("Language")} · {languageText}
-            </button>
-            <button type="button" onClick={() => closeMenu(cycleTheme)}>
-              <SunMoon size={18} aria-hidden="true" />
-              {t("Theme")} · {themeText}
-            </button>
-            {document.fullscreenEnabled && (
+            <section className="topbar-menu-status" aria-label={t("Status")}>
+              <h2>{t("Status")}</h2>
+              <p>
+                <span>{t("Provider")}</span> {t(providerStatus)}
+              </p>
+              <p>
+                <span>IndexedDB</span> {t(storageStatus)}
+              </p>
+              <p>
+                <span>{t("Update")}</span> <span>{updateText}</span>
+              </p>
+            </section>
+            <section className="topbar-menu-actions" aria-label={t("Actions")}>
+              <h2>{t("Actions")}</h2>
+              <button
+                className="topbar-menu-inspector"
+                type="button"
+                onClick={() =>
+                  closeMenu(() => {
+                    workspace.setInspecting(true);
+                  })
+                }
+              >
+                <ScanLine size={18} aria-hidden="true" />
+                {t("Workspace Inspector")}
+              </button>
+              <button type="button" onClick={() => closeMenu(openData)}>
+                <Database size={18} aria-hidden="true" />
+                {t(storageStatus)}
+              </button>
+              <label className="topbar-menu-select">
+                <Languages size={18} aria-hidden="true" />
+                <span>{t("Language")}</span>
+                <select
+                  aria-label={t("Change language")}
+                  value={settings.language}
+                  onChange={(event) =>
+                    void workspace.saveSettings({
+                      language: event.target.value as typeof settings.language,
+                    })
+                  }
+                >
+                  <option value="system">{t("System language")}</option>
+                  <option value="en">{t("English")}</option>
+                  <option value="zh-CN">{t("Simplified Chinese")}</option>
+                </select>
+              </label>
+              <label className="topbar-menu-select">
+                <SunMoon size={18} aria-hidden="true" />
+                <span>{t("Theme")}</span>
+                <select
+                  aria-label={t("Change theme")}
+                  value={settings.theme}
+                  onChange={(event) =>
+                    void workspace.saveSettings({
+                      theme: event.target.value as typeof settings.theme,
+                    })
+                  }
+                >
+                  <option value="system">{t("System")}</option>
+                  <option value="light">{t("Light")}</option>
+                  <option value="dark">{t("Dark")}</option>
+                </select>
+              </label>
+              {document.fullscreenEnabled && (
+                <button
+                  type="button"
+                  onClick={() => closeMenu(() => void toggleFullscreen())}
+                >
+                  {fullscreen ? (
+                    <Minimize size={18} aria-hidden="true" />
+                  ) : (
+                    <Maximize size={18} aria-hidden="true" />
+                  )}
+                  {t(fullscreen ? "Exit fullscreen" : "Enter fullscreen")}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => closeMenu(() => void toggleFullscreen())}
+                onClick={() => closeMenu(workspace.openSettings)}
               >
-                <Maximize size={18} aria-hidden="true" />
-                {t(fullscreen ? "Exit fullscreen" : "Enter fullscreen")}
+                <SettingsIcon size={18} aria-hidden="true" />
+                {t("Settings")}
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => closeMenu(workspace.openSettings)}
-            >
-              <SettingsIcon size={18} aria-hidden="true" />
-              {t("Settings")}
-            </button>
+            </section>
           </div>
         </details>
       </div>

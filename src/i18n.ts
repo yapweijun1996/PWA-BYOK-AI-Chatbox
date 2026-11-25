@@ -11,6 +11,9 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  Status: "状态",
+  Actions: "操作",
+  Update: "更新",
   "Luma Chat": "Luma Chat",
   U: "你",
   You: "你",

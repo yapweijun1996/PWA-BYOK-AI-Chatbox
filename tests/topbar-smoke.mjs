@@ -217,14 +217,58 @@ try {
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
   );
   await page.getByLabel("More actions").click();
-  await page.getByRole("button", { name: /Language/ }).waitFor();
-  await page.getByRole("button", { name: /Theme/ }).waitFor();
-  await page.getByRole("button", { name: /Theme/ }).click();
+  await page.getByRole("combobox", { name: "Change language" }).waitFor();
+  await page.getByRole("combobox", { name: "Change theme" }).selectOption("system");
   await waitForSavedSettings(page, { theme: "system" });
-  await page.getByLabel("More actions").click();
-  await page.getByRole("button", { name: /Language/ }).click();
+  await page.getByRole("combobox", { name: "Change language" }).selectOption("en");
   await waitForSavedSettings(page, { language: "en" });
+  await page.getByRole("combobox", { name: "Change theme" }).selectOption("dark");
+  await waitForSavedSettings(page, { theme: "dark" });
+  await page.getByRole("combobox", { name: "Change language" }).selectOption("zh-CN");
+  await waitForSavedSettings(page, { language: "zh-CN" });
+  await page.getByRole("region", { name: "状态" }).waitFor();
+  assert.equal(
+    await page.getByRole("combobox", { name: "切换主题" }).inputValue(),
+    "dark",
+  );
+  await page.getByRole("combobox", { name: "切换语言" }).selectOption("en");
+  await waitForSavedSettings(page, { language: "en" });
+  await page.getByRole("combobox", { name: "Change theme" }).selectOption("system");
+  await waitForSavedSettings(page, { theme: "system" });
+  assert.equal(
+    await page.getByRole("combobox", { name: "Change theme" }).inputValue(),
+    "system",
+  );
+  assert.equal(
+    await page
+      .locator(".topbar-menu button:visible, .topbar-menu select:visible")
+      .evaluateAll((nodes) =>
+        nodes.every((node) => node.getBoundingClientRect().height >= 44),
+      ),
+    true,
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await page
+      .getByLabel("More actions")
+      .evaluate((el) => document.activeElement === el),
+    true,
+  );
   await page.getByLabel("More actions").click();
+  await page.setViewportSize({ width: 568, height: 320 });
+  const menuBounds = await page.locator(".topbar-menu").boundingBox();
+  assert.ok(
+    menuBounds.x >= 0 &&
+      menuBounds.x + menuBounds.width <= 568 &&
+      menuBounds.y + menuBounds.height <= 320,
+  );
+  assert.equal(
+    await page
+      .locator(".topbar-menu")
+      .evaluate((element) => element.scrollHeight > element.clientHeight),
+    true,
+  );
+  await page.setViewportSize({ width: 320, height: 700 });
   await page.getByRole("button", { name: "Workspace Inspector" }).click();
   const inspector = page.getByRole("dialog", { name: "Workspace Inspector" });
   await inspector.waitFor();
@@ -271,7 +315,7 @@ try {
         standaloneLayout.paddingLeft >= 8 && standaloneLayout.paddingRight >= 8,
       );
       await appPage.getByLabel("More actions").click();
-      await appPage.getByRole("button", { name: /Theme/ }).waitFor();
+      await appPage.getByRole("combobox", { name: "Change theme" }).waitFor();
     } finally {
       await standalone.close();
     }
