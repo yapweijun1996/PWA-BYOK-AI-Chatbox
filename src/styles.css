@@ -859,6 +859,30 @@ select:focus-visible {
   line-height: 1.5;
   margin-bottom: 16px;
 }
+.memory-settings { margin-bottom: var(--space-medium); }
+.memory-settings textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.memory-list { list-style: none; padding: 0; }
+.memory-list li {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--color-border);
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
+.memory-list li > div:first-child { min-width: 0; flex: 1 1 180px; }
+.memory-list p { white-space: pre-wrap; }
+.memory-list .button-row { margin: 0; }
 .data-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

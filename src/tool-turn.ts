@@ -2,6 +2,8 @@ import { runJavascriptTool, toolTurnLimits } from "./javascript-tool";
 import type { ToolProgress } from "./javascript-tool";
 import type { ToolExchange, ToolRequest, ToolRound } from "./provider-tools";
 import type { ExecutionResult } from "./js-tool-runtime";
+import { localToolNames, runLocalTool } from "./local-tools";
+import type { Attachment } from "./types";
 
 /** Provider I/O stays with the caller; only the bounded tool transcript survives between requests in this turn. */
 export async function runToolTurn(
@@ -9,6 +11,7 @@ export async function runToolTurn(
   enabled: boolean,
   signal: AbortSignal,
   onProgress: ToolProgress,
+  attachments: readonly Attachment[] = [],
 ) {
   if (!enabled) {
     await stream();
@@ -30,12 +33,9 @@ export async function runToolTurn(
     for (const call of round.calls) {
       signal.throwIfAborted();
       results.push(
-        await runJavascriptTool(
-          call,
-          signal,
-          onProgress,
-          calls++ < toolTurnLimits.calls,
-        ),
+        localToolNames.includes(call.name)
+          ? await runLocalTool(call, signal, onProgress, calls++ < toolTurnLimits.calls, attachments)
+          : await runJavascriptTool(call, signal, onProgress, calls++ < toolTurnLimits.calls),
       );
     }
     signal.throwIfAborted();

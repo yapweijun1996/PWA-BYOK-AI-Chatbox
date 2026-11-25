@@ -11,6 +11,13 @@ const statusLabels = {
   cancelled: "Cancelled",
   limit: "Limit reached",
 } as const;
+const toolLabels: Record<string, string> = {
+  time_tool: "Time",
+  calculate: "Calculation",
+  analyze_file: "File analysis",
+  text_tool: "Text processing",
+  memory_tool: "Local memory",
+};
 
 export function ToolExecutionCard({
   execution,
@@ -23,7 +30,7 @@ export function ToolExecutionCard({
   const result = execution.result;
   const status = result
     ? t(statusLabels[result.status])
-    : t("Running JavaScript");
+    : t(execution.name === "javascript.execute" ? "Running JavaScript" : "Running tool");
   return (
     <details
       className="tool-execution"
@@ -31,7 +38,7 @@ export function ToolExecutionCard({
     >
       <summary>
         <Code2 size={16} aria-hidden="true" />
-        <strong>{execution.name}</strong>
+        <strong>{t(toolLabels[execution.name] ?? execution.name)}</strong>
         <span role="status" aria-live="polite">
           {status}
         </span>
@@ -45,8 +52,8 @@ export function ToolExecutionCard({
       <div className="tool-execution-body">
         {execution.code && (
           <>
-            <h4>{t("JavaScript source")}</h4>
-            <pre tabIndex={0} aria-label={t("JavaScript source")}>
+            <h4>{t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}</h4>
+            <pre tabIndex={0} aria-label={t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}>
               <code>{execution.code}</code>
             </pre>
           </>

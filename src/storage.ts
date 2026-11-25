@@ -263,6 +263,57 @@ export const storage = {
       listeners.delete(listener);
     };
   },
+  async listMemories() {
+    const db = await open();
+    return new Promise<{ key: string; value: string }[]>((resolve, reject) => {
+      const tx = db.transaction("settings", "readonly");
+      const store = tx.objectStore("settings");
+      const range = IDBKeyRange.bound("memory:", "memory;", false, true);
+      const keys = store.getAllKeys(range);
+      const values = store.getAll(range);
+      tx.oncomplete = () => resolve(keys.result.flatMap((key, index) =>
+        typeof key === "string" && key.startsWith("memory:") && typeof values.result[index] === "string"
+          ? [{ key: key.slice(7), value: values.result[index] as string }]
+          : [],
+      ));
+      tx.onabort = () => reject(tx.error ?? new Error("Could not read memories."));
+    });
+  },
+  async saveMemory(key: string, value: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    if (!key.trim() || key.length > 120 || !value.trim() || value.length > 2000)
+      throw new Error("Memory requires a key of at most 120 characters and a value of at most 2000 characters.");
+    await writeTransaction("settings", (tx, abortWrite) => {
+      signal?.throwIfAborted();
+      const abort = () => { try { tx.abort(); } catch {} };
+      signal?.addEventListener("abort", abort, { once: true });
+      tx.addEventListener("complete", () => signal?.removeEventListener("abort", abort));
+      tx.addEventListener("abort", () => signal?.removeEventListener("abort", abort));
+      const store = tx.objectStore("settings");
+      const storageKey = `memory:${key.trim()}`;
+      readThen(store.getKey(storageKey), abortWrite, (existing) => {
+        if (existing !== undefined) {
+          store.put(value, storageKey);
+          return;
+        }
+        readThen(store.count(IDBKeyRange.bound("memory:", "memory;", false, true)), abortWrite, (count) => {
+          if (count >= 100) throw new Error("Memory limit reached.");
+          store.put(value, storageKey);
+        });
+      });
+    });
+  },
+  async deleteMemory(key: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    await writeTransaction("settings", (tx) => {
+      signal?.throwIfAborted();
+      const abort = () => { try { tx.abort(); } catch {} };
+      signal?.addEventListener("abort", abort, { once: true });
+      tx.addEventListener("complete", () => signal?.removeEventListener("abort", abort));
+      tx.addEventListener("abort", () => signal?.removeEventListener("abort", abort));
+      tx.objectStore("settings").delete(`memory:${key}`);
+    });
+  },
   // Archiving the selected chat also commits its replacement selection (or none).
   async saveConversation(value: Conversation, nextActive?: string) {
     const expected = observed.get(value.id);

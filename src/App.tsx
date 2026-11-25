@@ -33,6 +33,7 @@ import { PreferenceFields } from "./components/Preferences";
 import { Toast } from "./components/Toast";
 import { ResponseInspector } from "./components/ResponseInspector";
 import { ToolExecutionCard } from "./components/ToolExecutionCard";
+import { MemorySettings } from "./components/MemorySettings";
 import { RichMessage } from "./components/RichMessage";
 import { copyMessage } from "./message-copy";
 import { interpolate, translate, translateNotice } from "./i18n";
@@ -602,16 +603,16 @@ function App({
                   <button
                     className="icon composer-reasoning"
                     type="button"
-                    aria-label={t("JavaScript tool for next reply")}
+                    aria-label={t("Local tools for next reply")}
                     aria-pressed={javascriptEnabled}
                     disabled={!chat || working}
                     title={t(
-                      "Allow the model to run local JavaScript and receive its results for this reply. Requires a tool-capable model.",
+                      "Enable local JavaScript, time, calculation, file, text and memory tools for this reply. Results are sent to the selected model.",
                     )}
                     onClick={toggleJavaScript}
                   >
                     <Code2 size={17} aria-hidden="true" />
-                    <span>JS</span>
+                    <span>{t("Tools")}</span>
                   </button>
                   {reasoningAvailable && (
                     <button
@@ -917,6 +918,7 @@ function App({
                 <p className="subtitle">
                   {t("Manage your chats, attachments, and browser storage.")}
                 </p>
+                <MemorySettings locale={locale} disabled={clearing || working || navigating || processingFiles} />
                 <div className="data-grid">
                   <div className="card">
                     <h2>{t("Local storage")}</h2>

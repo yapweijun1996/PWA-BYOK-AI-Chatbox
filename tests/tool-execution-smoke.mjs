@@ -121,7 +121,7 @@ try {
   await page.getByRole("button", { name: "Use key", exact: true }).click();
   await page.getByRole("button", { name: "Back to chat" }).click();
   const toggle = page.getByRole("button", {
-    name: "JavaScript tool for next reply",
+    name: "Local tools for next reply",
   });
   const send = async (text) => {
     await page

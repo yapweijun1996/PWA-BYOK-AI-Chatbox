@@ -142,8 +142,8 @@ export function useWorkspace({
     setArmedChat(javascriptEnabled ? undefined : active);
     setNotice(
       javascriptEnabled
-        ? "JavaScript tool disabled for the next reply."
-        : "JavaScript enabled for the next reply. Code runs locally; results go to the selected provider.",
+        ? "Local tools disabled for the next reply."
+        : "Local tools enabled for the next reply. Results go to the selected provider.",
     );
   };
   const drawerToggle = useRef<HTMLButtonElement>(null);
@@ -969,6 +969,7 @@ export function useWorkspace({
             : [...executions, record];
           publish("streaming", true);
         },
+        history.flatMap((message) => message.role === "user" ? message.attachments ?? [] : []),
       );
       terminal = abort.signal.aborted ? "interrupted" : "complete";
     } catch (e) {
@@ -1451,7 +1452,7 @@ export function useWorkspace({
       !confirm(
         [
           t(
-            "Permanently delete all local chats, attachments, settings, and saved keys?",
+            "Permanently delete all local chats, attachments, memories, settings, and saved keys?",
           ),
           t(
             "Other open tabs keep their in-memory drafts and keys. Close them to end those sessions.",

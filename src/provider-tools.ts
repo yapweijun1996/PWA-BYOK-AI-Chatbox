@@ -7,6 +7,7 @@ import {
 import type { ToolCall } from "./javascript-tool";
 import type { ExecutionResult } from "./js-tool-runtime";
 import { executionLimits } from "./js-tool-runtime/protocol";
+import { localToolDefinitions } from "./local-tools";
 
 const maxArguments = executionLimits.sourceChars * 6 + 256;
 export const maxToolReplayChars = 96 * 1024;
@@ -44,7 +45,7 @@ export function openAIToolFields(
   if (!tool) return { options: {}, tail: [] };
   return {
     options: {
-      tools: [{ type: "function", function: definition }],
+      tools: [definition, ...localToolDefinitions].map((fn) => ({ type: "function", function: fn })),
       tool_choice: tool.allowCalls ? "auto" : "none",
     },
     tail: tool.exchanges.flatMap(({ round, results }) => [
@@ -73,7 +74,7 @@ export function geminiToolFields(tool: ToolRequest | undefined) {
   if (!tool) return { options: {}, tail: [] };
   return {
     options: {
-      tools: [{ functionDeclarations: [definition] }],
+      tools: [{ functionDeclarations: [definition, ...localToolDefinitions] }],
       toolConfig: {
         functionCallingConfig: { mode: tool.allowCalls ? "AUTO" : "NONE" },
       },

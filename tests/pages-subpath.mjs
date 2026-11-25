@@ -116,6 +116,22 @@ try {
     pngIcons.map(({ sizes }) => sizes),
   );
   const name = await onlyShellCache(page, url);
+  assert.equal(await page.evaluate(async (name) => {
+    const cache = await caches.open(name);
+    const entry = (await cache.keys()).find(({ url }) => /\/local-file\.worker-.*\.js$/.test(url));
+    if (!entry) return false;
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(entry.url, { type: "module" });
+      const timer = setTimeout(() => { worker.terminate(); reject(new Error("Offline file worker timed out")); }, 5000);
+      worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error("Offline file worker failed")); };
+      worker.onmessage = ({ data }) => {
+        clearTimeout(timer);
+        worker.terminate();
+        resolve(data.rows === 2);
+      };
+      worker.postMessage({ name: "test.csv", text: "a,b\n1,2\n", operation: "summary", offset: 0 });
+    });
+  }, name), true);
   const offlineFont = await page.evaluate(async (name) => {
     const cache = await caches.open(name);
     const font = (await cache.keys()).find(({ url }) =>

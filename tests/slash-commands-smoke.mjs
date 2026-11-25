@@ -43,7 +43,7 @@ try {
   await input.press("Enter");
   assert.equal(
     await page
-      .getByRole("button", { name: "JavaScript tool for next reply" })
+      .getByRole("button", { name: "Local tools for next reply" })
       .getAttribute("aria-pressed"),
     "true",
   );
@@ -51,7 +51,7 @@ try {
   await input.press("Enter");
   assert.equal(
     await page
-      .getByRole("button", { name: "JavaScript tool for next reply" })
+      .getByRole("button", { name: "Local tools for next reply" })
       .getAttribute("aria-pressed"),
     "false",
   );

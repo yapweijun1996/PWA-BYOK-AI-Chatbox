@@ -57,8 +57,11 @@ describe("provider-independent JavaScript tool calling", () => {
         allowCalls: true,
         exchanges: [{ round, results: [result] }],
       });
+      expect((body as { tools: { function: { name: string } }[] }).tools.map((tool) => tool.function.name)).toEqual([
+        "javascript_execute", "time_tool", "calculate", "analyze_file", "text_tool", "memory_tool",
+      ]);
       expect(body).toMatchObject({
-        tools: [{ type: "function", function: { name: providerToolName } }],
+        tools: expect.arrayContaining([expect.objectContaining({ type: "function", function: expect.objectContaining({ name: providerToolName }) })]),
         tool_choice: "auto",
         messages: [
           { role: "user" },
@@ -108,8 +111,11 @@ describe("provider-independent JavaScript tool calling", () => {
       allowCalls: false,
       exchanges: [{ round, results: [result] }],
     });
+    expect((body as { tools: { functionDeclarations: { name: string }[] }[] }).tools[0].functionDeclarations.map((tool) => tool.name)).toEqual([
+      "javascript_execute", "time_tool", "calculate", "analyze_file", "text_tool", "memory_tool",
+    ]);
     expect(body).toMatchObject({
-      tools: [{ functionDeclarations: [{ name: providerToolName }] }],
+      tools: [{ functionDeclarations: expect.arrayContaining([expect.objectContaining({ name: providerToolName })]) }],
       toolConfig: { functionCallingConfig: { mode: "NONE" } },
       contents: [
         { role: "user" },
@@ -220,6 +226,10 @@ describe("provider-independent JavaScript tool calling", () => {
       toolExecutions: [{ result: { status: "cancelled" } }],
     });
     expect(validToolExecutions([{ ...record, result }])).toBe(true);
+    for (const name of ["time_tool", "calculate", "analyze_file", "text_tool", "memory_tool"]) {
+      expect(validToolExecutions([{ ...record, name, code: "{}", result }])).toBe(true);
+    }
+    expect(validToolExecutions([{ ...record, name: "unknown_tool", result }])).toBe(false);
     expect(
       validToolExecutions([
         {

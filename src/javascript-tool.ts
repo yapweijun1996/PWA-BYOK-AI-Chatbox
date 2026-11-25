@@ -5,6 +5,7 @@ import {
   failure,
 } from "./js-tool-runtime/protocol";
 import type { ExecutionResult } from "./js-tool-runtime";
+import { localToolNames } from "./local-tools";
 
 export const javascriptToolName = "javascript.execute";
 // Function names on provider APIs cannot reliably contain a dot.
@@ -31,7 +32,7 @@ export type ToolCall = Readonly<{
 }>;
 export type ToolExecution = Readonly<{
   id: string;
-  name: typeof javascriptToolName;
+  name: string;
   code: string;
   startedAt: number;
   result?: ExecutionResult;
@@ -111,7 +112,7 @@ export function validToolExecutions(value: unknown): value is ToolExecution[] {
       typeof item.id !== "string" ||
       item.id.length > 160 ||
       unique.has(item.id) ||
-      item.name !== javascriptToolName ||
+      (item.name !== javascriptToolName && !localToolNames.includes(item.name)) ||
       typeof item.code !== "string" ||
       item.code.length > executionLimits.sourceChars ||
       !numeric(item.startedAt)
