@@ -3,7 +3,7 @@ import { ArchiveRestore, MessageSquare, Search, X } from "lucide-react";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import type { Conversation, WorkspaceProject } from "../types";
-import { searchConversations } from "../workspace";
+import { searchWorkspace, type WorkspaceSearchResult } from "../workspace";
 
 export type SearchMode = "active" | "archived";
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
   chats: Conversation[];
   projects: WorkspaceProject[];
   onClose: () => void;
-  onChoose: (id: string) => void;
+  onChoose: (id: string, messageId?: string) => Promise<string | undefined>;
   restoreDisabled: boolean;
   onRestore: (id: string) => Promise<boolean>;
 };
@@ -33,18 +33,37 @@ export function WorkspaceSearch({
   const field = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState(initialMode);
   const [query, setQuery] = useState("");
+  const [opening, setOpening] = useState(false);
+  const openingRef = useRef(false);
+  const [openError, setOpenError] = useState("");
   const [restoreState, setRestoreState] = useState<
     "idle" | "pending" | "failed"
   >("idle");
   const results = useMemo(
-    () => searchConversations(chats, query, mode === "archived", projects),
+    () => searchWorkspace(chats, query, mode === "archived", projects),
     [chats, query, mode, projects],
   );
-  const close = () => dialog.current?.close();
-  const choose = (chatId: string) => {
-    if (restoreState === "pending") return;
-    close();
-    onChoose(chatId);
+  const close = () => {
+    if (!openingRef.current) dialog.current?.close();
+  };
+  const choose = async (result: WorkspaceSearchResult) => {
+    if (restoreState === "pending" || openingRef.current) return;
+    openingRef.current = true;
+    setOpening(true);
+    setOpenError("");
+    try {
+      const error = await onChoose(result.chat.id, result.message?.id);
+      if (error) {
+        setOpenError(error);
+        requestAnimationFrame(() => field.current?.focus());
+      } else dialog.current?.close();
+    } catch {
+      setOpenError("Could not open this message. Your work is unchanged.");
+      requestAnimationFrame(() => field.current?.focus());
+    } finally {
+      openingRef.current = false;
+      setOpening(false);
+    }
   };
   useLayoutEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
@@ -56,19 +75,28 @@ export function WorkspaceSearch({
       className="workspace-dialog workspace-search"
       aria-labelledby={titleId}
       ref={dialog}
+      aria-busy={opening || undefined}
       onClose={onClose}
+      onCancel={(event) => {
+        if (openingRef.current) event.preventDefault();
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
+        if (event.key === "Escape") {
+          event.preventDefault();
+          close();
+          return;
+        }
         if (
           event.key === "Enter" &&
           event.target === field.current &&
           results[0]
         ) {
           event.preventDefault();
-          choose(results[0].id);
+          void choose(results[0]);
           return;
         }
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -100,6 +128,7 @@ export function WorkspaceSearch({
             className="icon"
             type="button"
             aria-label={t("Close")}
+            disabled={opening}
             onClick={close}
           >
             <X size={20} aria-hidden="true" />
@@ -113,7 +142,11 @@ export function WorkspaceSearch({
             placeholder={t("Search chats...")}
             ref={field}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            disabled={opening}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpenError("");
+            }}
           />
         </label>
         <div
@@ -123,40 +156,81 @@ export function WorkspaceSearch({
         >
           <button
             aria-pressed={mode === "active"}
-            onClick={() => setMode("active")}
+            disabled={opening}
+            onClick={() => {
+              setMode("active");
+              setOpenError("");
+            }}
           >
             {t("Conversations")}
           </button>
           <button
             aria-pressed={mode === "archived"}
-            onClick={() => setMode("archived")}
+            disabled={opening}
+            onClick={() => {
+              setMode("archived");
+              setOpenError("");
+            }}
           >
             {t("Archived")}
           </button>
         </div>
         <ul className="workspace-results">
-          {results.map((chat) => {
+          {results.map((result) => {
+            const { chat, message, snippet } = result;
             const title =
               chat.title === "New chat" ? t("New chat") : chat.title;
             const project = projects.find(({ id }) => id === chat.projectId);
             return (
-              <li className="search-result" key={chat.id}>
+              <li
+                className="search-result"
+                key={JSON.stringify([chat.id, message?.id ?? null])}
+              >
                 <button
                   className="search-result-open"
-                  disabled={restoreState === "pending"}
-                  onClick={() => choose(chat.id)}
+                  disabled={restoreState === "pending" || opening}
+                  aria-label={
+                    message
+                      ? `${title} · ${t("Message match")} · ${t(message.role === "user" ? "You" : "Luma Chat")} · ${snippet}${Number.isFinite(new Date(message.createdAt).getTime()) ? ` · ${new Date(message.createdAt).toLocaleString(locale)}` : ""}`
+                      : `${title} · ${t("Conversation match")}${project ? ` · ${project.name}` : ""}`
+                  }
+                  onClick={() => void choose(result)}
                 >
                   <MessageSquare size={16} aria-hidden="true" />
                   <span>
                     {title}
                     {project && <small>{project.name}</small>}
+                    <small>
+                      {message
+                        ? `${t("Message match")} · ${t(message.role === "user" ? "You" : "Luma Chat")}`
+                        : t("Conversation match")}
+                    </small>
+                    {message && (
+                      <small className="search-message-snippet">
+                        {snippet}
+                      </small>
+                    )}
+                    {message &&
+                      Number.isFinite(
+                        new Date(message.createdAt).getTime(),
+                      ) && (
+                        <small>
+                          <time
+                            dateTime={new Date(message.createdAt).toISOString()}
+                          >
+                            {new Date(message.createdAt).toLocaleString(locale)}
+                          </time>
+                        </small>
+                      )}
                   </span>
                 </button>
                 {mode === "archived" && (
                   <button
                     className="icon"
                     aria-label={interpolate(t("Restore {name}"), title)}
-                    disabled={restoreDisabled || restoreState === "pending"}
+                    disabled={
+                      restoreDisabled || restoreState === "pending" || opening
+                    }
                     onClick={async () => {
                       setRestoreState("pending");
                       field.current?.focus();
@@ -172,6 +246,16 @@ export function WorkspaceSearch({
             );
           })}
         </ul>
+        {opening && (
+          <p className="hint" role="status">
+            {t("Opening search result…")}
+          </p>
+        )}
+        {openError && (
+          <p className="hint" role="alert">
+            {t(openError)}
+          </p>
+        )}
         {restoreState !== "idle" && (
           <p className="hint" role="status">
             {t(

@@ -141,6 +141,9 @@ export function useWorkspace({
     () => matchMedia("(min-width: 768px)").matches,
   );
   const [searchMode, setSearchMode] = useState<SearchMode | null>(null);
+  const [searchMatch, setSearchMatch] = useState<{ chatId: string; messageId: string; sequence: number }>();
+  const searchSequence = useRef(0);
+  const clearSearchMatch = useCallback((sequence: number) => setSearchMatch((current) => current?.sequence === sequence ? undefined : current), []);
   const [inspecting, setInspecting] = useState(false);
   const javascriptEnabled = settings.localToolsEnabled;
   const toggleJavaScript = () => {
@@ -591,12 +594,44 @@ export function useWorkspace({
       }));
       setView("chat");
       if (mobileDrawer) closeDrawer();
+      return true;
     } finally {
       session.update({ navigating: false });
     }
   };
   const create = () => void navigateChat();
   const choose = (chatId: string) => void navigateChat(chatId);
+  const openSearchResult = async (chatId: string, messageId?: string): Promise<string | undefined> => {
+    if (!messageId) return (await navigateChat(chatId)) ? undefined : "Could not open this conversation. Your work is unchanged.";
+    const initial = session.get();
+    if (initial.reply || initial.processingFiles || initial.navigating) return "Finish the current reply or attachment task before opening a message result.";
+    if (initial.conflicts.has(initial.active) || initial.conflicts.has(chatId) || initial.replySaves.has(initial.active) || initial.replySaves.has(chatId)) return "Save or resolve the local conflict before opening a message result.";
+    const initialTarget = initial.threads.find((item) => item.id === chatId);
+    if (!initialTarget?.messages.some((item) => item.id === messageId)) return "This message is no longer available.";
+    const changingBranch = !activePath(initialTarget).some((item) => item.id === messageId);
+    if (changingBranch && (selectActiveChat(initial)?.editState || initialTarget.editState)) return "Finish or cancel editing before changing branches.";
+    session.update({ navigating: true });
+    try {
+      const outgoing = flushDraft(initial.active) ?? writes.current[initial.active];
+      if (outgoing && !(await outgoing)) return "Could not save the current draft. Your work is unchanged.";
+      if (chatId !== initial.active) {
+        const pendingTarget = flushDraft(chatId) ?? writes.current[chatId];
+        if (pendingTarget && !(await pendingTarget)) return "Could not save the target draft. Your work is unchanged.";
+      }
+      const target = session.get().threads.find((item) => item.id === chatId);
+      if (!target?.messages.some((item) => item.id === messageId)) return "This message is no longer available.";
+      const changed = !activePath(target).some((item) => item.id === messageId);
+      const selected = changed ? selectBranch(target, messageId) : target;
+      const saved = await queuePreferenceWrite(() => storage.openSearchResult(selected, changed));
+      if (!saved) return "Could not open this message. Your work is unchanged.";
+      followReply.current = false;
+      session.update((latest) => ({ threads: changed ? latest.threads.map((item) => item.id === chatId ? selected : item) : latest.threads, active: chatId }));
+      setView("chat");
+      if (mobileDrawer) closeDrawer();
+      setSearchMatch({ chatId, messageId, sequence: ++searchSequence.current });
+      return undefined;
+    } finally { session.update({ navigating: false }); }
+  };
   const remove = async (chatId: string) => {
     if (
       session.get().reply ||
@@ -1727,6 +1762,9 @@ export function useWorkspace({
     closeDrawer,
     create,
     choose,
+    openSearchResult,
+    searchMatch,
+    clearSearchMatch,
     openSettings,
     saveSettings,
     organizeChat,

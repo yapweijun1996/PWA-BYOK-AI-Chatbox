@@ -363,6 +363,7 @@ select:focus-visible {
   margin-bottom: 28px;
   min-width: 0;
 }
+.message[data-search-match="true"] .bubble { outline: 2px solid var(--color-focus); outline-offset: 3px; }
 .message.user .avatar {
   background: var(--color-user-bg);
   color: var(--color-user-text);

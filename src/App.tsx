@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Paperclip,
   Sparkles,
@@ -107,6 +107,9 @@ function App({
     closeDrawer,
     create,
     choose,
+    openSearchResult,
+    searchMatch,
+    clearSearchMatch,
     openSettings,
     saveSettings,
     organizeChat,
@@ -193,6 +196,23 @@ function App({
     redact,
   } = workspace;
   const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat]);
+  const focusedSearchSequence = useRef(0);
+  useEffect(() => {
+    if (!searchMatch) return;
+    const timer = window.setTimeout(() => clearSearchMatch(searchMatch.sequence), 5000);
+    return () => clearTimeout(timer);
+  }, [searchMatch, clearSearchMatch]);
+  useEffect(() => {
+    if (!searchMatch || searchMode || active !== searchMatch.chatId || view !== "chat" || focusedSearchSequence.current === searchMatch.sequence) return;
+    const frame = requestAnimationFrame(() => {
+      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-id]")).find((element) => element.dataset.messageId === searchMatch.messageId);
+      if (!target) return;
+      focusedSearchSequence.current = searchMatch.sequence;
+      target.scrollIntoView({ block: "center", behavior: "auto" });
+      target.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [searchMatch, searchMode, active, view]);
   useLayoutEffect(() => {
     if (!pwa.applying) return;
     const blockInput = (event: KeyboardEvent) => {
@@ -347,6 +367,8 @@ function App({
                       className={`message ${m.role}`}
                       key={m.id}
                       data-message-id={m.id}
+                      data-search-match={searchMatch?.chatId === chat.id && searchMatch.messageId === m.id || undefined}
+                      tabIndex={-1}
                     >
                       <div className="avatar">
                         {m.role === "user" ? <UserRound size={19} aria-hidden="true" /> : <Sparkles size={19} aria-hidden="true" />}
@@ -1140,7 +1162,7 @@ function App({
           chats={threads}
           projects={settings.projects}
           onClose={() => setSearchMode(null)}
-          onChoose={choose}
+          onChoose={openSearchResult}
           restoreDisabled={working || processingFiles || navigating}
           onRestore={(chatId) => organizeChat(chatId, { archived: false })}
         />

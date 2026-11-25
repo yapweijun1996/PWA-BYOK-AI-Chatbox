@@ -6,6 +6,7 @@ import {
   mergeProjects,
   normalizeSidebarWidth,
   searchConversations,
+  searchWorkspace,
 } from "../src/workspace";
 import type { Conversation } from "../src/types";
 
@@ -59,6 +60,29 @@ describe("workspace data contracts", () => {
     expect(searchConversations([a, b], "keyword", true, [project])).toEqual([
       b,
     ]);
+  });
+
+  it("returns separate, bounded message hits without duplicating shared messages", () => {
+    const c = chat("c", {
+      title: "needle topic",
+      messages: [
+        {
+          id: "shared",
+          role: "user",
+          content: `prefix ${"x".repeat(200)} needle shared suffix`,
+          createdAt: 1,
+        },
+        { id: "a", role: "assistant", content: "needle one", createdAt: 2 },
+        { id: "b", role: "assistant", content: "needle two", createdAt: 3 },
+      ],
+    });
+    const results = searchWorkspace([c], "NEEDLE", false, []);
+    expect(results.map((entry) => entry.message?.id ?? "conversation")).toEqual(
+      ["conversation", "shared", "a", "b"],
+    );
+    expect(results[1].snippet).toContain("needle shared");
+    expect(results[1].snippet!.length).toBeLessThanOrEqual(162);
+    expect(searchWorkspace([c], "", false, [])).toEqual([{ chat: c }]);
   });
 
   it("restores bounded preferences and accepts existing version-1 backups", () => {

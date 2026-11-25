@@ -341,6 +341,19 @@ export const storage = {
     );
     observe(row);
   },
+  async openSearchResult(value: Conversation, changed: boolean) {
+    const expected = observed.get(value.id);
+    const row = changed ? { ...value, localRevision: crypto.randomUUID() } : undefined;
+    await writeTransaction(["conversations", "settings"], (tx, abort) => {
+      const chats = tx.objectStore("conversations");
+      readThen(chats.get(value.id), abort, (stored: StoredChat | undefined) => {
+        if (!matches(expected, stored)) throw new ConversationConflictError(value.id);
+        if (row) chats.put(row);
+        tx.objectStore("settings").put(value.id, ACTIVE_KEY);
+      });
+    });
+    if (row) observe(row);
+  },
   // Compare previewed records inside the write transaction, not in a separate
   // preflight read. Legacy v1 records have no reliable modification counter.
   async importBackup(plan: {

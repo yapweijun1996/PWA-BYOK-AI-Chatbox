@@ -11,6 +11,16 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Message match": "消息匹配",
+  "Conversation match": "会话匹配",
+  "Opening search result…": "正在打开搜索结果…",
+  "Could not open this conversation. Your work is unchanged.": "无法打开此会话，你的内容未被更改。",
+  "Could not open this message. Your work is unchanged.": "无法打开此消息，你的内容未被更改。",
+  "Finish the current reply or attachment task before opening a message result.": "请先完成当前回复或附件处理，再打开消息结果。",
+  "Save or resolve the local conflict before opening a message result.": "请先保存内容或解决本地冲突，再打开消息结果。",
+  "This message is no longer available.": "此消息已不存在。",
+  "Could not save the current draft. Your work is unchanged.": "无法保存当前草稿，你的内容未被更改。",
+  "Could not save the target draft. Your work is unchanged.": "无法保存目标草稿，你的内容未被更改。",
   "Only the selected branch and its attachments are sent.": "只会发送所选分支及其附件。",
   "Finish or cancel editing before changing branches.": "请先完成或取消编辑，再切换分支。",
   "The edited message is no longer available.": "正在编辑的消息已不存在。",

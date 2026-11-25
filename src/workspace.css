@@ -357,6 +357,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.search-result-open .search-message-snippet { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .search-result-open small {
   display: block;
   color: var(--color-muted);

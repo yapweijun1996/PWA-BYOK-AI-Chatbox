@@ -1,4 +1,5 @@
 import type { Conversation, WorkspaceProject } from "./types";
+import type { Message } from "./types";
 
 export const sidebarWidth = { min: 224, default: 264, max: 440 } as const;
 export const projectNameLimit = 80;
@@ -77,6 +78,51 @@ export function searchConversations(
           )),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export type WorkspaceSearchResult = {
+  chat: Conversation;
+  message?: Message;
+  snippet?: string;
+};
+export function searchWorkspace(
+  chats: Conversation[],
+  query: string,
+  archived: boolean,
+  projects: WorkspaceProject[],
+): WorkspaceSearchResult[] {
+  const needle = query.trim().toLowerCase();
+  const names = new Map(
+    projects.map((project) => [project.id, project.name.toLowerCase()]),
+  );
+  const result: WorkspaceSearchResult[] = [];
+  for (const chat of [...chats]
+    .filter((item) => Boolean(item.archived) === archived)
+    .sort((a, b) => b.updatedAt - a.updatedAt)) {
+    if (
+      !needle ||
+      chat.title.toLowerCase().includes(needle) ||
+      Boolean(chat.projectId && names.get(chat.projectId)?.includes(needle))
+    )
+      result.push({ chat });
+    if (!needle) continue;
+    for (const message of chat.messages) {
+      const index = message.content.toLowerCase().indexOf(needle);
+      if (index < 0) continue;
+      const start = Math.max(0, index - 40);
+      const end = Math.min(
+        message.content.length,
+        start + 160,
+        Math.max(index + needle.length, start + 120),
+      );
+      result.push({
+        chat,
+        message,
+        snippet: `${start ? "…" : ""}${message.content.slice(start, end).replace(/\s+/g, " ")}${end < message.content.length ? "…" : ""}`,
+      });
+    }
+  }
+  return result;
 }
 
 export function mostRecentVisible(
