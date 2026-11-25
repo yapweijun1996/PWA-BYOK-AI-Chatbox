@@ -54,14 +54,15 @@ try {
     assert.ok(Math.abs(effort.top - send.top) <= 1 && Math.abs(effort.bottom - send.bottom) <= 1, `${stage} ${width}: effort and send heights differ`);
     assert.ok(model.width >= 90, `${stage} ${width}: model name too narrow`);
     if (width <= 520) assert.ok(effort.width >= 132, `${stage} ${width}: effort label too narrow`);
+    else assert.ok(effort.width >= 148, `${stage} ${width}: effort selector shrank`);
     assert.ok(Math.abs(data.firstText.top - data.icon.top) < 8, `${stage} ${width}: privacy icon detached`);
   };
-  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 600]) await check(width, "empty");
+  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 522, 540, 600, 767]) await check(width, "empty");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Hello");
   await page.getByRole("button", { name: "Send message" }).click();
   await page.getByText("Hello", { exact: true }).last().waitFor();
   await page.locator(".message.assistant").getByText("Saved locally").waitFor();
-  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 600]) await check(width, "conversation");
+  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 522, 540, 600, 767]) await check(width, "conversation");
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: "Expand message editor" }).click();
   await page.waitForFunction(() => document.querySelector(".composer[data-expanded=true] textarea") === document.activeElement);

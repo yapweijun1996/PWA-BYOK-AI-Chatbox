@@ -1303,6 +1303,14 @@ select:focus-visible {
     padding-top: 10vh;
   }
 }
+/* On wider phones the single-row toolbar must not shrink the selected label. */
+@media (min-width: 521px) and (max-width: 767px) {
+  .composer-actions .composer-effort-wrap {
+    width: 148px;
+    max-width: 148px;
+    flex: 0 0 148px;
+  }
+}
 /* Keep the model and effort labels readable on narrow phones. */
 @media (max-width: 520px) {
   .composer-actions {
