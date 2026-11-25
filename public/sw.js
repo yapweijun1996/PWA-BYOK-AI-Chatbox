@@ -1,5 +1,6 @@
 // Vite fills these with the final build identity and [relative URL, SRI] pairs.
 const REVISION = "__LUMA_REVISION__";
+const APP_VERSION = "__LUMA_APP_VERSION__";
 const PRECACHE = /* __LUMA_PRECACHE__ */ [];
 const scope = self.registration.scope;
 // Unlike the old luma-shell-* namespace, this cannot be swept by a legacy worker.
@@ -17,6 +18,13 @@ const pinnedRequest = (url) =>
     cache: "reload",
     integrity: assets.get(url),
   });
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "LUMA_GET_VERSION" && event.ports[0]) {
+    event.ports[0].postMessage({ version: APP_VERSION });
+    event.ports[0].close();
+  }
+});
 
 async function installShell() {
   if (!assets.has(shell)) throw new Error("Missing built shell manifest");

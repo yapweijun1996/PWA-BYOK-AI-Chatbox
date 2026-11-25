@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Sparkles, X } from "lucide-react";
 import { translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
 import { compactModelName } from "../model-options";
@@ -20,6 +20,8 @@ export function ModelSelector({
   onSelect,
   onSettings,
   triggerRef,
+  topbarStatus,
+  modelId,
 }: {
   locale: Locale;
   autoFocusSearch: boolean;
@@ -30,6 +32,8 @@ export function ModelSelector({
   onSelect: (provider: ProviderId, option: ModelOption) => void;
   onSettings: () => void;
   triggerRef?: RefObject<HTMLButtonElement | null>;
+  topbarStatus?: string;
+  modelId?: string;
 }) {
   const t = (text: string) => translate(locale, text);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -72,14 +76,25 @@ export function ModelSelector({
   return (
     <>
       <button
-        className="model-pill"
+        className={`model-pill${topbarStatus ? " topbar-model" : ""}`}
+        data-model-id={topbarStatus ? modelId : undefined}
         type="button"
         ref={(element) => {
           trigger.current = element;
           if (triggerRef) triggerRef.current = element;
         }}
-        title={selected?.id || name}
-        aria-label={selected ? `${t("Choose model")} · ${name}` : name}
+        title={
+          topbarStatus
+            ? `${labels[provider]} · ${modelId || name} · ${t(topbarStatus)}`
+            : selected?.id || name
+        }
+        aria-label={
+          topbarStatus
+            ? `${t("Choose model in topbar")} · ${labels[provider]} · ${name} · ${t(topbarStatus)}`
+            : selected
+              ? `${t("Choose model")} · ${name}`
+              : name
+        }
         aria-haspopup="dialog"
         aria-controls={id}
         onClick={() => {
@@ -89,8 +104,16 @@ export function ModelSelector({
           if (autoFocusSearch) search.current?.focus();
         }}
       >
+        {topbarStatus && <Sparkles size={18} aria-hidden="true" />}
         <span>{name}</span>
-        <ChevronDown size={15} aria-hidden="true" />
+        {topbarStatus && (
+          <span
+            className="provider-dot"
+            data-state={topbarStatus}
+            title={t(topbarStatus)}
+          />
+        )}
+        <ChevronDown size={topbarStatus ? 18 : 15} aria-hidden="true" />
       </button>
       <dialog
         className="model-dialog"

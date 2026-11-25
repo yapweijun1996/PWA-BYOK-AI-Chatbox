@@ -132,7 +132,22 @@ try {
   await draft.fill(unsent);
   await waitForSavedConversation(page, { draft: unsent });
   const appVersion = JSON.parse(await readFile("package.json", "utf8")).version;
+  const workerVersion = await page.evaluate(async () => {
+    const worker = (await navigator.serviceWorker.ready).active;
+    return new Promise((resolve, reject) => {
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => reject(new Error("Worker version timed out")), 5000);
+      channel.port1.onmessage = ({ data }) => {
+        clearTimeout(timer);
+        channel.port1.close();
+        resolve(data.version);
+      };
+      worker.postMessage({ type: "LUMA_GET_VERSION" }, [channel.port2]);
+    });
+  });
+  assert.equal(workerVersion, appVersion);
   const check = button(page, `Check for updates · v${appVersion}`);
+  assert.equal(await check.getAttribute("data-update-state"), "idle");
   const toast = page.locator(".toast").getByRole("status");
   const animation = () =>
     check
@@ -141,6 +156,8 @@ try {
   updateGate = Promise.withResolvers();
   await check.click();
   await toast.getByText("Checking for updates…").waitFor();
+  assert.equal(await check.getAttribute("data-update-state"), "checking");
+  assert.equal(await page.locator(".update-state-label").innerText(), "Checking");
   assert.equal(await check.getAttribute("aria-busy"), "true");
   assert.equal(await animation(), "update-spin");
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -149,6 +166,8 @@ try {
   updateGate.resolve();
   updateGate = undefined;
   await toast.getByText("Luma Chat is up to date.").waitFor();
+  assert.equal(await check.getAttribute("data-update-state"), "current");
+  assert.equal(await page.locator(".update-state-label").innerText(), "Up to date");
   assert.equal(await check.getAttribute("aria-busy"), "false");
   await button(page, "Dismiss message").click();
   assert.equal(await toast.textContent(), "");
@@ -157,6 +176,8 @@ try {
   await toast
     .getByText("You are offline. Reconnect to check for updates.")
     .waitFor();
+  assert.equal(await check.getAttribute("data-update-state"), "offline");
+  assert.equal(await page.locator(".update-state-label").innerText(), "Offline");
   await context.setOffline(false);
   failUpdate = true;
   await check.click();
@@ -164,6 +185,8 @@ try {
     "Could not check for updates. Try again later.",
   );
   await failed.waitFor();
+  assert.equal(await check.getAttribute("data-update-state"), "failed");
+  assert.equal(await page.locator(".update-state-label").innerText(), "Update failed");
   failUpdate = false;
 
   live = worker = "B";
@@ -223,6 +246,41 @@ try {
   await check.click();
   const waiting = toast.getByText("An update is ready.", { exact: false });
   await waiting.waitFor();
+  assert.equal(await check.getAttribute("data-update-state"), "available");
+  await page.getByText("v0.2.1 · Update available", { exact: true }).waitFor();
+  assert.match(await check.getAttribute("title"), /v0\.2\.1/);
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 1101, height: 800 });
+  assert.equal(
+    await page.locator(".top-actions").evaluate((element) =>
+      element.scrollWidth <= element.clientWidth &&
+      element.getBoundingClientRect().right <= innerWidth,
+    ),
+    true,
+  );
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.getByLabel("More actions").click();
+  await page.locator(".topbar-menu").getByText("An update is ready · v0.2.1", { exact: true }).waitFor();
+  await page.getByLabel("More actions").click();
+  await page.setViewportSize(originalViewport);
+  const legacyViewer = await context.newPage();
+  await legacyViewer.addInitScript(() => {
+    const postMessage = ServiceWorker.prototype.postMessage;
+    ServiceWorker.prototype.postMessage = function (message, ...args) {
+      if (message?.type === "LUMA_GET_VERSION") return;
+      return postMessage.call(this, message, ...args);
+    };
+  });
+  await legacyViewer.goto(url);
+  await assertRelease(legacyViewer, "A");
+  const legacyCheck = button(legacyViewer, `Check for updates · v${appVersion}`);
+  await legacyViewer.waitForFunction(
+    () => document.querySelector(".update-control")?.getAttribute("data-update-state") === "available",
+  );
+  await legacyViewer.waitForTimeout(1300);
+  assert.match(await legacyCheck.getAttribute("title"), /An update is ready/);
+  assert.doesNotMatch(await legacyCheck.getAttribute("title"), /v0\.2\.1/);
+  await legacyViewer.close();
   assert.equal(await page.evaluate(() => window.updateDocument), documentId);
   assert.equal(await button(page, "Stop generating").isVisible(), true);
   assert.equal(await draft.inputValue(), unsent);

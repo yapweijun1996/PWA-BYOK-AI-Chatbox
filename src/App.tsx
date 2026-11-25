@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import {
-  Menu,
   Paperclip,
   Sparkles,
   ArrowLeft,
@@ -8,17 +7,10 @@ import {
   Download,
   Upload,
   Copy,
-  ChevronDown,
-  RefreshCw,
   Brain,
   Code2,
-  Search,
-  Settings as SettingsIcon,
-  SquarePen,
-  ScanLine,
   UserRound,
 } from "lucide-react";
-import { version } from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
 import { WorkspaceInspector } from "./components/WorkspaceInspector";
@@ -26,11 +18,11 @@ import { Composer } from "./components/Composer";
 import { ModelSelector } from "./components/ModelSelector";
 import { LmStudioAddressEditor } from "./components/LmStudioAddressEditor";
 import { HistorySharingDialog } from "./components/HistorySharingDialog";
-import { canRequestReasoning, compactModelName } from "./model-options";
+import { canRequestReasoning } from "./model-options";
 import { formatSize } from "./format-size";
 import { downloadBackup } from "./backup";
 import { PreferenceFields } from "./components/Preferences";
-import { Toast } from "./components/Toast";
+import { Topbar } from "./components/Topbar";
 import { ResponseInspector } from "./components/ResponseInspector";
 import { ToolExecutionCard } from "./components/ToolExecutionCard";
 import { MemorySettings } from "./components/MemorySettings";
@@ -83,6 +75,7 @@ function App({
   initial: InitialAppState;
   onInitialCommit: () => void;
 }) {
+  const workspace = useWorkspace({ initial, onInitialCommit });
   const {
     locale,
     t,
@@ -98,7 +91,6 @@ function App({
     settings,
     searchMode,
     setSearchMode,
-    drawerToggle,
     settingsHeading,
     importInput,
     messagesContent,
@@ -116,18 +108,11 @@ function App({
     remove,
     saveProject,
     deleteProject,
-    toggleSidebar,
-    setDrawer,
     chat,
     config,
     selectedModel,
-    isConfigured,
-    checking,
-    updateLabel,
-    check,
     inspecting,
     setInspecting,
-    notice,
     setNotice,
     onMessageScroll,
     retry,
@@ -193,7 +178,7 @@ function App({
     getBufferedDrafts,
     pwa,
     redact,
-  } = useWorkspace({ initial, onInitialCommit });
+  } = workspace;
   const modelTrigger = useRef<HTMLButtonElement>(null);
   const runCommand = (command: SlashCommand) => {
     switch (command) {
@@ -249,121 +234,7 @@ function App({
         />
       )}
       <main className="main" inert={mobileDrawer || undefined}>
-        <header className="topbar">
-          <button
-            className="icon desktop-toggle"
-            aria-label={
-              settings.sidebarCollapsed
-                ? t("Expand sidebar")
-                : t("Collapse sidebar")
-            }
-            aria-expanded={!settings.sidebarCollapsed}
-            aria-controls="chat-sidebar"
-            onClick={toggleSidebar}
-          >
-            <Menu size={22} />
-          </button>
-          <button
-            className="icon mobile"
-            ref={drawerToggle}
-            aria-label={t("Open menu")}
-            aria-expanded={mobileDrawer}
-            aria-controls="chat-sidebar"
-            onClick={() => setDrawer(true)}
-          >
-            <Menu size={22} />
-          </button>
-          <strong>
-            {view === "chat"
-              ? !chat || chat.title === "New chat"
-                ? t("New chat")
-                : chat.title
-              : t("Settings")}
-          </strong>
-          <div className="top-actions">
-            {view === "chat" && (
-              <button
-                className="model-pill"
-                title={config.model || undefined}
-                onClick={openSettings}
-              >
-                <Sparkles size={17} />
-                <span>
-                  {labels[config.id]} ·{" "}
-                  {selectedModel
-                    ? compactModelName(selectedModel)
-                    : t("Choose a model")}
-                </span>
-                <ChevronDown size={16} />
-              </button>
-            )}
-            {view === "chat" && (
-              <span className="connection-state">
-                {isConfigured ? t("Ready to send") : t("Setup needed")}
-              </span>
-            )}
-            <span className="local-pill">
-              <span className="dot" />
-              {t(" Local storage")}
-            </span>
-            {desktop && settings.sidebarCollapsed && (
-              <>
-                <button
-                  className="icon workspace-shortcut"
-                  aria-label={t("New chat")}
-                  title={t("New chat")}
-                  onClick={create}
-                >
-                  <SquarePen size={18} aria-hidden="true" />
-                </button>
-                <button
-                  className="icon workspace-shortcut"
-                  aria-label={t("Search conversations")}
-                  title={t("Search conversations")}
-                  aria-haspopup="dialog"
-                  onClick={() => setSearchMode("active")}
-                >
-                  <Search size={18} aria-hidden="true" />
-                </button>
-                <button
-                  className="icon workspace-shortcut"
-                  aria-label={t("Settings")}
-                  title={t("Settings")}
-                  onClick={openSettings}
-                >
-                  <SettingsIcon size={18} aria-hidden="true" />
-                </button>
-              </>
-            )}
-            <button
-              className="icon inspector-control"
-              type="button"
-              aria-label={t("Workspace Inspector")}
-              title={t("Workspace Inspector")}
-              aria-haspopup="dialog"
-              onClick={() => setInspecting(true)}
-            >
-              <ScanLine size={18} aria-hidden="true" />
-            </button>
-            <button
-              className="icon update-control"
-              type="button"
-              aria-label={updateLabel}
-              title={updateLabel}
-              aria-busy={checking}
-              aria-disabled={checking}
-              onClick={() => void check()}
-            >
-              <RefreshCw size={18} aria-hidden="true" />
-              <span aria-hidden="true">v{version}</span>
-            </button>
-          </div>
-          <Toast
-            locale={locale}
-            message={notice}
-            onDismiss={() => setNotice("")}
-          />
-        </header>
+        <Topbar workspace={workspace} />
         {conflicts.size > 0 && (
           <aside
             className="conflict-notice"

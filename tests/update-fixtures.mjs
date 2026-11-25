@@ -37,7 +37,7 @@ export async function updateFixtures() {
       ),
   );
   const template = await readFile("public/sw.js", "utf8");
-  const bWorker = renderShellWorker(template, b);
+  const bWorker = renderShellWorker(template, b, "0.2.1");
   function release(files, worker) {
     return new Map([
       ...files,

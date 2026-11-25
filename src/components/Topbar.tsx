@@ -1,0 +1,443 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  CircleAlert,
+  Database,
+  Download,
+  Languages,
+  Maximize,
+  Menu,
+  Minimize,
+  MoreVertical,
+  RefreshCw,
+  ScanLine,
+  Search,
+  Settings as SettingsIcon,
+  SquarePen,
+  SunMoon,
+} from "lucide-react";
+import { version } from "../../package.json";
+import { IconButton } from "./IconButton";
+import { Toast } from "./Toast";
+import { WorkspaceActions } from "./WorkspaceActions";
+import type { WorkspaceRequest } from "./WorkspaceActions";
+import { storage } from "../storage";
+import { ModelSelector } from "./ModelSelector";
+import type { useWorkspace } from "../use-workspace";
+
+type Workspace = ReturnType<typeof useWorkspace>;
+const updateMessages = {
+  idle: "Update check idle",
+  checking: "Checking for updates…",
+  current: "Luma Chat is up to date.",
+  available: "An update is ready",
+  failed: "Could not check for updates. Try again later.",
+  offline: "You are offline. Reconnect to check for updates.",
+  preparing: "The app is still preparing offline support. Try again shortly.",
+  unavailable: "Update checks are unavailable in this build or browser.",
+} as const;
+const updateShortLabels = {
+  idle: "",
+  checking: "Checking",
+  current: "Up to date",
+  available: "Update available",
+  failed: "Update failed",
+  offline: "Offline",
+  preparing: "Preparing",
+  unavailable: "Unavailable",
+} as const;
+
+export function Topbar({ workspace }: { workspace: Workspace }) {
+  const { t, locale, settings, chat, view } = workspace;
+  const [actions, setActions] = useState<WorkspaceRequest | null>(null);
+  const [readable, setReadable] = useState<"checking" | "ready" | "failed">(
+    "checking",
+  );
+  const [fullscreen, setFullscreen] = useState(
+    Boolean(document.fullscreenElement),
+  );
+  const overflow = useRef<HTMLDetailsElement>(null);
+  const write = useSyncExternalStore(
+    storage.subscribeWrites,
+    storage.getWriteStatus,
+  );
+
+  useEffect(() => {
+    let current = true;
+    void storage.inspectRepository().then(
+      () => {
+        if (current) setReadable("ready");
+      },
+      () => {
+        if (current) setReadable("failed");
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [write.revision]);
+  useEffect(() => {
+    const onFullscreen = () =>
+      setFullscreen(Boolean(document.fullscreenElement));
+    const onPointer = (event: PointerEvent) => {
+      if (
+        overflow.current?.open &&
+        !overflow.current.contains(event.target as Node)
+      )
+        overflow.current.open = false;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && overflow.current?.open) {
+        overflow.current.open = false;
+        overflow.current.querySelector<HTMLElement>("summary")?.focus();
+      }
+    };
+    document.addEventListener("fullscreenchange", onFullscreen);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const storageStatus = write.pending
+    ? "Saving to IndexedDB"
+    : write.lastOutcome === "failed"
+      ? "Last local save failed"
+      : readable === "ready"
+        ? "IndexedDB available"
+        : readable === "failed"
+          ? "IndexedDB unavailable"
+          : "Checking IndexedDB";
+  const updateState =
+    workspace.pwa.status === "waiting" ? "available" : workspace.pwa.checkState;
+  const availableVersion =
+    updateState === "available" ? workspace.pwa.availableVersion : undefined;
+  const updateText = availableVersion
+    ? `${t(updateMessages[updateState])} · v${availableVersion}`
+    : t(updateMessages[updateState]);
+  const UpdateIcon =
+    updateState === "current"
+      ? CheckCircle2
+      : updateState === "available"
+        ? Download
+        : updateState === "failed" ||
+            updateState === "offline" ||
+            updateState === "unavailable"
+          ? CircleAlert
+          : RefreshCw;
+  const cycleTheme = () => {
+    const options = ["system", "light", "dark"] as const;
+    void workspace.saveSettings({
+      theme: options[(options.indexOf(settings.theme) + 1) % options.length],
+    });
+  };
+  const cycleLanguage = () => {
+    const options = ["system", "en", "zh-CN"] as const;
+    void workspace.saveSettings({
+      language:
+        options[(options.indexOf(settings.language) + 1) % options.length],
+    });
+  };
+  const themeText = t(
+    settings.theme === "system"
+      ? "System"
+      : settings.theme === "light"
+        ? "Light"
+        : "Dark",
+  );
+  const languageText = t(
+    settings.language === "system"
+      ? "System language"
+      : settings.language === "en"
+        ? "English"
+        : "Simplified Chinese",
+  );
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      workspace.setNotice("Could not change fullscreen mode.");
+    }
+  };
+  const closeMenu = (action: () => void) => {
+    if (overflow.current) {
+      overflow.current.open = false;
+      overflow.current.querySelector<HTMLElement>("summary")?.focus();
+    }
+    action();
+  };
+  const openData = () => workspace.setView("data");
+  const title =
+    view === "chat"
+      ? !chat || chat.title === "New chat"
+        ? t("New chat")
+        : chat.title
+      : t("Settings");
+  const providerStatus =
+    !workspace.online && workspace.config.id !== "lmstudio"
+      ? "Browser offline"
+      : workspace.providerStatus;
+
+  return (
+    <header className="topbar">
+      <IconButton
+        className="desktop-toggle"
+        label={t(
+          settings.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar",
+        )}
+        aria-expanded={!settings.sidebarCollapsed}
+        aria-controls="chat-sidebar"
+        onClick={workspace.toggleSidebar}
+      >
+        <Menu size={18} aria-hidden="true" />
+      </IconButton>
+      <IconButton
+        className="mobile"
+        ref={workspace.drawerToggle}
+        label={t("Open menu")}
+        aria-expanded={workspace.mobileDrawer}
+        aria-controls="chat-sidebar"
+        onClick={() => workspace.setDrawer(true)}
+      >
+        <Menu size={18} aria-hidden="true" />
+      </IconButton>
+      <strong className="topbar-title">
+        {view === "chat" && chat ? (
+          <button
+            className="topbar-title-button"
+            type="button"
+            title={title}
+            aria-label={`${t("Conversation actions")} · ${title}`}
+            aria-haspopup="dialog"
+            aria-expanded={Boolean(
+              actions?.kind === "chat" && actions.id === chat.id,
+            )}
+            onClick={(event) =>
+              setActions({
+                kind: "chat",
+                id: chat.id,
+                anchor: event.currentTarget,
+              })
+            }
+          >
+            <span>{title}</span>
+            <ChevronDown size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <span>{title}</span>
+        )}
+      </strong>
+      <div className="top-actions">
+        {view === "chat" && (
+          <ModelSelector
+            locale={locale}
+            autoFocusSearch={workspace.desktopInput}
+            provider={workspace.config.id}
+            modelId={workspace.config.model}
+            selected={workspace.selectedModel}
+            groups={workspace.modelGroups}
+            onLoad={workspace.loadCatalog}
+            onSelect={workspace.selectModel}
+            onSettings={workspace.openSettings}
+            topbarStatus={providerStatus}
+          />
+        )}
+        <span className="topbar-desktop-actions">
+          <IconButton
+            label={t(storageStatus)}
+            title={`IndexedDB · ${t(storageStatus)}`}
+            onClick={openData}
+            data-storage-state={storageStatus}
+          >
+            <Database size={18} aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            label={`${t("Change language")} · ${languageText}`}
+            title={`${t("Language")} · ${languageText}`}
+            onClick={cycleLanguage}
+          >
+            <Languages size={18} aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            label={`${t("Change theme")} · ${themeText}`}
+            title={`${t("Theme")} · ${themeText}`}
+            onClick={cycleTheme}
+          >
+            <SunMoon size={18} aria-hidden="true" />
+          </IconButton>
+          {document.fullscreenEnabled && (
+            <IconButton
+              label={t(fullscreen ? "Exit fullscreen" : "Enter fullscreen")}
+              onClick={() => void toggleFullscreen()}
+            >
+              {fullscreen ? (
+                <Minimize size={18} aria-hidden="true" />
+              ) : (
+                <Maximize size={18} aria-hidden="true" />
+              )}
+            </IconButton>
+          )}
+          {!settings.sidebarCollapsed && (
+            <IconButton
+              label={t("Open settings from topbar")}
+              title={t("Settings")}
+              onClick={workspace.openSettings}
+            >
+              <SettingsIcon size={18} aria-hidden="true" />
+            </IconButton>
+          )}
+        </span>
+        {workspace.desktop && settings.sidebarCollapsed && (
+          <>
+            <IconButton
+              className="workspace-shortcut"
+              label={t("New chat")}
+              onClick={workspace.create}
+            >
+              <SquarePen size={18} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              className="workspace-shortcut"
+              label={t("Search conversations")}
+              aria-haspopup="dialog"
+              onClick={() => workspace.setSearchMode("active")}
+            >
+              <Search size={18} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              className="workspace-shortcut"
+              label={t("Settings")}
+              onClick={workspace.openSettings}
+            >
+              <SettingsIcon size={18} aria-hidden="true" />
+            </IconButton>
+          </>
+        )}
+        <IconButton
+          className="inspector-control"
+          label={t("Workspace Inspector")}
+          aria-haspopup="dialog"
+          onClick={() => workspace.setInspecting(true)}
+        >
+          <ScanLine size={18} aria-hidden="true" />
+        </IconButton>
+        <div className="update-group">
+          <IconButton
+            className="update-control"
+            label={workspace.updateLabel}
+            title={`${workspace.updateLabel} · ${updateText}`}
+            aria-describedby="topbar-update-status"
+            aria-busy={workspace.checking}
+            aria-disabled={workspace.checking}
+            data-update-state={updateState}
+            onClick={() => void workspace.check()}
+          >
+            <UpdateIcon size={18} aria-hidden="true" />
+          </IconButton>
+          <span className="update-version" aria-hidden="true">
+            v{version}
+          </span>
+          {updateState !== "idle" && (
+            <span className="update-state-label" aria-hidden="true">
+              {availableVersion && `v${availableVersion} · `}
+              {t(updateShortLabels[updateState])}
+            </span>
+          )}
+        </div>
+        <span
+          id="topbar-update-status"
+          className="visually-hidden"
+          role="status"
+        >
+          {updateText}
+        </span>
+        <details className="topbar-more" ref={overflow}>
+          <summary
+            className="topbar-icon"
+            aria-label={t("More actions")}
+            title={t("More actions")}
+          >
+            <MoreVertical size={18} aria-hidden="true" />
+          </summary>
+          <div className="topbar-menu">
+            <p>{t(providerStatus)}</p>
+            <p>{updateText}</p>
+            <button
+              className="topbar-menu-inspector"
+              type="button"
+              onClick={() =>
+                closeMenu(() => {
+                  workspace.setInspecting(true);
+                })
+              }
+            >
+              <ScanLine size={18} aria-hidden="true" />
+              {t("Workspace Inspector")}
+            </button>
+            <button type="button" onClick={() => closeMenu(openData)}>
+              <Database size={18} aria-hidden="true" />
+              {t(storageStatus)}
+            </button>
+            <button type="button" onClick={() => closeMenu(cycleLanguage)}>
+              <Languages size={18} aria-hidden="true" />
+              {t("Language")} · {languageText}
+            </button>
+            <button type="button" onClick={() => closeMenu(cycleTheme)}>
+              <SunMoon size={18} aria-hidden="true" />
+              {t("Theme")} · {themeText}
+            </button>
+            {document.fullscreenEnabled && (
+              <button
+                type="button"
+                onClick={() => closeMenu(() => void toggleFullscreen())}
+              >
+                <Maximize size={18} aria-hidden="true" />
+                {t(fullscreen ? "Exit fullscreen" : "Enter fullscreen")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => closeMenu(workspace.openSettings)}
+            >
+              <SettingsIcon size={18} aria-hidden="true" />
+              {t("Settings")}
+            </button>
+          </div>
+        </details>
+      </div>
+      <Toast
+        locale={locale}
+        message={workspace.notice}
+        onDismiss={() => workspace.setNotice("")}
+      />
+      {actions && chat && (
+        <WorkspaceActions
+          request={actions}
+          locale={locale}
+          chat={chat}
+          projects={settings.projects}
+          projectHasChats={false}
+          working={
+            workspace.working ||
+            workspace.processingFiles ||
+            workspace.navigating
+          }
+          onClose={() => {
+            const anchor = actions.anchor;
+            setActions(null);
+            requestAnimationFrame(() => anchor.isConnected && anchor.focus());
+          }}
+          onChat={workspace.organizeChat}
+          onDeleteChat={workspace.remove}
+          onSaveProject={workspace.saveProject}
+          onDeleteProject={workspace.deleteProject}
+        />
+      )}
+    </header>
+  );
+}

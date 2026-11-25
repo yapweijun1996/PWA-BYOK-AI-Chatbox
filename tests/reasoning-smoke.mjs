@@ -224,15 +224,17 @@ try {
   );
   const topModel = page.locator(".topbar .model-pill");
   await topModel.click();
+  await page.getByRole("dialog", { name: "Choose model" }).getByRole("button", { name: "Open provider settings" }).click();
   await page
     .getByRole("button", { name: "Use this model for the current chat" })
     .click();
   await page.getByLabel("Model ID").fill("changed-global-profile");
   await page.getByRole("button", { name: "Back to chat" }).click();
-  assert.equal(await topModel.getAttribute("title"), "reasoning-model");
+  assert.match(await topModel.getAttribute("title"), /reasoning-model/);
   await page.reload();
-  assert.equal(await topModel.getAttribute("title"), "reasoning-model");
+  assert.match(await topModel.getAttribute("title"), /reasoning-model/);
   await topModel.click();
+  await page.getByRole("dialog", { name: "Choose model" }).getByRole("button", { name: "Open provider settings" }).click();
   assert.equal(
     await page.getByLabel("Model ID").inputValue(),
     "changed-global-profile",
@@ -252,6 +254,7 @@ try {
   const openInspector = page.getByRole("button", {
     name: "Workspace Inspector",
   });
+  await page.getByLabel("More actions").click();
   await openInspector.click();
   const modal = page.getByRole("dialog", { name: "Workspace Inspector" });
   await modal.getByRole("tab", { name: "Runtime" }).waitFor();
@@ -303,7 +306,7 @@ try {
   await page.keyboard.press("Escape");
   await modal.waitFor({ state: "hidden" });
   assert.ok(
-    await openInspector.evaluate(
+    await page.getByLabel("More actions").evaluate(
       (element) => element === document.activeElement,
     ),
   );

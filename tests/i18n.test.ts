@@ -41,5 +41,8 @@ describe("interface language and existing preferences", () => {
         "Authentication failed (HTTP 401). Check this provider's key or token.",
       ),
     ).toContain("401");
+    expect(translate("zh-CN", "IndexedDB available")).toBe("IndexedDB 可用");
+    expect(translateNotice("zh-CN", "Invalid time zone specified: Example/Invalid"))
+      .toBe("无效的时区：Example/Invalid");
   });
 });

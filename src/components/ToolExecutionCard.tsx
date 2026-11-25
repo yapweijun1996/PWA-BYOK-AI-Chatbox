@@ -1,5 +1,5 @@
 import { ChevronDown, Code2 } from "lucide-react";
-import { translate } from "../i18n";
+import { translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
 import type { ToolExecution } from "../javascript-tool";
 import "../tool-execution.css";
@@ -72,7 +72,7 @@ export function ToolExecutionCard({
           </>
         ) : null}
         {result?.error && (
-          <p className="tool-error">{t(result.error.message)}</p>
+          <p className="tool-error">{translateNotice(locale, result.error.message)}</p>
         )}
         {result?.status === "success" && (
           <>

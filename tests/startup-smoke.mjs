@@ -298,9 +298,9 @@ try {
     (await cached.locator("#chat-sidebar").boundingBox()).width,
     280,
   );
-  assert.equal(
+  assert.match(
     await cached.locator(".topbar .model-pill").getAttribute("title"),
-    "local-restored-model",
+    /local-restored-model/,
   );
   assert.equal(
     await cached

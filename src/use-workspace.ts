@@ -118,6 +118,12 @@ export function useWorkspace({
   const locale = resolveLanguage(settings.language, systemLanguage);
   const t = (text: string) => translate(locale, text);
   const [secrets, setSecrets] = useState<Secrets>({});
+  const credentialRevision = useRef(0);
+  const previousSecrets = useRef(secrets);
+  if (previousSecrets.current !== secrets) {
+    previousSecrets.current = secrets;
+    credentialRevision.current++;
+  }
   const [view, setView] = useState<View>("chat");
   const [editingProvider, setEditingProvider] = useState(settings.provider);
   const [historyTarget, setHistoryTarget] = useState<ProviderId>();
@@ -153,6 +159,14 @@ export function useWorkspace({
   const updateLabel = `${t("Check for updates")} · v${version}`;
   const working = activeReply !== null;
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [providerObservation, setProviderObservation] = useState<{
+    id: ProviderId;
+    endpoint: string;
+    model: string;
+    credentialRevision: number;
+    state: "connecting" | "succeeded" | "catalog" | "failed";
+  }>();
+  const providerObservationSequence = useRef(0);
   const [catalogs, setCatalogs] = useState<
     Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
   >({});
@@ -861,6 +875,7 @@ export function useWorkspace({
       target,
       pricing,
       secret: credentialFor(target, secrets[target.id]),
+      credentialRevision: credentialRevision.current,
     };
   };
   const runReply = async (
@@ -924,36 +939,59 @@ export function useWorkspace({
           roundTelemetry = undefined;
           let firstText = true;
           let firstReasoning = true;
-          const round = await streamChat(
-            prepared.target,
-            prepared.secret,
-            history,
-            abort.signal,
-            (text) => {
-              if (!isCurrentReply(abort) || abort.signal.aborted) return;
-              tracker.visible(text);
-              if (firstText && content) content += "\n\n";
-              firstText = false;
-              content += text;
-              publishStream();
-            },
-            (text) => {
-              if (!isCurrentReply(abort) || abort.signal.aborted) return;
-              if (firstReasoning && reasoning) reasoning += "\n\n";
-              firstReasoning = false;
-              reasoning += text;
-              publishStream();
-            },
-            (sample, receivedAt) => {
-              if (
-                isCurrentReply(abort) &&
-                !abort.signal.aborted &&
-                tracker.receive(sample, receivedAt)
-              )
+          const observation = {
+            id: prepared.target.id,
+            endpoint: prepared.target.endpoint,
+            model: prepared.target.model,
+            credentialRevision: prepared.credentialRevision,
+          };
+          const observationSequence = ++providerObservationSequence.current;
+          setProviderObservation({ ...observation, state: "connecting" });
+          let round: Awaited<ReturnType<typeof streamChat>>;
+          try {
+            round = await streamChat(
+              prepared.target,
+              prepared.secret,
+              history,
+              abort.signal,
+              (text) => {
+                if (!isCurrentReply(abort) || abort.signal.aborted) return;
+                tracker.visible(text);
+                if (firstText && content) content += "\n\n";
+                firstText = false;
+                content += text;
                 publishStream();
-            },
-            tool,
-          );
+              },
+              (text) => {
+                if (!isCurrentReply(abort) || abort.signal.aborted) return;
+                if (firstReasoning && reasoning) reasoning += "\n\n";
+                firstReasoning = false;
+                reasoning += text;
+                publishStream();
+              },
+              (sample, receivedAt) => {
+                if (
+                  isCurrentReply(abort) &&
+                  !abort.signal.aborted &&
+                  tracker.receive(sample, receivedAt)
+                )
+                  publishStream();
+              },
+              tool,
+            );
+            if (
+              !abort.signal.aborted &&
+              providerObservationSequence.current === observationSequence
+            )
+              setProviderObservation({ ...observation, state: "succeeded" });
+          } catch (error) {
+            if (providerObservationSequence.current === observationSequence) {
+              if (!abort.signal.aborted)
+                setProviderObservation({ ...observation, state: "failed" });
+              else setProviderObservation(undefined);
+            }
+            throw error;
+          }
           roundTelemetry = tracker.snapshot();
           return round;
         },
@@ -1145,17 +1183,43 @@ export function useWorkspace({
   };
   const testConnection = async () => {
     if (workspaceSignal.aborted) return;
+    const target = settings.providers[config.id];
+    const observation = {
+      id: target.id,
+      endpoint: target.endpoint,
+      model: target.model,
+      credentialRevision: credentialRevision.current,
+    };
+    const usesCurrentCredential =
+      !keyInput || keyInput === credentialFor(target, secrets[target.id]);
+    const observationSequence = usesCurrentCredential
+      ? ++providerObservationSequence.current
+      : undefined;
     try {
       setNotice("Connecting…");
+      if (usesCurrentCredential)
+        setProviderObservation({ ...observation, state: "connecting" });
       const result = await loadCatalog(config.id, keyInput);
       if (workspaceSignal.aborted) return;
+      if (
+        usesCurrentCredential &&
+        observationSequence === providerObservationSequence.current
+      )
+        setProviderObservation({ ...observation, state: "catalog" });
       setNotice(
         result.length
           ? `Model list loaded (${result.length}). This does not verify your key or chat access. Select one or enter its ID.`
           : "Model list loaded but no models were listed. This does not verify your key or chat access; enter a model ID manually.",
       );
     } catch (e) {
-      if (!workspaceSignal.aborted) setNotice(errorText(e));
+      if (!workspaceSignal.aborted) {
+        if (
+          usesCurrentCredential &&
+          observationSequence === providerObservationSequence.current
+        )
+          setProviderObservation({ ...observation, state: "failed" });
+        setNotice(errorText(e));
+      }
     }
   };
   const storeKey = async () => {
@@ -1489,6 +1553,7 @@ export function useWorkspace({
       });
       resetProviderForm();
       setSecrets({});
+      setProviderObservation(undefined);
       setEditingProvider(defaultSettings.provider);
       setCatalogs({});
       setImportPreview(null);
@@ -1553,6 +1618,22 @@ export function useWorkspace({
       if (!workspaceSignal.aborted) setNotice("Could not request persistent storage.");
     }
   };
+  let providerStatus = "Provider connection not checked";
+  if (!isConfigured) providerStatus = "Setup needed";
+  else if (
+    providerObservation?.id === config.id &&
+    providerObservation.endpoint === config.endpoint &&
+    providerObservation.model === config.model &&
+    providerObservation.credentialRevision === credentialRevision.current
+  ) {
+    const labels = {
+      connecting: "Connecting to provider",
+      succeeded: "Last provider request succeeded",
+      catalog: "Model list reachable; chat not checked",
+      failed: "Last provider request failed",
+    };
+    providerStatus = labels[providerObservation.state];
+  }
   const preferences: PreferenceProps = {
     locale,
     theme: settings.theme,
@@ -1604,6 +1685,7 @@ export function useWorkspace({
     setDrawer,
     chat,
     config,
+    providerStatus,
     selectedModel,
     isConfigured,
     checking,

@@ -113,7 +113,7 @@ function verify(host: HTMLElement, initial: InitialAppState) {
       "1" ||
     composer.disabled === Boolean(activeChat) ||
     composer.value !== (activeChat?.draft || "").replace(/\r\n?/g, "\n") ||
-    app.querySelector<HTMLButtonElement>(".topbar .model-pill")?.title !== model
+    app.querySelector<HTMLButtonElement>(".topbar .model-pill")?.dataset.modelId !== model
   )
     throw new StartupFailure("ui");
 }

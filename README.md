@@ -4,6 +4,8 @@ Luma Chat is a local-first, installable BYOK AI chat application. It supports di
 
 The UI supports English and Simplified Chinese. Use **Settings → Appearance** to choose a language and a light, dark, or system theme. **Settings** also contains AI providers and Local data.
 
+The top bar provides model selection, conversation actions, language and theme controls, IndexedDB status, and update checks. On smaller screens, additional actions are in the more menu. The provider indicator reflects the latest request for the current provider, model, and session credentials. A successful model-list request is labeled separately from a successful chat request. IndexedDB status reflects a local read check and the latest local write outcome; browser storage quota and the separate localStorage theme hint are shown elsewhere. The update control shows the installed package version and reports checking, current, waiting, offline, and failure states. A compatible waiting service worker reports its package version; older workers show an available update without a version.
+
 Use the [feature map](FEATURE-MAP.md) to find a capability, its implementation, and its limits. For the source review, prioritized bugs, implementation tasks, and release criteria, see the [engineering roadmap](ROADMAP.md). It distinguishes committed functionality from work in progress; it is not a release announcement.
 
 ## Run locally

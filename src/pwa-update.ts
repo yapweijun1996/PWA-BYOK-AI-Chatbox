@@ -17,6 +17,38 @@ function waitForInstall(worker: ServiceWorker): Promise<boolean> {
   });
 }
 
+function readWorkerVersion(worker: ServiceWorker): Promise<string | undefined> {
+  if (typeof MessageChannel === "undefined") return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    let done = false;
+    const finish = (version?: string) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(version);
+    };
+    const timer = setTimeout(() => finish(), 1200);
+    channel.port1.onmessage = ({ data }) => {
+      const version = data?.version;
+      finish(
+        typeof version === "string" &&
+          /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version) &&
+          version.length <= 64
+          ? version
+          : undefined,
+      );
+    };
+    try {
+      worker.postMessage({ type: "LUMA_GET_VERSION" }, [channel.port2]);
+    } catch {
+      channel.port2.close();
+      finish();
+    }
+  });
+}
+
 export type WorkerStatus =
   | "unavailable"
   | "unregistered"
@@ -29,6 +61,16 @@ const supported = () => import.meta.env.PROD && "serviceWorker" in navigator;
 // Let waiting workers activate naturally so open drafts and replies are safe.
 export function useAppUpdate(notify: (message: string) => void) {
   const [checking, setChecking] = useState(false);
+  const [checkState, setCheckState] = useState<
+    | "idle"
+    | "checking"
+    | "current"
+    | "available"
+    | "failed"
+    | "offline"
+    | "preparing"
+    | "unavailable"
+  >("idle");
   const [status, setStatus] = useState<WorkerStatus>(() =>
     supported() ? "unregistered" : "unavailable",
   );
@@ -36,6 +78,22 @@ export function useAppUpdate(notify: (message: string) => void) {
     () => supported() && Boolean(navigator.serviceWorker.controller),
   );
   const inFlight = useRef(false);
+  const waitingWorker = useRef<ServiceWorker | null>(null);
+  const [availableVersion, setAvailableVersion] = useState<string>();
+  const observeWaiting = (worker: ServiceWorker | null) => {
+    if (waitingWorker.current === worker) return;
+    waitingWorker.current = worker;
+    setAvailableVersion(undefined);
+    if (worker)
+      void readWorkerVersion(worker).then(
+        (version) => {
+          if (waitingWorker.current === worker) setAvailableVersion(version);
+        },
+        () => {
+          if (waitingWorker.current === worker) setAvailableVersion(undefined);
+        },
+      );
+  };
 
   useEffect(() => {
     if (!supported()) return;
@@ -44,6 +102,11 @@ export function useAppUpdate(notify: (message: string) => void) {
     let installing: ServiceWorker | null = null;
     const announceReady = () => {
       if (disposed) return;
+      observeWaiting(registration?.waiting ?? null);
+      if (!registration?.waiting)
+        setCheckState((previous) =>
+          previous === "available" ? "idle" : previous,
+        );
       const hasController = Boolean(navigator.serviceWorker.controller);
       setControlled(hasController);
       setStatus(
@@ -94,6 +157,7 @@ export function useAppUpdate(notify: (message: string) => void) {
     });
     return () => {
       disposed = true;
+      waitingWorker.current = null;
       cancel();
       window.removeEventListener("luma:worker-registered", attach);
       navigator.serviceWorker.removeEventListener(
@@ -108,6 +172,7 @@ export function useAppUpdate(notify: (message: string) => void) {
   const check = async () => {
     if (inFlight.current) return;
     if (!supported()) {
+      setCheckState("unavailable");
       notify("Update checks are unavailable in this build or browser.");
       return;
     }
@@ -115,27 +180,35 @@ export function useAppUpdate(notify: (message: string) => void) {
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration?.waiting && navigator.serviceWorker.controller) {
+        observeWaiting(registration.waiting);
+        setCheckState("available");
         notify(readyNotice);
         return;
       }
       if (!navigator.onLine) {
+        setCheckState("offline");
         notify("You are offline. Reconnect to check for updates.");
         return;
       }
       if (!registration || !navigator.serviceWorker.controller) {
+        setCheckState("preparing");
         notify(
           "The app is still preparing offline support. Try again shortly.",
         );
         return;
       }
       setChecking(true);
+      setCheckState("checking");
       notify("Checking for updates…");
       if (!registration.installing) await registration.update();
       const installing = registration.installing;
       if (installing && !(await waitForInstall(installing)))
         throw new Error("Update installation failed");
+      observeWaiting(registration.waiting);
+      setCheckState(registration.waiting ? "available" : "current");
       notify(registration.waiting ? readyNotice : "Luma Chat is up to date.");
     } catch {
+      setCheckState("failed");
       notify("Could not check for updates. Try again later.");
     } finally {
       inFlight.current = false;
@@ -143,5 +216,5 @@ export function useAppUpdate(notify: (message: string) => void) {
     }
   };
 
-  return { checking, check, status, controlled };
+  return { checking, check, status, controlled, checkState, availableVersion };
 }
