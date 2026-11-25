@@ -19,6 +19,9 @@ export type ExecutionValue = Readonly<{
 export type ExecutionResult = Readonly<{
   status: ExecutionStatus;
   durationMs: number;
+  startupMs?: number;
+  executionMs?: number;
+  totalMs?: number;
   console: readonly ConsoleEntry[];
   truncated: boolean;
   value?: ExecutionValue;

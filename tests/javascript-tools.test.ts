@@ -3,6 +3,7 @@ import { recoverMessage, validBackup } from "../src/data-contracts";
 import {
   javascriptToolName,
   providerToolName,
+  restoreToolExecutions,
   validToolExecutions,
 } from "../src/javascript-tool";
 import { collectToolRound } from "../src/provider-tools";
@@ -283,5 +284,19 @@ describe("provider-independent JavaScript tool calling", () => {
       completed,
     ]).body;
     expect(JSON.stringify(body)).not.toMatch(/21 \* 2|testing|toolExecutions/);
+  });
+});
+
+
+describe("tool execution history compatibility", () => {
+  const record = { id: "history", name: javascriptToolName, code: "1 + 1", startedAt: 1 };
+  it("accepts old records and bounded new timing and stage fields", () => {
+    expect(validToolExecutions([{ ...record, result }])).toBe(true);
+    expect(validToolExecutions([{ ...record, stage: "running", result: { ...result, startupMs: 3, executionMs: 4, totalMs: 7 } }])).toBe(true);
+    expect(validToolExecutions([{ ...record, stage: "unknown" }])).toBe(false);
+    expect(validToolExecutions([{ ...record, result: { ...result, startupMs: -1 } }])).toBe(false);
+  });
+  it("marks unfinished history interrupted without executing it", () => {
+    expect(restoreToolExecutions([{ ...record, stage: "starting" }])?.[0].result).toMatchObject({ status: "cancelled", error: { message: "Execution was interrupted before completion." } });
   });
 });

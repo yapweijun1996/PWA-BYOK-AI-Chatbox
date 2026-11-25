@@ -1,5 +1,17 @@
 // Malay translations for interface, provider and diagnostic messages.
 export const msExtra: Record<string, string> = {
+  "Starting JavaScript": "Memulakan JavaScript",
+  "Execution": "Pelaksanaan",
+  "Total": "Jumlah",
+  "Copy result": "Salin hasil",
+  "Execution was interrupted before completion.": "Pelaksanaan terhenti sebelum selesai.",
+  "Reduce the calculation size and try again.": "Kurangkan saiz pengiraan dan cuba lagi.",
+  "Reduce the data size and try again.": "Kurangkan saiz data dan cuba lagi.",
+  "Reload the app and try again.": "Muat semula aplikasi dan cuba lagi.",
+  "Provide valid input within the tool limits.": "Berikan input sah dalam had alat.",
+  "Check the JavaScript code and try again.": "Semak kod JavaScript dan cuba lagi.",
+  "Check whether this operation is supported.": "Semak sama ada operasi ini disokong.",
+
   "Saved key unavailable": "Kunci tersimpan tidak tersedia",
   "Enter API key or token": "Masukkan kunci API atau token",
   "Key saved on this device.": "Kunci disimpan pada peranti ini.",

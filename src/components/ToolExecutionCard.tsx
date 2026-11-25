@@ -1,4 +1,5 @@
-import { ChevronDown, Code2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Code2, Copy } from "lucide-react";
 import { translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
 import type { ToolExecution } from "../javascript-tool";
@@ -26,11 +27,24 @@ export function ToolExecutionCard({
   execution: ToolExecution;
   locale: Locale;
 }) {
+  const [copyNotice, setCopyNotice] = useState("");
   const t = (text: string) => translate(locale, text);
   const result = execution.result;
   const status = result
     ? t(statusLabels[result.status])
-    : t(execution.name === "javascript.execute" ? "Running JavaScript" : "Running tool");
+    : t(execution.name === "javascript.execute" ? (execution.stage === "starting" ? "Starting JavaScript" : "Running JavaScript") : "Running tool");
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopyNotice(t("Copied.")); }
+    catch { setCopyNotice(t("Copy unavailable.")); }
+  };
+  const advice = result?.error && ({
+    timeout: "Reduce the calculation size and try again.",
+    memory: "Reduce the data size and try again.",
+    runtime: "Reload the app and try again.",
+    input: "Provide valid input within the tool limits.",
+    javascript: "Check the JavaScript code and try again.",
+    unsupported: "Check whether this operation is supported.",
+  } as Record<string, string>)[result.error.code];
   return (
     <details
       className="tool-execution"
@@ -52,12 +66,13 @@ export function ToolExecutionCard({
       <div className="tool-execution-body">
         {execution.code && (
           <>
-            <h4>{t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}</h4>
+            <div className="tool-heading"><h4>{t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}</h4><button type="button" onClick={() => void copy(execution.code)} aria-label={t("Copy code")} title={t("Copy code")}><Copy size={14} aria-hidden="true" /></button></div>
             <pre tabIndex={0} aria-label={t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}>
               <code>{execution.code}</code>
             </pre>
           </>
         )}
+        {result && (result.startupMs !== undefined || result.totalMs !== undefined) && <p className="tool-timings">{result.startupMs !== undefined && <span>{t("Startup")}: {result.startupMs} ms · </span>}{result.executionMs !== undefined && <span>{t("Execution")}: {result.executionMs} ms · </span>}{result.totalMs !== undefined && <span>{t("Total")}: {result.totalMs} ms</span>}</p>}
         {result?.console.length ? (
           <>
             <h4>{t("Console output")}</h4>
@@ -72,11 +87,11 @@ export function ToolExecutionCard({
           </>
         ) : null}
         {result?.error && (
-          <p className="tool-error">{translateNotice(locale, result.error.message)}</p>
+          <div><p className="tool-error">{translateNotice(locale, result.error.message)}</p>{advice && <p className="muted">{t(advice)}</p>}</div>
         )}
         {result?.status === "success" && (
           <>
-            <h4>{t("Execution result")}</h4>
+            <div className="tool-heading"><h4>{t("Execution result")}</h4>{result.value && <button type="button" onClick={() => void copy(result.value!.text)} aria-label={t("Copy result")} title={t("Copy result")}><Copy size={14} aria-hidden="true" /></button>}</div>
             {result.value ? (
               <pre tabIndex={0} aria-label={t("Execution result")}>
                 <code>{result.value.text}</code>
@@ -89,6 +104,7 @@ export function ToolExecutionCard({
         {result?.truncated && (
           <p className="muted">{t("Execution output was truncated.")}</p>
         )}
+        <span className="tool-copy-status" role="status" aria-live="polite">{copyNotice}</span>
       </div>
     </details>
   );

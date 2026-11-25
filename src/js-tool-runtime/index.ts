@@ -17,6 +17,7 @@ export type {
 export function executeJavaScript(
   input: ExecutionRequest,
   signal?: AbortSignal,
+  onStage?: (stage: "starting" | "running") => void,
 ): Promise<ExecutionResult> {
   if (signal?.aborted) return Promise.resolve(cancelledExecution());
   if (
@@ -32,6 +33,8 @@ export function executeJavaScript(
       ),
     );
   return new Promise((resolve) => {
+    const initiated = performance.now();
+    onStage?.("starting");
     let worker: Worker;
     try {
       worker = new Worker(new URL("./execute.worker.ts", import.meta.url), {
@@ -40,7 +43,7 @@ export function executeJavaScript(
       });
     } catch {
       resolve(
-        failure("error", "runtime", "Could not start the JavaScript worker."),
+        { ...failure("error", "runtime", "Could not start the JavaScript worker."), totalMs: Math.round(performance.now() - initiated) },
       );
       return;
     }
@@ -63,7 +66,9 @@ export function executeJavaScript(
       globalThis.clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
       worker.terminate();
-      resolve(result);
+      const now = performance.now();
+      resolve({ ...result, totalMs: Math.round(now - initiated),
+        ...(started === undefined ? {} : { startupMs: Math.round(started - initiated), executionMs: Math.round(now - started) }) });
     }
     function cancel() {
       end({
@@ -76,6 +81,7 @@ export function executeJavaScript(
       if (data.type === "ready" && started === undefined) {
         globalThis.clearTimeout(timer);
         started = performance.now();
+        onStage?.("running");
         timer = globalThis.setTimeout(
           () =>
             end(

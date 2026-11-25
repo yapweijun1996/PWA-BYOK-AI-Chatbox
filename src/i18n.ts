@@ -12,6 +12,18 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Starting JavaScript": "正在启动 JavaScript",
+  "Execution": "执行",
+  "Total": "总计",
+  "Copy result": "复制结果",
+  "Execution was interrupted before completion.": "执行在完成前中断。",
+  "Reduce the calculation size and try again.": "请缩小计算规模后重试。",
+  "Reduce the data size and try again.": "请缩小数据量后重试。",
+  "Reload the app and try again.": "请重新加载应用后重试。",
+  "Provide valid input within the tool limits.": "请提供符合工具限制的有效输入。",
+  "Check the JavaScript code and try again.": "请检查 JavaScript 代码后重试。",
+  "Check whether this operation is supported.": "请检查是否支持此操作。",
+
   "Saved key unavailable": "已保存的密钥不可用",
   "Enter API key or token": "输入 API 密钥或令牌",
   "Key saved on this device.": "密钥已保存在此设备。",

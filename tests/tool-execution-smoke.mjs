@@ -139,6 +139,7 @@ try {
   assert.equal(toolResult.tool_call_id, "call_1");
   const parsed = JSON.parse(toolResult.content);
   assert.equal(parsed.status, "success", JSON.stringify(parsed));
+  for (const field of ["startupMs", "executionMs", "totalMs"]) assert.ok(Number.isFinite(parsed[field]) && parsed[field] >= 0, field);
   assert.deepEqual(parsed.console, [
     { level: "log", text: "sandbox undefined" },
   ]);
@@ -159,6 +160,9 @@ try {
   await tool.locator("summary").click();
   assert.equal(await tool.getByLabel("JavaScript source").innerText(), source);
   await tool.getByLabel("Console output").waitFor();
+  await tool.getByText(/Startup:.*Execution:.*Total:/).waitFor();
+  await tool.getByRole("button", { name: "Copy code" }).waitFor();
+  await tool.getByRole("button", { name: "Copy result" }).waitFor();
   assert.match(
     await tool.getByLabel("Execution result").innerText(),
     /"answer":42/,

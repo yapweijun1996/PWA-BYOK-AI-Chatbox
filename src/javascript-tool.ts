@@ -35,6 +35,7 @@ export type ToolExecution = Readonly<{
   name: string;
   code: string;
   startedAt: number;
+  stage?: "starting" | "running";
   result?: ExecutionResult;
 }>;
 export type ToolProgress = (record: ToolExecution) => void;
@@ -81,8 +82,9 @@ export async function runJavascriptTool(
       "The tool requires a nonempty code string within the source size limit.",
     );
   else {
-    onProgress(execution);
-    result = await executeJavaScript({ code: execution.code }, signal);
+    result = await executeJavaScript({ code: execution.code }, signal, (stage) =>
+      onProgress({ ...execution, stage }),
+    );
   }
   onProgress({ ...execution, result });
   return result;
@@ -92,7 +94,7 @@ export function restoreToolExecutions(
   executions?: ToolExecution[],
 ): ToolExecution[] | undefined {
   return executions?.map((record) =>
-    record.result ? record : { ...record, result: cancelledExecution() },
+    record.result ? record : { ...record, result: failure("cancelled", "cancelled", "Execution was interrupted before completion.") },
   );
 }
 
@@ -115,7 +117,8 @@ export function validToolExecutions(value: unknown): value is ToolExecution[] {
       (item.name !== javascriptToolName && !localToolNames.includes(item.name)) ||
       typeof item.code !== "string" ||
       item.code.length > executionLimits.sourceChars ||
-      !numeric(item.startedAt)
+      !numeric(item.startedAt) ||
+      (item.stage !== undefined && !["starting", "running"].includes(item.stage))
     )
       return false;
     unique.add(item.id);
@@ -128,6 +131,7 @@ export function validToolExecutions(value: unknown): value is ToolExecution[] {
         result.status,
       ) ||
       !numeric(result.durationMs) ||
+      [result.startupMs, result.executionMs, result.totalMs].some((n) => n !== undefined && !numeric(n)) ||
       typeof result.truncated !== "boolean" ||
       !Array.isArray(result.console) ||
       result.console.length > executionLimits.consoleEntries
