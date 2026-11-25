@@ -644,6 +644,7 @@ select:focus-visible {
   font-size: 14px;
   line-height: 1.5;
 }
+.composer textarea:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; border-radius: var(--radius-small); }
 .composer-actions {
   display: flex;
   align-items: center;
@@ -653,13 +654,12 @@ select:focus-visible {
 .composer-actions .model-pill {
   min-width: 0;
   flex: 0 1 150px;
-  order: 2;
   margin-inline-start: auto;
   min-height: 36px;
   max-width: min(150px, 100%);
   font-size: var(--font-small);
 }
-.composer-actions .send { order: 3; margin-inline-start: 0; }
+.composer-actions .send { margin-inline-start: 0; }
 .composer-expand { position: absolute; top: 8px; inset-inline-end: 8px; z-index: 1; width: 32px; height: 32px; }
 .composer-backdrop { position: fixed; inset: 0; z-index: 100; background: var(--color-scrim); }
 .composer[data-expanded="true"] { position: fixed; z-index: 101; inset: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) auto max(20px, env(safe-area-inset-left)); width: min(900px, calc(100% - 40px)); height: calc(var(--app-viewport-height, 100dvh) - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))); margin: auto; display: flex; flex-direction: column; }
@@ -810,6 +810,8 @@ select:focus-visible {
   color: var(--color-muted);
   font-size: var(--font-small);
 }
+.composer-notice { display: flex; align-items: center; justify-content: space-between; gap: var(--space-small); padding: var(--space-extra-small) var(--space-small); color: var(--color-text); background: var(--color-soft); border-radius: var(--radius-small); overflow-wrap: anywhere; }
+.composer-notice .icon { flex: none; min-width: 44px; min-height: 44px; }
 .attachment-area { min-width: 0; margin-bottom: var(--space-extra-small); }
 .attachment-heading { margin: 0 var(--space-extra-small); color: var(--color-muted); font-size: var(--font-caption); }
 .file-list {

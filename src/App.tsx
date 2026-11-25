@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import {
   Paperclip,
   Sparkles,
@@ -76,6 +76,7 @@ function App({
   onInitialCommit: () => void;
 }) {
   const workspace = useWorkspace({ initial, onInitialCommit });
+  const toolsHelpId = useId();
   const {
     locale,
     t,
@@ -472,26 +473,17 @@ function App({
               processingFiles={processingFiles}
               phase={phase}
               blockedReason={chat ? composerBlocked : undefined}
+              notice={workspace.notice}
+              onDismissNotice={() => setNotice("")}
               commandsEnabled={Boolean(chat) && !working && !navigating && !processingFiles && !conflicts.has(active) && !replySave}
               onCommand={runCommand}
               modelControl={
                 <>
-                  <ModelSelector
-                    triggerRef={modelTrigger}
-                    locale={locale}
-                    autoFocusSearch={desktopInput}
-                    provider={config.id}
-                    selected={selectedModel}
-                    groups={modelGroups}
-                    onLoad={loadCatalog}
-                    onSelect={selectModel}
-                    onSettings={openSettings}
-                  />
                   <button
                     className="icon composer-reasoning"
                     type="button"
                     aria-label={t("Local tools")}
-                    aria-description={t("Enable local JavaScript, time, calculation, file, text and memory tools. Results are sent to the selected model.")}
+                    aria-describedby={toolsHelpId}
                     aria-pressed={javascriptEnabled}
                     disabled={!chat || working}
                     title={t(
@@ -502,6 +494,9 @@ function App({
                     <Code2 size={17} aria-hidden="true" />
                     <span>{t("Tools")}</span>
                   </button>
+                  <span className="visually-hidden" id={toolsHelpId}>
+                    {t("Enable local JavaScript, time, calculation, file, text and memory tools. Results are sent to the selected model.")}
+                  </span>
                   {reasoningAvailable && (
                     <button
                       className="icon composer-reasoning"
@@ -515,6 +510,17 @@ function App({
                       <span>{t("Reasoning")}</span>
                     </button>
                   )}
+                  <ModelSelector
+                    triggerRef={modelTrigger}
+                    locale={locale}
+                    autoFocusSearch={desktopInput}
+                    provider={config.id}
+                    selected={selectedModel}
+                    groups={modelGroups}
+                    onLoad={loadCatalog}
+                    onSelect={selectModel}
+                    onSettings={openSettings}
+                  />
                 </>
               }
               onDraft={editDraft}

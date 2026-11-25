@@ -10,7 +10,7 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { interpolate, translate } from "../i18n";
+import { interpolate, translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
 import { formatSize } from "../format-size";
 import type { Attachment } from "../types";
@@ -30,6 +30,8 @@ type Props = {
   processingFiles: boolean;
   phase: ReplyPhase;
   blockedReason?: string;
+  notice: string;
+  onDismissNotice: () => void;
   modelControl: ReactNode;
   commandsEnabled: boolean;
   onCommand: (command: SlashCommand) => void;
@@ -49,6 +51,8 @@ export function Composer({
   processingFiles,
   phase,
   blockedReason,
+  notice,
+  onDismissNotice,
   modelControl,
   commandsEnabled,
   onCommand,
@@ -67,6 +71,9 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const commandListId = useId();
+  const hintId = useId();
+  const statusId = useId();
+  const attachmentHelpId = useId();
   const [dismissedDraft, setDismissedDraft] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState(0);
   const commandQuery = /^\/([a-z]*)$/i.exec(draft);
@@ -99,6 +106,27 @@ export function Composer({
       input?.setSelectionRange(start, end);
     });
   };
+
+  useLayoutEffect(() => {
+    if (!expanded || !shell.current) return;
+    const app = shell.current.closest<HTMLElement>(".app");
+    if (!app) return;
+    const previous = new Map<HTMLElement, boolean>();
+    let child: HTMLElement = shell.current;
+    while (child !== app && child.parentElement) {
+      const parent = child.parentElement;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling !== child && sibling instanceof HTMLElement) {
+          previous.set(sibling, sibling.inert);
+          sibling.inert = true;
+        }
+      }
+      child = parent;
+    }
+    return () => {
+      for (const [element, inert] of previous) element.inert = inert;
+    };
+  }, [expanded]);
 
   useEffect(() => {
     shell.current
@@ -216,6 +244,11 @@ export function Composer({
           if (canAttach) onFiles(Array.from(event.dataTransfer.files));
         }}
       >
+        {enterSends && (
+          <span id={hintId} className="visually-hidden">
+            {t("Enter to send · Shift+Enter for a new line")}
+          </span>
+        )}
         {matches.length > 0 && (
           <div className="slash-menu">
             <div className="slash-menu-heading">
@@ -318,13 +351,26 @@ export function Composer({
           </section>
         )}
         {(processingFiles || blockedReason || saving || stopping) && (
-          <p className="composer-status" role="status">
+          <p id={statusId} className="composer-status" role="status">
             {processingFiles
               ? t("Preparing attachments…")
               : saving || stopping
                 ? busyLabel
                 : t(blockedReason || "")}
           </p>
+        )}
+        {expanded && notice && (
+          <div className="composer-notice">
+            <span role="status">{translateNotice(locale, notice)}</span>
+            <button
+              type="button"
+              className="icon"
+              aria-label={t("Dismiss message")}
+              onClick={onDismissNotice}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
         <button
           className="icon composer-expand"
@@ -348,6 +394,16 @@ export function Composer({
           rows={1}
           placeholder={t("Ask anything...")}
           aria-label={t("Message")}
+          aria-describedby={
+            [
+              enterSends ? hintId : undefined,
+              processingFiles || blockedReason || saving || stopping
+                ? statusId
+                : undefined,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           aria-autocomplete="list"
           aria-controls={matches.length ? commandListId : undefined}
           aria-activedescendant={
@@ -445,14 +501,17 @@ export function Composer({
             type="button"
             title={t("Attach images or text files · 5 MB per file")}
             aria-label={t("Attach image or text")}
-            aria-description={t(
-              "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.",
-            )}
+            aria-describedby={attachmentHelpId}
             onClick={() => fileInput.current?.click()}
             disabled={!canAttach}
           >
             <Plus size={20} aria-hidden="true" />
           </button>
+          <span id={attachmentHelpId} className="visually-hidden">
+            {t(
+              "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.",
+            )}
+          </span>
           <input
             ref={fileInput}
             type="file"
@@ -510,7 +569,7 @@ export function Composer({
         </span>
       </p>
       {enterSends && (
-        <p className="composer-hint">
+        <p className="composer-hint" aria-hidden="true">
           {t("Enter to send · Shift+Enter for a new line")}
         </p>
       )}

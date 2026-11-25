@@ -364,7 +364,7 @@ export function useWorkspace({
         event.altKey ||
         event.isComposing ||
         event.key.toLowerCase() !== "k" ||
-        document.querySelector("dialog[open]")
+        document.querySelector('dialog[open], .composer[data-expanded="true"]')
       )
         return;
       event.preventDefault();

@@ -70,6 +70,11 @@ try {
   const selector = form.getByRole("button", { name: /^Choose model/ });
   assert.equal(await send.isDisabled(), true);
   await input.focus();
+  assert.notEqual(
+    await input.evaluate((element) => getComputedStyle(element).outlineStyle),
+    "none",
+  );
+  assert.match(await input.getAttribute("aria-describedby"), /.+/);
   assert.equal(
     await form.evaluate((element) => getComputedStyle(element).outlineStyle),
     "solid",
@@ -97,6 +102,24 @@ try {
   await input.evaluate((element) => element.setSelectionRange(4, 9));
   await page.getByRole("button", { name: "Expand message editor" }).click();
   await page.getByRole("dialog", { name: "Expanded message editor" }).waitFor();
+  assert.equal(
+    await page.locator(".sidebar").evaluate((element) => element.inert),
+    true,
+  );
+  await page.keyboard.press("Control+k");
+  assert.equal(
+    await page.getByRole("dialog", { name: "Search conversations" }).count(),
+    0,
+  );
+  await selector.click();
+  const expandedModelDialog = page.getByRole("dialog", {
+    name: "Choose model",
+  });
+  await expandedModelDialog.waitFor();
+  await page.keyboard.press("Escape");
+  await expandedModelDialog.waitFor({ state: "hidden" });
+  await page.getByRole("dialog", { name: "Expanded message editor" }).waitFor();
+  await input.focus();
   assert.equal(await input.inputValue(), "Long draft\n".repeat(50));
   assert.deepEqual(
     await input.evaluate((element) => [
@@ -110,6 +133,10 @@ try {
   await page
     .getByRole("dialog", { name: "Expanded message editor" })
     .waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator(".sidebar").evaluate((element) => element.inert),
+    false,
+  );
   assert.deepEqual(
     await input.evaluate((element) => [
       element.selectionStart,
@@ -119,6 +146,20 @@ try {
   );
   await input.fill("");
   assert.equal((await input.boundingBox()).height, defaultHeight);
+  const attach = form.getByRole("button", { name: "Attach image or text" });
+  await attach.focus();
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await form
+      .getByRole("button", { name: "Local tools" })
+      .evaluate((element) => document.activeElement === element),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await selector.evaluate((element) => document.activeElement === element),
+    true,
+  );
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
@@ -380,6 +421,16 @@ try {
   await page.getByRole("button", { name: "Expand message editor" }).click();
   await page.getByRole("dialog", { name: "Expanded message editor" }).waitFor();
   assert.equal(await form.locator(".file-chip").count(), 4);
+  await form.locator('input[type="file"]').setInputFiles({
+    name: "bad-expanded.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("invalid"),
+  });
+  await form
+    .getByRole("status")
+    .getByText("bad-expanded.png: this image could not be read.")
+    .waitFor();
+  await form.getByRole("button", { name: "Dismiss message" }).click();
   await page.getByRole("button", { name: "Close expanded editor" }).click();
   for (const name of ["one.txt", "two.txt", "three.txt", "four.txt"]) {
     await page.getByRole("button", { name: `Remove ${name}` }).click();
