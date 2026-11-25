@@ -326,3 +326,41 @@ describe("Responses application integration", () => {
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+describe("Responses failure guidance", () => {
+  it("distinguishes incomplete outputs while retaining streamed text", () => {
+    let text = "";
+    const stream = collectResponsesEvents((part) => { text += part; }, () => {});
+    stream.push({ type: "response.output_text.delta", delta: "partial" });
+    expect(() => stream.push({ type: "response.incomplete", response: { incomplete_details: { reason: "max_output_tokens" } } })).toThrow(/output limit/);
+    expect(text).toBe("partial");
+    const filtered = collectResponsesEvents(() => {}, () => {});
+    expect(() => filtered.push({ type: "response.incomplete", response: { incomplete_details: { reason: "content_filter" } } })).toThrow(/content policy/);
+  });
+
+  it("maps known stream errors without exposing untrusted server messages", () => {
+    const stream = collectResponsesEvents(() => {}, () => {});
+    expect(() => stream.push({ type: "response.failed", response: { error: { code: "insufficient_quota", message: "secret user input" } } })).toThrow(/quota or credits/);
+    const unknown = collectResponsesEvents(() => {}, () => {});
+    expect(() => unknown.push({ type: "error", code: "secret user input", message: "secret user input" })).toThrow("The provider reported an error while generating. Partial output was retained.");
+  });
+
+  it("handles mock HTTP errors with localized, bounded and safe guidance", async () => {
+    const { vi } = await import("vitest");
+    const { streamChat } = await import("../src/providers");
+    const { translateNotice } = await import("../src/i18n");
+    const { responsesHttpHint } = await import("../src/responses-errors");
+    const config = { id: "openai" as const, model: "gpt-6-luna", endpoint: "https://api.openai.com/v1", vision: false, openaiApi: "responses" as const };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: "context_length_exceeded", message: "secret user input" } }), { status: 400 })));
+    try {
+      const error = await streamChat(config, "fake-key", [message], new AbortController().signal, () => {}).catch((e: Error) => e);
+      expect(error.message).toContain("context limit");
+      expect(error.message).not.toContain("secret user input");
+      expect(translateNotice("zh-CN", error.message)).toContain("上下文");
+      expect(translateNotice("ms", error.message)).toContain("konteks");
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "secret user input" } }), { status: 400 })));
+      await expect(streamChat(config, "fake-key", [message], new AbortController().signal, () => {})).rejects.toThrow(/Responses API request \(HTTP 400\)/);
+      expect(await responsesHttpHint(new Response("x".repeat(16385), { status: 400 }))).toBeUndefined();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});

@@ -1,3 +1,4 @@
+import { responsesHttpHint } from "./responses-errors";
 import { buildResponsesRequest, replay, streamResponsesPrototype } from "./openai-responses";
 import type { OutputItem } from "./openai-responses";
 import type { Attachment, Message, ProviderConfig } from "./types";
@@ -80,8 +81,15 @@ async function request(
     throw new Error(`Connection failed. ${networkHint(config)}`);
   }
   if (!response.ok) {
+    const hint = config.id === "openai" && path === "/responses" ? await responsesHttpHint(response) : undefined;
+    init.signal?.throwIfAborted();
+    if (hint) throw new Error(hint);
     const message =
-      response.status === 401
+      response.status === 400 && config.id === "openai" && path === "/responses"
+        ? "OpenAI rejected the Responses API request (HTTP 400). Check the model and its supported settings, then retry."
+        : response.status === 413 && config.id === "openai" && path === "/responses"
+          ? "The request is too large for OpenAI (HTTP 413). Shorten the conversation or attachments, then retry."
+          : response.status === 401
         ? "Authentication failed (HTTP 401). Check this provider's key or token."
         : response.status === 403
           ? "Access denied (HTTP 403). Check the provider's account permissions and model access."

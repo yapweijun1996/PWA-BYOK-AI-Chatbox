@@ -1,3 +1,4 @@
+import { responsesStreamFailure } from "./responses-errors";
 import {
   javascriptToolDescription,
   javascriptToolParameters,
@@ -24,7 +25,7 @@ const record = (x: unknown): Record<string, unknown> | undefined =>
     : undefined;
 const invalid = () =>
   new Error(
-    "The provider returned an invalid or oversized tool call. No code was executed for this round.",
+    "Responses API data is invalid or exceeds the supported size. Check model compatibility and retry.",
   );
 const tools = [
   {
@@ -240,9 +241,7 @@ export function collectResponsesEvents(
         event.type === "response.incomplete" ||
         event.type === "error"
       )
-        throw new Error(
-          "The provider reported an error while generating. Partial output was retained.",
-        );
+        throw new Error(responsesStreamFailure(event));
       else if (event.type === "response.completed") {
         const response = record(event.response);
         if (

@@ -167,9 +167,33 @@ try {
   await page.getByText("Answer 5", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Dismiss message" }).click();
   await edited.getByRole("button", { name: "Delete branch" }).click();
+  // Hold an IndexedDB write transaction so the branch cannot be committed yet.
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open("luma-chat");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("conversations", "readwrite");
+      const store = tx.objectStore("conversations");
+      window.releaseBranchTestLock = false;
+      const keepAlive = () => {
+        const read = store.count();
+        read.onerror = () => reject(read.error);
+        read.onsuccess = () => {
+          if (!window.branchTestLockAcquired) { window.branchTestLockAcquired = true; resolve(); }
+          if (!window.releaseBranchTestLock) keepAlive();
+        };
+      };
+      tx.oncomplete = () => db.close();
+      keepAlive();
+    };
+  }));
   await dialog
     .getByRole("button", { name: "Delete branch", exact: true })
     .click();
+  await page.getByText("Answer 5", { exact: true }).waitFor();
+  assert.equal(await page.getByText("Answer 4", { exact: true }).count(), 0);
+  await page.evaluate(() => { window.releaseBranchTestLock = true; });
   await page.getByText("Answer 4", { exact: true }).waitFor();
   assert.equal(
     await page.getByText("Edited question", { exact: true }).count(),

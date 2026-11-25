@@ -12,6 +12,19 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "The conversation exceeds the model's context limit. Start a new chat or shorten the input, then retry.": "对话超过模型的上下文限制。请新建对话或缩短输入后重试。",
+  "OpenAI quota or credits are exhausted. Check your billing and usage limits before retrying.": "OpenAI 配额或余额已用尽。请检查账单和使用限额后重试。",
+  "OpenAI rate limit reached. Wait a moment and retry, or check your rate limits.": "已达到 OpenAI 请求频率上限。请稍后重试，或检查频率限制。",
+  "OpenAI could not find or grant access to this model. Check the model ID and account permissions.": "OpenAI 找不到此模型或未授予访问权限。请检查模型 ID 和账户权限。",
+  "OpenAI rejected the API key. Check the key in Providers.": "OpenAI 拒绝了 API 密钥。请在服务商设置中检查密钥。",
+  "OpenAI rejected a request setting for this model. Check model compatibility with Responses API and local tools.": "OpenAI 拒绝了此模型的某项请求设置。请检查模型是否兼容 Responses API 和本地工具。",
+  "OpenAI rejected a request setting. Check the model ID and its Responses API compatibility.": "OpenAI 拒绝了某项请求设置。请检查模型 ID 及其 Responses API 兼容性。",
+  "OpenAI encountered a server error. Wait a moment and retry.": "OpenAI 服务器发生错误。请稍后重试。",
+  "OpenAI returned an incomplete response. Partial output was retained; retry or shorten the input.": "OpenAI 返回了不完整的回复，已保留部分输出；请重试或缩短输入。",
+  "Responses API data is invalid or exceeds the supported size. Check model compatibility and retry.": "Responses API 数据无效或超过支持的大小。请检查模型兼容性后重试。",
+  "OpenAI rejected the Responses API request (HTTP 400). Check the model and its supported settings, then retry.": "OpenAI 拒绝了 Responses API 请求（HTTP 400）。请检查模型及其支持的设置后重试。",
+  "The request is too large for OpenAI (HTTP 413). Shorten the conversation or attachments, then retry.": "发送给 OpenAI 的请求过大（HTTP 413）。请缩短对话或减少附件后重试。",
+
   "OpenAI API mode": "OpenAI API 模式",
   "Responses API is experimental and has been tested with a mock interface. Tool history is stored on this device and sent with the active branch.": "Responses API 为实验功能，已使用模拟接口测试。工具历史保存在本设备，并随当前分支发送。",
   "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning.": "GPT-6 Luna 启用本地工具时会将推理强度设为 none（无）。关闭工具可使用模型默认推理设置。",

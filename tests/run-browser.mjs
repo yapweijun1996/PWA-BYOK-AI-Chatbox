@@ -73,6 +73,7 @@ try {
     "tests/reasoning-smoke.mjs",
     "tests/tool-execution-smoke.mjs",
     "tests/openai-luna-smoke.mjs",
+    "tests/responses-errors-smoke.mjs",
     "tests/local-tools-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",

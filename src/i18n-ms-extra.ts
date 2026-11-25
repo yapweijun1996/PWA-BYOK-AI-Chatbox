@@ -1,5 +1,18 @@
 // Malay translations for interface, provider and diagnostic messages.
 export const msExtra: Record<string, string> = {
+  "The conversation exceeds the model's context limit. Start a new chat or shorten the input, then retry.": "Perbualan melebihi had konteks model. Mulakan sembang baharu atau pendekkan input, kemudian cuba lagi.",
+  "OpenAI quota or credits are exhausted. Check your billing and usage limits before retrying.": "Kuota atau kredit OpenAI telah habis. Periksa bil dan had penggunaan sebelum mencuba lagi.",
+  "OpenAI rate limit reached. Wait a moment and retry, or check your rate limits.": "Had kadar OpenAI telah dicapai. Tunggu sebentar dan cuba lagi, atau periksa had kadar anda.",
+  "OpenAI could not find or grant access to this model. Check the model ID and account permissions.": "OpenAI tidak menemui atau tidak memberikan akses kepada model ini. Periksa ID model dan kebenaran akaun.",
+  "OpenAI rejected the API key. Check the key in Providers.": "OpenAI menolak kunci API. Periksa kunci dalam tetapan penyedia.",
+  "OpenAI rejected a request setting for this model. Check model compatibility with Responses API and local tools.": "OpenAI menolak tetapan permintaan untuk model ini. Periksa keserasian model dengan Responses API dan alat setempat.",
+  "OpenAI rejected a request setting. Check the model ID and its Responses API compatibility.": "OpenAI menolak tetapan permintaan. Periksa ID model dan keserasiannya dengan Responses API.",
+  "OpenAI encountered a server error. Wait a moment and retry.": "OpenAI mengalami ralat pelayan. Tunggu sebentar dan cuba lagi.",
+  "OpenAI returned an incomplete response. Partial output was retained; retry or shorten the input.": "OpenAI mengembalikan respons yang tidak lengkap. Sebahagian output dikekalkan; cuba lagi atau pendekkan input.",
+  "Responses API data is invalid or exceeds the supported size. Check model compatibility and retry.": "Data Responses API tidak sah atau melebihi saiz yang disokong. Periksa keserasian model dan cuba lagi.",
+  "OpenAI rejected the Responses API request (HTTP 400). Check the model and its supported settings, then retry.": "OpenAI menolak permintaan Responses API (HTTP 400). Periksa model dan tetapan yang disokong, kemudian cuba lagi.",
+  "The request is too large for OpenAI (HTTP 413). Shorten the conversation or attachments, then retry.": "Permintaan terlalu besar untuk OpenAI (HTTP 413). Pendekkan perbualan atau lampiran, kemudian cuba lagi.",
+
   "Your current draft and attachments will be kept so you can restore them by cancelling the edit. The original message remains unchanged.":
     "Draf dan lampiran semasa akan disimpan supaya boleh dipulihkan apabila suntingan dibatalkan. Mesej asal tidak berubah.",
   "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.":

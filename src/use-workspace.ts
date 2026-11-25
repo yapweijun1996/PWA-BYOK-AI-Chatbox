@@ -1274,9 +1274,12 @@ export function useWorkspace({
     if (!chat.messages.some((message) => message.id === messageId)) return;
     session.update({ navigating: true });
     try {
-      const saved = await updateChat(chat.id, (current) => deleting ? removeBranch(current, messageId) : selectBranch(current, messageId));
-      if (!saved) session.update({ threads: session.get().threads.map((item) => item.id === chat.id ? chat : item) });
-      else followReply.current = true;
+      const selected = deleting ? removeBranch(chat, messageId) : selectBranch(chat, messageId);
+      // Keep the old branch visible until the selection/deletion is durable.
+      if (await queueSave(selected)) {
+        followReply.current = true;
+        session.update((current) => ({ threads: current.threads.map((item) => item.id === chat.id ? selected : item) }));
+      }
     } finally { session.update({ navigating: false }); }
   };
   const testConnection = async () => {
