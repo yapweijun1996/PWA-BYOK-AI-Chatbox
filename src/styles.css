@@ -393,7 +393,7 @@ select:focus-visible {
 }
 .user .bubble {
   flex: 0 1 auto;
-  max-width: 85%;
+  max-width: min(85%, calc(100% - 50px));
   background: var(--color-soft);
   border-color: transparent;
 }
@@ -407,6 +407,8 @@ select:focus-visible {
 }
 .message-meta strong {
   color: var(--color-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .message-meta time { flex: none; white-space: nowrap; }
 .reasoning {
@@ -1093,6 +1095,8 @@ select:focus-visible {
 }
 @media (max-width: 767px) {
   .message-action { min-width: 44px; min-height: 44px; justify-content: center; }
+  .user .bubble { max-width: calc(100% - 40px); }
+  .message-actions { gap: 2px; }
   .reasoning summary { min-height: 44px; padding-inline: var(--space-small); }
   .reasoning .rich-message { padding-inline: var(--space-small); }
   .editing-banner { flex-wrap: wrap; }

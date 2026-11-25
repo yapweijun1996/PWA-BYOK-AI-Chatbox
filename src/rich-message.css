@@ -31,7 +31,7 @@
 .rich-message :is(h4, h5, h6) {
   font-size: 1em;
 }
-.rich-message :is(p, ul, ol, blockquote, .rich-code, .rich-table) {
+.rich-message :is(p, ul, ol, blockquote, .rich-code, .rich-table-frame) {
   margin-block: 0.75em;
 }
 .rich-message :is(ul, ol) {
@@ -110,6 +110,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rich-code-actions { display: flex; flex: none; align-items: center; }
 .rich-code-copy,
 .rich-image-action {
   display: inline-flex;
@@ -129,6 +130,8 @@
 .rich-image-action:hover {
   background: var(--color-soft);
 }
+.rich-code-copy[aria-pressed="true"] { background: var(--color-soft); color: var(--color-text); }
+.rich-code-copy:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
 .rich-code pre {
   margin: 0;
   padding: var(--space-base);
@@ -139,6 +142,10 @@
   white-space: pre;
   overflow-wrap: normal;
 }
+.rich-code pre[data-wrap="true"] code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-scroll-hint { padding: var(--space-small) var(--space-base); color: var(--color-muted); font-size: var(--font-caption); }
+.rich-table-frame { max-width: 100%; min-width: 0; }
+.rich-table { border-radius: var(--radius-small); }
 .rich-code :is(.hljs-keyword, .hljs-selector-tag, .hljs-meta) {
   color: var(--syntax-keyword);
 }
@@ -172,6 +179,7 @@
 .rich-table :is(th, td) {
   padding: 6px 10px;
   border: 1px solid var(--color-border);
+  vertical-align: top;
 }
 .rich-table th {
   background: var(--color-bg);

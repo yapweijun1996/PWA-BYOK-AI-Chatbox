@@ -3,11 +3,14 @@ import {
   memo,
   useContext,
   useDeferredValue,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import type { ElementContent, RootContent } from "hast";
-import { Copy, Image as ImageIcon } from "lucide-react";
+import { Copy, Image as ImageIcon, WrapText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -134,8 +137,29 @@ function syntax(source: string, language: string) {
   }
 }
 
+function useHorizontalOverflow<T extends HTMLElement>(content: unknown) {
+  const ref = useRef<T>(null);
+  const [overflow, setOverflow] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const update = () =>
+      setOverflow(element.scrollWidth > element.clientWidth + 1);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    update();
+    return () => observer.disconnect();
+  }, [content]);
+  return { ref, overflow };
+}
+
 function CodeBlock({ source, language }: { source: string; language: string }) {
   const { locale, onNotice } = useContext(localeContext);
+  const [wrap, setWrap] = useState(false);
+  const { ref, overflow } = useHorizontalOverflow<HTMLPreElement>(
+    `${wrap}:${source}`,
+  );
   const code = useMemo(() => syntax(source, language), [source, language]);
   const label =
     languageNames.get(language) ??
@@ -152,22 +176,67 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
     <div className="rich-code">
       <div className="rich-code-header">
         <span title={label}>{label}</span>
-        <button
-          type="button"
-          className="rich-code-copy"
-          onClick={() => void copy()}
-        >
-          <Copy size={14} aria-hidden="true" />
-          {translate(locale, "Copy code")}
-        </button>
+        <div className="rich-code-actions">
+          <button
+            type="button"
+            className="rich-code-copy"
+            aria-pressed={wrap}
+            title={translate(locale, "Wrap code")}
+            onClick={() => setWrap((value) => !value)}
+          >
+            <WrapText size={14} aria-hidden="true" />
+            {translate(locale, "Wrap")}
+          </button>
+          <button
+            type="button"
+            className="rich-code-copy"
+            onClick={() => void copy()}
+          >
+            <Copy size={14} aria-hidden="true" />
+            {translate(locale, "Copy code")}
+          </button>
+        </div>
       </div>
       <pre
+        ref={ref}
         className="rich-scroll"
+        data-wrap={wrap}
         tabIndex={0}
-        aria-label={`${label} · ${translate(locale, "Code block")}`}
+        aria-label={`${label} · ${translate(locale, "Code block")}${overflow ? ` · ${translate(locale, "Scroll horizontally to see more")}` : ""}`}
       >
         <code>{code}</code>
       </pre>
+      {overflow && (
+        <div className="rich-scroll-hint" aria-hidden="true">
+          {translate(locale, "Scroll horizontally to see more")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageTable({
+  children,
+  ...props
+}: ComponentPropsWithoutRef<"table"> & { children?: ReactNode }) {
+  const { locale } = useContext(localeContext);
+  const { ref, overflow } = useHorizontalOverflow<HTMLDivElement>(children);
+  return (
+    <div className="rich-table-frame">
+      <div
+        className="rich-table rich-scroll"
+        ref={ref}
+        tabIndex={0}
+        role="region"
+        aria-label={`${translate(locale, "Message table")}${overflow ? ` · ${translate(locale, "Scroll horizontally to see more")}` : ""}`}
+      >
+        <table {...props}>{children}</table>
+      </div>
+      {overflow && (
+        <div className="rich-scroll-hint" aria-hidden="true">
+          {translate(locale, "Scroll horizontally to see more")}
+        </div>
+      )}
     </div>
   );
 }
@@ -227,10 +296,14 @@ function MessageImage({
             )}
           </span>
           {state === "failed" && (
-            <button className="rich-image-action" type="button" onClick={() => {
-              setAttempt((value) => value + 1);
-              setState("loading");
-            }}>
+            <button
+              className="rich-image-action"
+              type="button"
+              onClick={() => {
+                setAttempt((value) => value + 1);
+                setState("loading");
+              }}
+            >
               {translate(locale, "Retry")}
             </button>
           )}
@@ -259,17 +332,7 @@ const components: Components = {
     );
   },
   table({ node: _node, children, ...props }) {
-    const { locale } = useContext(localeContext);
-    return (
-      <div
-        className="rich-table rich-scroll"
-        tabIndex={0}
-        role="region"
-        aria-label={translate(locale, "Message table")}
-      >
-        <table {...props}>{children}</table>
-      </div>
-    );
+    return <MessageTable {...props}>{children}</MessageTable>;
   },
   img({ src, alt = "", title }) {
     return typeof src === "string" && src ? (

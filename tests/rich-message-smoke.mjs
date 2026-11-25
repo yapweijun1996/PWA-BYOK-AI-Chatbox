@@ -159,6 +159,20 @@ try {
   await copy.click();
   await page.getByText("Code copied.").waitFor();
   assert.equal(await page.evaluate(() => window.testClipboard), code);
+  const wrap = reply.getByRole("button", { name: "Wrap", exact: true });
+  const codeScroll = reply.locator(".rich-code pre");
+  assert.equal(await wrap.getAttribute("aria-pressed"), "false");
+  await wrap.click();
+  assert.equal(await wrap.getAttribute("aria-pressed"), "true");
+  assert.equal(await codeScroll.evaluate((el) => getComputedStyle(el.querySelector("code")).whiteSpace), "pre-wrap");
+  await page.waitForFunction(() => {
+    const el = document.querySelector(".rich-code pre");
+    return el.scrollWidth <= el.clientWidth + 1 && !el.parentElement.querySelector(".rich-scroll-hint");
+  });
+  await page.evaluate(() => { window.testClipboard = "not copied yet"; });
+  await copy.click();
+  assert.equal(await page.evaluate(() => window.testClipboard), code);
+  await wrap.click();
   assert.equal(imageRequests, 0);
   await reply
     .getByRole("button", { name: "Load image: Example chart" })
@@ -186,6 +200,12 @@ try {
   assert.equal(widths.page, 320);
   assert.equal(widths.pane, widths.paneWidth);
   assert.deepEqual(widths.nested, [true, true]);
+  assert.equal(await reply.locator(".rich-scroll-hint").count(), 2);
+  const table = reply.getByRole("region", { name: /Message table/ });
+  assert.match(await table.getAttribute("aria-label"), /Scroll horizontally/);
+  await table.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => document.querySelector(".rich-table").scrollLeft > 0);
 
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   const saved = await page.evaluate(async () => {

@@ -11,6 +11,9 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Wrap": "换行",
+  "Wrap code": "代码自动换行",
+  "Scroll horizontally to see more": "横向滚动查看更多",
   "Response in progress": "回复生成中",
   "Generating": "生成中",
   "Showing the first 100 results. Refine your search to see more.": "仅显示前 100 条结果，请细化搜索以查看更多。",
