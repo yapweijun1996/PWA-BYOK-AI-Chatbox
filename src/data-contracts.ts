@@ -80,7 +80,7 @@ export function mergeSettings(
       Array.isArray(input?.projects) ? input.projects.filter(validProject) : [],
     ),
     language:
-      input?.language && ["system", "en", "zh-CN"].includes(input.language)
+      input?.language && ["system", "en", "zh-CN", "ms"].includes(input.language)
         ? input.language
         : "system",
     providers: configs,

@@ -130,6 +130,8 @@ try {
   assert.equal(await field("Provider").innerText(), "LM Studio");
   assert.equal(await field("Model").innerText(), "reasoning-model");
   assert.notEqual(await field("TTFT").innerText(), "N/A");
+  const ttftSource = inspector.locator("dl > div").filter({ has: page.getByText("TTFT", { exact: true }) }).getByRole("note", { name: "Client measured" });
+  assert.equal(await ttftSource.innerText(), "Client");
   assert.equal(await field("TTFV").innerText(), "N/A");
   assert.equal(await field("TPS").innerText(), "N/A");
   assert.equal(await field("Total tokens").innerText(), "N/A");
@@ -166,6 +168,8 @@ try {
   );
   assert.notEqual(await field("TTFV").innerText(), "N/A");
   assert.notEqual(await field("TPS").innerText(), "N/A");
+  assert.match(await inspector.locator(".response-explanation").innerText(), /Client estimate: reported output tokens/);
+  await inspector.getByRole("note", { name: "Client estimate: reported output tokens ÷ time between first and last generated deltas" }).waitFor();
   assert.equal(await field("Total tokens").innerText(), "71");
   assert.equal(await field("Reasoning tokens").innerText(), "10");
   assert.equal(await field("Cached tokens").innerText(), "0");
@@ -240,7 +244,7 @@ try {
       suppressed: true,
     },
   );
-  const topModel = page.locator(".topbar .model-pill");
+  const topModel = page.locator(".composer .model-pill");
   await topModel.click();
   await page.getByRole("dialog", { name: "Choose model" }).getByRole("button", { name: "Open provider settings" }).click();
   await page

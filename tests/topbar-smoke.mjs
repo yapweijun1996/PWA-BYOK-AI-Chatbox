@@ -89,13 +89,27 @@ try {
   await page.getByRole("button", { name: "Change theme" }).click();
   await waitForSavedSettings(page, { theme: "light" });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
-  await page.getByRole("button", { name: "Change language" }).click();
-  await waitForSavedSettings(page, { language: "en" });
-  await page.getByRole("button", { name: "Change language" }).click();
+  await page.locator(".topbar-language summary").click();
+  await page.locator(".language-menu").getByRole("button", { name: "Malay" }).click();
+  await waitForSavedSettings(page, { language: "ms" });
+  assert.equal(await page.locator("html").getAttribute("lang"), "ms");
+  await page.reload();
+  await page.locator('html[lang="ms"][data-startup="ready"]').waitFor();
+  await page.locator(".topbar-language summary").click();
+  await page.locator(".language-menu").getByRole("button", { name: "Bahasa Cina Ringkas" }).click();
   await waitForSavedSettings(page, { language: "zh-CN" });
   assert.equal(await page.locator("html").getAttribute("lang"), "zh-CN");
-  await page.getByRole("button", { name: "切换语言" }).click();
+  await page.locator(".topbar-language summary").click();
+  await page.locator(".language-menu").getByRole("button", { name: "跟随系统语言" }).click();
   await waitForSavedSettings(page, { language: "system" });
+  assert.equal(await page.locator(".topbar .model-pill").count(), 0);
+  const updateBounds = await page.locator(".update-group").boundingBox();
+  const newBounds = await page.locator(".topbar-new").boundingBox();
+  assert.ok(updateBounds.x < newBounds.x);
+  const chatsBefore = await page.locator(".history-name").count();
+  await page.locator(".topbar-new").click();
+  await page.waitForFunction((count) => document.querySelectorAll(".history-name").length === count + 1, chatsBefore);
+
 
   await page.getByRole("button", { name: "Conversation actions" }).click();
   const actions = page.getByRole("dialog", { name: "Conversation actions" });
@@ -106,7 +120,7 @@ try {
     .locator(".topbar-title")
     .getByText("Renamed from topbar")
     .waitFor();
-  await page.locator(".topbar-model").click();
+  await page.locator(".composer .model-pill").click();
   const models = page.getByRole("dialog", { name: "Choose model" });
   await models.getByRole("button", { name: "Open provider settings" }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
@@ -121,9 +135,9 @@ try {
     })
     .waitFor();
   await page.getByRole("button", { name: "Back to chat" }).click();
-  const model = page.locator(".topbar-model");
+  const model = page.locator(".composer .model-pill");
   assert.match(
-    await model.getAttribute("aria-label"),
+    await page.locator(".topbar-menu-status").textContent(),
     /Model list reachable; chat not checked/,
   );
   const input = page.getByRole("textbox", { name: "Message", exact: true });
@@ -132,8 +146,8 @@ try {
   await page.getByText("Response failed").waitFor();
   await page.waitForFunction(() =>
     document
-      .querySelector(".topbar-model")
-      ?.getAttribute("aria-label")
+      .querySelector(".topbar-menu-status")
+      ?.textContent
       ?.includes("Last provider request failed"),
   );
   await input.fill("second");
@@ -141,8 +155,8 @@ try {
   await page.getByText("Provider reply").waitFor();
   await page.waitForFunction(() =>
     document
-      .querySelector(".topbar-model")
-      ?.getAttribute("aria-label")
+      .querySelector(".topbar-menu-status")
+      ?.textContent
       ?.includes("Last provider request succeeded"),
   );
   const gate = {
@@ -163,8 +177,8 @@ try {
   await page.getByText("Provider reply").nth(1).waitFor();
   await page.waitForFunction(() =>
     document
-      .querySelector(".topbar-model")
-      ?.getAttribute("aria-label")
+      .querySelector(".topbar-menu-status")
+      ?.textContent
       ?.includes("Last provider request succeeded"),
   );
   gate.release.resolve();
@@ -174,7 +188,7 @@ try {
     })
     .waitFor();
   assert.match(
-    await model.getAttribute("aria-label"),
+    await page.locator(".topbar-menu-status").textContent(),
     /Last provider request succeeded/,
   );
 

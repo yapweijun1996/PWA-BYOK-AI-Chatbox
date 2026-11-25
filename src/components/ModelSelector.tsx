@@ -77,7 +77,7 @@ export function ModelSelector({
     <>
       <button
         className={`model-pill${topbarStatus ? " topbar-model" : ""}`}
-        data-model-id={topbarStatus ? modelId : undefined}
+        data-model-id={modelId}
         type="button"
         ref={(element) => {
           trigger.current = element;

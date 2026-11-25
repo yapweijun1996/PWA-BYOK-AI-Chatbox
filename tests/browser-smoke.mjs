@@ -306,7 +306,7 @@ try {
   await response.getByText("$0.0012", { exact: true }).last().waitFor();
   const cost = response.locator("dl > div").filter({ hasText: "API cost (USD)" });
   assert.equal(await cost.locator("dd").first().innerText(), "$0.0012");
-  assert.ok(await cost.getByText("Provider reported").isVisible());
+  assert.ok(await cost.getByRole("note", { name: "Provider reported" }).isVisible());
   assert.equal(await page.evaluate(() => window.testXss), undefined);
   assert.equal(
     await page.locator('section[aria-label="Conversation"] img').count(),
@@ -318,7 +318,7 @@ try {
   const estimateFooter = estimated.locator(".response-inspector > summary");
   await estimateFooter.getByText("≈$0.0021", { exact: true }).waitFor();
   await estimateFooter.click();
-  await estimated.getByText("Catalog estimate", { exact: true }).waitFor();
+  await estimated.getByRole("note", { name: "Catalog estimate" }).waitFor();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "OpenAI", exact: true }).click();
   await page

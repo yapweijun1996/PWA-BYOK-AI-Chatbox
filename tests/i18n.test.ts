@@ -11,6 +11,8 @@ describe("interface language and existing preferences", () => {
   it("uses the browser language for system mode and honors explicit choice", () => {
     expect(resolveLanguage("system", "zh-CN")).toBe("zh-CN");
     expect(resolveLanguage("system", "fr-FR")).toBe("en");
+    expect(resolveLanguage("system", "ms-MY")).toBe("ms");
+    expect(mergeSettings({ language: "ms" }).language).toBe("ms");
     expect(resolveLanguage("en", "zh-CN")).toBe("en");
   });
   it("restores old settings with a safe language and sidebar default", () => {
@@ -26,6 +28,8 @@ describe("interface language and existing preferences", () => {
   it("localizes UI and dynamic diagnostics without changing user data", () => {
     expect(translate("zh-CN", "New chat")).toBe("新对话");
     expect(translate("en", "New chat")).toBe("New chat");
+    expect(translate("ms", "New chat")).toBe("Sembang baharu");
+    expect(translate("ms", "Not translated yet")).toBe("Not translated yet");
     expect(
       interpolate(translate("zh-CN", "Delete {name}"), "Customer notes"),
     ).toContain("Customer notes");

@@ -196,6 +196,12 @@ select:focus-visible {
 .topbar .inspector-control { min-width: 0; min-height: 0; }
 .topbar-menu-inspector { display: none !important; }
 .topbar-more { position: relative; flex: none; }
+.topbar-language { position: relative; flex: none; }
+.topbar-language summary { list-style: none; }
+.topbar-language summary::-webkit-details-marker { display: none; }
+.language-menu { position: absolute; z-index: 5; inset-inline-end: 0; top: calc(100% + 6px); width: min(200px, calc(100vw - 24px)); padding: 6px; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-surface); box-shadow: 0 8px 28px var(--color-shadow); }
+.language-menu button { display: block; width: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--color-text); text-align: start; }
+.language-menu button:hover, .language-menu button:focus-visible, .language-menu button[aria-pressed="true"] { background: var(--color-soft); }
 .topbar-more summary { list-style: none; }
 .topbar-more summary::-webkit-details-marker { display: none; }
 .topbar-menu {
@@ -252,7 +258,7 @@ select:focus-visible {
   gap: 3px;
   align-items: center;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 .top-actions .model-pill {
@@ -548,6 +554,21 @@ select:focus-visible {
 .response-inspector-content .response-source {
   color: var(--color-muted);
   line-height: 1.45;
+}
+.response-source span {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+.response-inspector-content .response-explanation {
+  margin-top: var(--space-medium);
+  padding-top: var(--space-base);
+  border-top: 1px solid var(--color-border);
 }
 .response-inspector-content p {
   margin: var(--space-small) 0 0;
@@ -1128,7 +1149,7 @@ select:focus-visible {
     font-size: 9pt;
     flex: 1 1 0;
   }
-  .top-actions { gap: 0; flex: 0 1 auto; }
+  .top-actions { gap: 0; flex: 0 0 auto; }
   .top-actions .model-pill { padding-inline: 6px; }
   .topbar-icon { width: 44px; height: 44px; }
   .update-version { display: none; }

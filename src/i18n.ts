@@ -1,5 +1,6 @@
-﻿export type Language = "system" | "en" | "zh-CN";
-export type Locale = "en" | "zh-CN";
+import { ms } from "./i18n-ms";
+export type Language = "system" | "en" | "zh-CN" | "ms";
+export type Locale = "en" | "zh-CN" | "ms";
 export function resolveLanguage(
   preference: Language,
   systemLanguage: string,
@@ -7,10 +8,15 @@ export function resolveLanguage(
   return preference === "system"
     ? systemLanguage.toLowerCase().startsWith("zh")
       ? "zh-CN"
-      : "en"
+      : systemLanguage.toLowerCase().startsWith("ms") ? "ms" : "en"
     : preference;
 }
 const zh: Record<string, string> = {
+  "Malay": "马来语",
+  "Language options": "语言选项",
+  "New chat from topbar": "从顶部栏新建对话",
+  "Client": "客户端",
+  "Estimate": "估算",
   "Model information": "模型信息",
   "Speed and timing": "速度与时间",
   "Token usage": "Token 用量",
@@ -691,10 +697,20 @@ export function translate(locale: Locale, text: string): string {
   if (locale === "en") return text;
   const match = text.match(/^(\s*)(.*?)(\s*)$/s);
   if (!match) return text;
-  return match[1] + (zh[match[2]] ?? match[2]) + match[3];
+  const dictionary = locale === "ms" ? ms : zh;
+  return match[1] + (dictionary[match[2]] ?? match[2]) + match[3];
 }
 export function translateNotice(locale: Locale, text: string): string {
   if (locale === "en") return text;
+  if (locale === "ms") {
+    const http = text.match(/^Provider returned HTTP (\d+)\.$/);
+    if (http) return `Penyedia mengembalikan HTTP ${http[1]}.`;
+    const timezone = text.match(/^Invalid time zone specified: (.+)$/i);
+    if (timezone) return `Zon masa tidak sah: ${timezone[1]}`;
+    const imported = text.match(/^Imported (\d+) conversations\.$/);
+    if (imported) return `${imported[1]} perbualan diimport.`;
+    return translate(locale, text);
+  }
   const timezone = text.match(/^Invalid time zone specified: (.+)$/i);
   if (timezone) return `无效的时区：${timezone[1]}`;
   const catalog = text.match(

@@ -299,7 +299,7 @@ try {
     280,
   );
   assert.match(
-    await cached.locator(".topbar .model-pill").getAttribute("title"),
+    await cached.locator(".composer .model-pill").getAttribute("title"),
     /local-restored-model/,
   );
   assert.equal(

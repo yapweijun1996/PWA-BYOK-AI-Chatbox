@@ -159,6 +159,23 @@ export const ResponseInspector = memo(function ResponseInspector({
       [t("API cost (USD)"), t("Finish reason"), t("Timestamp")],
     ],
   ] as const;
+  const sourceLabel = (source: string) => {
+    if (source === reported) return t("Provider");
+    if (source === measured) return t("Client");
+    if (source === t("Catalog estimate")) return t("Estimate");
+    if (
+      source === t("Provider timings: generated tokens ÷ generation duration")
+    )
+      return t("Provider timings");
+    if (
+      source ===
+      t(
+        "Client estimate: reported output tokens ÷ time between first and last generated deltas",
+      )
+    )
+      return t("Client estimate");
+    return source;
+  };
 
   return (
     <details className="response-inspector">
@@ -202,13 +219,27 @@ export const ResponseInspector = memo(function ResponseInspector({
                     <dt>{label}</dt>
                     <dd>{value}</dd>
                     {source && value !== missing && (
-                      <dd className="response-source">{source}</dd>
+                      <dd className="response-source">
+                        <span role="note" title={source} aria-label={source}>
+                          {sourceLabel(source)}
+                        </span>
+                      </dd>
                     )}
                   </div>
                 ))}
             </dl>
           </section>
         ))}
+        {throughput && (
+          <p className="response-explanation">
+            <strong>TPS: </strong>
+            {throughput.source === "provider"
+              ? t("Provider timings: generated tokens ÷ generation duration")
+              : t(
+                  "Client estimate: reported output tokens ÷ time between first and last generated deltas",
+                )}
+          </p>
+        )}
         <p>
           {t(
             "TTFT starts at the request and ends at the first generated text or reasoning delta. TTFV ends at the first nonblank answer text. Neither measures provider compute time.",

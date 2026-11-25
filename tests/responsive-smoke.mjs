@@ -98,7 +98,6 @@ try {
       const selectors = [
         ".topbar",
         ".top-actions",
-        ".top-actions .model-pill",
         ".inspector-control",
         ".update-control",
         ".composer",

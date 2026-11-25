@@ -595,6 +595,7 @@ function App({
                     locale={locale}
                     autoFocusSearch={desktopInput}
                     provider={config.id}
+                    modelId={config.model}
                     selected={selectedModel}
                     groups={modelGroups}
                     onLoad={loadCatalog}

@@ -41,6 +41,7 @@ export function PreferenceFields({
           <option value="system">{t("System language")}</option>
           <option value="en">{t("English")}</option>
           <option value="zh-CN">{t("Simplified Chinese")}</option>
+          <option value="ms">{t("Malay")}</option>
         </select>
       </label>
     </>

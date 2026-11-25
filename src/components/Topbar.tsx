@@ -23,7 +23,6 @@ import { Toast } from "./Toast";
 import { WorkspaceActions } from "./WorkspaceActions";
 import type { WorkspaceRequest } from "./WorkspaceActions";
 import { storage } from "../storage";
-import { ModelSelector } from "./ModelSelector";
 import type { useWorkspace } from "../use-workspace";
 
 type Workspace = ReturnType<typeof useWorkspace>;
@@ -58,6 +57,7 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
     Boolean(document.fullscreenElement),
   );
   const overflow = useRef<HTMLDetailsElement>(null);
+  const languageMenu = useRef<HTMLDetailsElement>(null);
   const write = useSyncExternalStore(
     storage.subscribeWrites,
     storage.getWriteStatus,
@@ -82,12 +82,21 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       setFullscreen(Boolean(document.fullscreenElement));
     const onPointer = (event: PointerEvent) => {
       if (
+        languageMenu.current?.open &&
+        !languageMenu.current.contains(event.target as Node)
+      )
+        languageMenu.current.open = false;
+      if (
         overflow.current?.open &&
         !overflow.current.contains(event.target as Node)
       )
         overflow.current.open = false;
     };
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && languageMenu.current?.open) {
+        languageMenu.current.open = false;
+        languageMenu.current.querySelector<HTMLElement>("summary")?.focus();
+      }
       if (event.key === "Escape" && overflow.current?.open) {
         overflow.current.open = false;
         overflow.current.querySelector<HTMLElement>("summary")?.focus();
@@ -135,13 +144,6 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       theme: options[(options.indexOf(settings.theme) + 1) % options.length],
     });
   };
-  const cycleLanguage = () => {
-    const options = ["system", "en", "zh-CN"] as const;
-    void workspace.saveSettings({
-      language:
-        options[(options.indexOf(settings.language) + 1) % options.length],
-    });
-  };
   const themeText = t(
     settings.theme === "system"
       ? "System"
@@ -154,7 +156,9 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       ? "System language"
       : settings.language === "en"
         ? "English"
-        : "Simplified Chinese",
+        : settings.language === "ms"
+          ? "Malay"
+          : "Simplified Chinese",
   );
   const toggleFullscreen = async () => {
     try {
@@ -206,6 +210,32 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       >
         <Menu size={18} aria-hidden="true" />
       </IconButton>
+      <div className="update-group">
+        <IconButton
+          className="update-control"
+          label={workspace.updateLabel}
+          title={`${workspace.updateLabel} · ${updateText}`}
+          aria-describedby="topbar-update-status"
+          aria-busy={workspace.checking}
+          aria-disabled={workspace.checking}
+          data-update-state={updateState}
+          onClick={() => void workspace.check()}
+        >
+          <UpdateIcon size={18} aria-hidden="true" />
+        </IconButton>
+        <span className="update-version" aria-hidden="true">
+          v{version}
+        </span>
+        {updateState !== "idle" && (
+          <span className="update-state-label" aria-hidden="true">
+            {availableVersion && `v${availableVersion} · `}
+            {t(updateShortLabels[updateState])}
+          </span>
+        )}
+      </div>
+      <span id="topbar-update-status" className="visually-hidden" role="status">
+        {updateText}
+      </span>
       <strong className="topbar-title">
         {view === "chat" && chat ? (
           <button
@@ -233,20 +263,44 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
         )}
       </strong>
       <div className="top-actions">
-        {view === "chat" && (
-          <ModelSelector
-            locale={locale}
-            autoFocusSearch={workspace.desktopInput}
-            provider={workspace.config.id}
-            modelId={workspace.config.model}
-            selected={workspace.selectedModel}
-            groups={workspace.modelGroups}
-            onLoad={workspace.loadCatalog}
-            onSelect={workspace.selectModel}
-            onSettings={workspace.openSettings}
-            topbarStatus={providerStatus}
-          />
-        )}
+        <details className="topbar-language" ref={languageMenu}>
+          <summary
+            className="topbar-icon"
+            aria-label={`${t("Change language")} · ${languageText}`}
+            title={`${t("Language")} · ${languageText}`}
+          >
+            <Languages size={18} aria-hidden="true" />
+          </summary>
+          <div
+            className="language-menu"
+            role="group"
+            aria-label={t("Language options")}
+          >
+            {(
+              [
+                ["system", "System language"],
+                ["en", "English"],
+                ["zh-CN", "Simplified Chinese"],
+                ["ms", "Malay"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={settings.language === value}
+                onClick={() => {
+                  if (languageMenu.current) languageMenu.current.open = false;
+                  void workspace.saveSettings({ language: value });
+                  languageMenu.current
+                    ?.querySelector<HTMLElement>("summary")
+                    ?.focus();
+                }}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+        </details>
         <span className="topbar-desktop-actions">
           <IconButton
             label={t(storageStatus)}
@@ -255,13 +309,6 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
             data-storage-state={storageStatus}
           >
             <Database size={18} aria-hidden="true" />
-          </IconButton>
-          <IconButton
-            label={`${t("Change language")} · ${languageText}`}
-            title={`${t("Language")} · ${languageText}`}
-            onClick={cycleLanguage}
-          >
-            <Languages size={18} aria-hidden="true" />
           </IconButton>
           <IconButton
             label={`${t("Change theme")} · ${themeText}`}
@@ -296,13 +343,6 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
           <>
             <IconButton
               className="workspace-shortcut"
-              label={t("New chat")}
-              onClick={workspace.create}
-            >
-              <SquarePen size={18} aria-hidden="true" />
-            </IconButton>
-            <IconButton
-              className="workspace-shortcut"
               label={t("Search conversations")}
               aria-haspopup="dialog"
               onClick={() => workspace.setSearchMode("active")}
@@ -326,36 +366,14 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
         >
           <ScanLine size={18} aria-hidden="true" />
         </IconButton>
-        <div className="update-group">
-          <IconButton
-            className="update-control"
-            label={workspace.updateLabel}
-            title={`${workspace.updateLabel} · ${updateText}`}
-            aria-describedby="topbar-update-status"
-            aria-busy={workspace.checking}
-            aria-disabled={workspace.checking}
-            data-update-state={updateState}
-            onClick={() => void workspace.check()}
-          >
-            <UpdateIcon size={18} aria-hidden="true" />
-          </IconButton>
-          <span className="update-version" aria-hidden="true">
-            v{version}
-          </span>
-          {updateState !== "idle" && (
-            <span className="update-state-label" aria-hidden="true">
-              {availableVersion && `v${availableVersion} · `}
-              {t(updateShortLabels[updateState])}
-            </span>
-          )}
-        </div>
-        <span
-          id="topbar-update-status"
-          className="visually-hidden"
-          role="status"
+        <IconButton
+          className="topbar-new"
+          label={t("New chat from topbar")}
+          title={t("New chat")}
+          onClick={workspace.create}
         >
-          {updateText}
-        </span>
+          <SquarePen size={18} aria-hidden="true" />
+        </IconButton>
         <details className="topbar-more" ref={overflow}>
           <summary
             className="topbar-icon"
@@ -410,6 +428,7 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
                   <option value="system">{t("System language")}</option>
                   <option value="en">{t("English")}</option>
                   <option value="zh-CN">{t("Simplified Chinese")}</option>
+                  <option value="ms">{t("Malay")}</option>
                 </select>
               </label>
               <label className="topbar-menu-select">
