@@ -98,6 +98,7 @@ try {
   const languageTrigger = page.locator(".topbar-language summary");
   await languageTrigger.press("Enter");
   assert.equal(await page.locator(".language-menu").getByRole("button", { name: "Bahasa Melayu" }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.locator(".language-menu").getByRole("button", { name: "Bahasa Melayu" }).locator("svg").count(), 1);
   await page.locator(".language-menu").getByRole("button", { name: "Bahasa Melayu" }).focus();
   await page.keyboard.press("Tab");
   assert.equal(await page.locator(".topbar-language").evaluate((element) => element.open), false);

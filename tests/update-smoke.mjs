@@ -149,8 +149,9 @@ try {
     });
   });
   assert.equal(workerVersion, appVersion);
-  const check = button(page, `Check for updates · v${appVersion}`);
+  const check = page.locator(".update-control");
   assert.equal(await check.getAttribute("data-update-state"), "idle");
+  assert.equal(await check.getAttribute("aria-label"), `Check for updates · v${appVersion}`);
   const toast = page.locator(".toast").getByRole("status");
   const animation = () =>
     check
@@ -265,6 +266,7 @@ try {
     )
     .waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "available");
+  await page.waitForFunction(() => document.querySelector(".update-control")?.getAttribute("aria-label") === "Install update · v0.2.1");
   await page.getByText("v0.2.1 · Update available", { exact: true }).waitFor();
   assert.match(await check.getAttribute("title"), /v0\.2\.1/);
   const originalViewport = page.viewportSize();
@@ -297,10 +299,7 @@ try {
   });
   await legacyViewer.goto(url);
   await assertRelease(legacyViewer, "A");
-  const legacyCheck = button(
-    legacyViewer,
-    `Check for updates · v${appVersion}`,
-  );
+  const legacyCheck = legacyViewer.locator(".update-control");
   await legacyViewer.waitForFunction(
     () =>
       document
@@ -308,6 +307,7 @@ try {
         ?.getAttribute("data-update-state") === "available",
   );
   await legacyViewer.waitForTimeout(1300);
+  assert.equal(await legacyCheck.getAttribute("aria-label"), "Install update");
   assert.match(await legacyCheck.getAttribute("title"), /An update is ready/);
   assert.doesNotMatch(await legacyCheck.getAttribute("title"), /v0\.2\.1/);
   await legacyViewer.close();

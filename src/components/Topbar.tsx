@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
@@ -125,6 +126,10 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
     workspace.pwa.status === "waiting" ? "available" : workspace.pwa.checkState;
   const availableVersion =
     updateState === "available" ? workspace.pwa.availableVersion : undefined;
+  const updateLabel =
+    updateState === "available"
+      ? `${t("Install update")}${availableVersion ? ` · v${availableVersion}` : ""}`
+      : workspace.updateLabel;
   const updateText = availableVersion
     ? `${t(updateMessages[updateState])} · v${availableVersion}`
     : t(updateMessages[updateState]);
@@ -240,8 +245,8 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
         <div className="update-group">
           <IconButton
             className="update-control"
-            label={workspace.updateLabel}
-            title={`${workspace.updateLabel} · ${updateText}`}
+            label={updateLabel}
+            title={`${updateLabel} · ${updateText}`}
             aria-describedby="topbar-update-status"
             aria-busy={workspace.checking}
             aria-disabled={workspace.checking}
@@ -312,7 +317,10 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
                     ?.focus();
                 }}
               >
-                {t(label)}
+                <span>{t(label)}</span>
+                {settings.language === value && (
+                  <Check size={16} aria-hidden="true" />
+                )}
               </button>
             ))}
           </div>

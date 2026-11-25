@@ -1,6 +1,7 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Install update": "Pasang kemas kini",
   ...msExtra,
   "Explain metric sources": "Terangkan sumber metrik",
   "Provider values come from the selected provider. Client values are measured or estimated in this browser. Estimates are not billing records.": "Nilai penyedia berasal daripada penyedia yang dipilih. Nilai klien diukur atau dianggarkan dalam pelayar ini. Anggaran bukan rekod bil.",
