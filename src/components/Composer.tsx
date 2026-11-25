@@ -217,7 +217,7 @@ export function Composer({
           if (event.key === "Tab") {
             const items = Array.from(
               shell.current?.querySelectorAll<HTMLElement>(
-                'button:not(:disabled), textarea:not(:disabled), [href], input:not([type="hidden"]):not(:disabled)',
+                'button:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], input:not([type="hidden"]):not(:disabled)',
               ) || [],
             ).filter((item) => item.offsetParent !== null);
             if (!items.length) return;
@@ -591,8 +591,8 @@ export function Composer({
         </div>
       </form>
       <p className="privacy">
-        <Lock size={13} aria-hidden="true" />
         <span>
+          <Lock size={13} aria-hidden="true" />
           {t(
             "Chats are stored on this device. Content is sent to your selected provider.",
           )}

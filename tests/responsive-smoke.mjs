@@ -147,7 +147,11 @@ try {
     assert.ok(await attachment.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
     const composerBounds = await page.locator(".composer").boundingBox();
     const bubbleBounds = await page.locator(".message.assistant .bubble").first().boundingBox();
-    assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
+    if (width < 768) {
+      assert.ok(Math.abs(composerBounds.x - (width - composerBounds.x - composerBounds.width)) <= 1, `${width}: mobile composer must be centered`);
+    } else {
+      assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
+    }
     assert.ok(Math.abs(composerBounds.x + composerBounds.width - bubbleBounds.x - bubbleBounds.width) <= 1, `${width}: composer and bubble right edges`);
     const conversation = page.locator(".conversation");
     assert.ok(

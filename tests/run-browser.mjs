@@ -76,6 +76,7 @@ try {
     "tests/responses-errors-smoke.mjs",
     "tests/reasoning-effort-smoke.mjs",
     "tests/composer-effort-vault-smoke.mjs",
+    "tests/composer-mobile-alignment-smoke.mjs",
     "tests/local-tools-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",

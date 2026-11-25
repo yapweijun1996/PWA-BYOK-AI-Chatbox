@@ -582,7 +582,7 @@ function App({
                   </span>
                   {reasoningAvailable && (
                     <button
-                      className="icon composer-reasoning"
+                      className="icon composer-reasoning composer-thoughts"
                       type="button"
                       title={reasoningLabel}
                       aria-label={reasoningLabel}
