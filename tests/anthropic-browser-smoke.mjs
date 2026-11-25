@@ -91,7 +91,7 @@ try {
   assert.equal(requests[1].body.messages.length, 1);
   assert.equal(
     await page.getByText("Claude reply 1", { exact: true }).count(),
-    1,
+    0,
   );
   await page.getByText("Saved locally", { exact: true }).last().waitFor();
   await page.getByRole("button", { name: "Settings", exact: true }).click();

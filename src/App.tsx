@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Paperclip,
   Sparkles,
@@ -12,6 +12,8 @@ import {
   UserRound,
   SquarePen,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
@@ -31,6 +33,7 @@ import { ToolExecutionCard } from "./components/ToolExecutionCard";
 import { MemorySettings } from "./components/MemorySettings";
 import { RichMessage } from "./components/RichMessage";
 import { copyMessage } from "./message-copy";
+import { branchDescendants, versionGroups } from "./branches";
 import { interpolate, translate, translateNotice } from "./i18n";
 import type { Locale } from "./i18n";
 import type { InitialAppState } from "./startup";
@@ -81,7 +84,7 @@ function App({
 }) {
   const workspace = useWorkspace({ initial, onInitialCommit });
   const toolsHelpId = useId();
-  const [messageAction, setMessageAction] = useState<{ kind: "retry" | "edit"; message: Message; chatId: string; anchor: HTMLElement }>();
+  const [messageAction, setMessageAction] = useState<{ kind: "retry" | "edit" | "delete"; message: Message; chatId: string; anchor: HTMLElement }>();
   const {
     locale,
     t,
@@ -122,6 +125,8 @@ function App({
     setNotice,
     onMessageScroll,
     retry,
+    visibleMessages,
+    changeBranch,
     editMessage,
     cancelEdit,
     desktopInput,
@@ -187,6 +192,7 @@ function App({
     pwa,
     redact,
   } = workspace;
+  const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat]);
   useLayoutEffect(() => {
     if (!pwa.applying) return;
     const blockInput = (event: KeyboardEvent) => {
@@ -201,6 +207,13 @@ function App({
     const anchor = messageAction?.anchor;
     setMessageAction(undefined);
     if (restoreFocus) requestAnimationFrame(() => anchor?.isConnected && anchor.focus());
+  };
+  const switchMessageVersion = async (messageId: string) => {
+    await changeBranch(messageId);
+    requestAnimationFrame(() => {
+      const message = Array.from(document.querySelectorAll<HTMLElement>("[data-message-id]")).find((element) => element.dataset.messageId === messageId);
+      message?.querySelector<HTMLElement>(".branch-control")?.focus();
+    });
   };
   const runCommand = (command: SlashCommand) => {
     switch (command) {
@@ -301,13 +314,13 @@ function App({
         {view === "chat" && (
           <>
             <section
-              className={`conversation${!chat || chat.messages.length === 0 ? " conversation-empty" : ""}`}
+              className={`conversation${!visibleMessages.length ? " conversation-empty" : ""}`}
               data-conversation-id={active}
               aria-label={t("Conversation")}
               ref={conversation}
               onScroll={onMessageScroll}
             >
-              {!chat || chat.messages.length === 0 ? (
+              {!chat || visibleMessages.length === 0 ? (
                 <div className="welcome">
                   <div className="welcome-icon">
                     <Sparkles size={28} />
@@ -329,7 +342,7 @@ function App({
                 </div>
               ) : (
                 <div className="messages" ref={messagesContent}>
-                  {chat.messages.map((m) => (
+                  {visibleMessages.map((m) => (
                     <article
                       className={`message ${m.role}`}
                       key={m.id}
@@ -433,15 +446,22 @@ function App({
                             </div>
                           )}
                         <div className="message-actions">
+                        {(messageVersions.get(m.id)?.length ?? 0) > 1 && (() => {
+                          const versions = messageVersions.get(m.id)!;
+                          const index = versions.findIndex((version) => version.id === m.id);
+                          return <div className="branch-control" aria-label={`${t("Message versions")} ${index + 1} / ${versions.length}`} role="group" tabIndex={-1}>
+                            <button type="button" className="message-action" title={t("Previous version")} aria-label={t("Previous version")} disabled={index <= 0 || working || navigating || processingFiles || Boolean(replySave) || Boolean(chat.editState) || conflicts.has(chat.id)} onClick={() => void switchMessageVersion(versions[index - 1].id)}><ChevronLeft size={16} aria-hidden="true" /></button>
+                            <span aria-live="polite">{index + 1} / {versions.length}</span>
+                            <button type="button" className="message-action" title={t("Next version")} aria-label={t("Next version")} disabled={index >= versions.length - 1 || working || navigating || processingFiles || Boolean(replySave) || Boolean(chat.editState) || conflicts.has(chat.id)} onClick={() => void switchMessageVersion(versions[index + 1].id)}><ChevronRight size={16} aria-hidden="true" /></button>
+                          </div>;
+                        })()}
                         {m.role === "assistant" && m.status !== "streaming" &&
-                          replySave?.message !== m &&
-                          m.id ===
-                            chat.messages[chat.messages.length - 1]?.id && (
+                          replySave?.message !== m && (
                               <button
                                 className="message-action"
                                 type="button"
                                 title={t("Retry")}
-                                disabled={working || navigating || processingFiles || Boolean(replySave) || conflicts.has(chat.id)}
+                                disabled={working || navigating || processingFiles || Boolean(replySave) || Boolean(chat.editState) || conflicts.has(chat.id)}
                                 onClick={(event) => setMessageAction({ kind: "retry", message: m, chatId: chat.id, anchor: event.currentTarget })}
                               >
                                 <RefreshCw size={16} aria-hidden="true" />
@@ -466,6 +486,7 @@ function App({
                             {t(" Copy")}
                           </button>
                         )}
+                        <button type="button" className="message-action" title={t("Delete branch")} aria-label={t("Delete branch")} disabled={working || navigating || processingFiles || Boolean(replySave) || Boolean(chat.editState) || conflicts.has(chat.id)} onClick={(event) => setMessageAction({ kind: "delete", message: m, chatId: chat.id, anchor: event.currentTarget })}><Trash2 size={16} aria-hidden="true" /></button>
                         </div>
                         {m.role === "assistant" && (
                           <ResponseInspector message={m} locale={locale} />
@@ -1078,10 +1099,11 @@ function App({
         )}
       </main>
       {messageAction && messageAction.chatId === chat?.id && (
-        <MessageActionDialog locale={locale} kind={messageAction.kind} current={effective.config} original={messageAction.message.request} onClose={() => closeMessageAction(true)} onConfirm={(original) => {
+        <MessageActionDialog locale={locale} kind={messageAction.kind} current={effective.config} original={messageAction.message.request} branchCount={branchDescendants(chat, messageAction.message.id).size} onClose={() => closeMessageAction(true)} onConfirm={(original) => {
           const action = messageAction;
           closeMessageAction(false);
-          if (action.kind === "retry") void retry(original);
+          if (action.kind === "retry") void retry(original, action.message.id);
+          else if (action.kind === "delete") void changeBranch(action.message.id, true);
           else void editMessage(action.message);
         }} />
       )}

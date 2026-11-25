@@ -16,6 +16,7 @@ import {
 import { validResponseTelemetry } from "./response-telemetry";
 import { validOverrides, validRequestSnapshot } from "./request-config";
 import { restoreToolExecutions, validToolExecutions } from "./javascript-tool";
+import { validBranchConversation } from "./branches";
 
 export function recoverMessage(message: Message): Message {
   if (
@@ -176,13 +177,13 @@ function validAttachment(a: Attachment): boolean {
 const validAttachments = (items: Attachment[]) =>
   Array.isArray(items) && uniqueIds(items) && items.every(validAttachment);
 
-export type BackupV1 = {
-  version: 1;
+export type Backup = {
+  version: 1 | 2;
   conversations: Conversation[];
   projects?: WorkspaceProject[];
   settings?: Partial<Settings>;
 };
-export function validBackup(value: unknown): value is BackupV1 {
+export function validBackup(value: unknown): value is Backup {
   if (!value || typeof value !== "object") return false;
   const data = value as {
     version?: unknown;
@@ -191,7 +192,7 @@ export function validBackup(value: unknown): value is BackupV1 {
     settings?: unknown;
   };
   if (
-    data.version !== 1 ||
+    (data.version !== 1 && data.version !== 2) ||
     !Array.isArray(data.conversations) ||
     !uniqueIds(data.conversations) ||
     (data.settings !== undefined &&
@@ -207,6 +208,7 @@ export function validBackup(value: unknown): value is BackupV1 {
   return data.conversations.every(
     (c: Conversation) =>
       c &&
+      (data.version !== 1 || c.branchVersion === undefined) &&
       typeof c.id === "string" &&
       typeof c.title === "string" &&
       typeof c.draft === "string" &&
@@ -227,6 +229,7 @@ export function validBackup(value: unknown): value is BackupV1 {
       Number.isFinite(c.updatedAt) &&
       Array.isArray(c.messages) &&
       uniqueIds(c.messages) &&
+      validBranchConversation(c) &&
       c.messages.every((m: Message) => {
         if (
           !m ||

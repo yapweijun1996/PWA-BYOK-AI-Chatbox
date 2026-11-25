@@ -15,6 +15,7 @@ import type { WorkerStatus } from "../pwa-update";
 import type { ResolvedConfig } from "../request-config";
 import { storage } from "../storage";
 import { requestHistory } from "../providers";
+import { activePath } from "../branches";
 import type { Conversation, Settings } from "../types";
 import type { ActiveReply } from "../workspace-state";
 import {
@@ -99,7 +100,7 @@ export function WorkspaceInspector({
     chat?.messages.filter((message) => message.role === "assistant") ?? [];
   const selected =
     responses.find((message) => message.id === selection) ?? responses.at(-1);
-  const relevantHistory = chat ? requestHistory(chat.messages).length : 0;
+  const relevantHistory = chat ? requestHistory(activePath(chat)).length : 0;
   const mode =
     matchMedia("(display-mode: standalone)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true

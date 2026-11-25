@@ -11,6 +11,16 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Only the selected branch and its attachments are sent.": "只会发送所选分支及其附件。",
+  "Finish or cancel editing before changing branches.": "请先完成或取消编辑，再切换分支。",
+  "The edited message is no longer available.": "正在编辑的消息已不存在。",
+  "Delete branch?": "删除分支？",
+  "Delete branch": "删除分支",
+  "Delete this message? This cannot be undone.": "删除此消息？此操作无法撤销。",
+  "Delete this branch and its {name} messages? This cannot be undone.": "删除此分支的 {name} 条消息？此操作无法撤销。",
+  "Previous version": "上一个版本",
+  "Next version": "下一个版本",
+  "Message versions": "消息版本",
   "Retry reply?": "重新生成回复？",
   "Replace current draft?": "替换当前草稿？",
   "A new request may incur charges. Earlier replies stay in this chat.": "新请求可能产生费用，之前的回复会保留在对话中。",

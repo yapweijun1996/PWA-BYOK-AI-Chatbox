@@ -50,7 +50,9 @@ function readThen<T>(
 }
 
 const DB = "luma-chat";
-const VERSION = 1;
+// Older clients flatten message history and could send hidden branches. Bump
+// the database version so they cannot reopen a branch-aware workspace.
+const VERSION = 2;
 const ACTIVE_KEY = "activeConversation";
 let database: Promise<IDBDatabase> | undefined;
 let writeStatus = {

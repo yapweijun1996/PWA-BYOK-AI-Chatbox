@@ -15,6 +15,7 @@ import { canRequestReasoning, configureModel } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { formatSize } from "./format-size";
 import { readAttachment } from "./attachments";
+import { activePath, activateBranch, asBranchConversation, pathTo, removeBranch, selectBranch } from "./branches";
 import { copyConversationSelection } from "./message-copy";
 import type { PreferenceProps } from "./components/Preferences";
 import type { ReplyPhase } from "./components/Composer";
@@ -43,7 +44,7 @@ import {
   resolveTheme,
   subscribeSystemDark,
 } from "./theme";
-import { mergeSettings, recoverMessage, type BackupV1 } from "./data-contracts";
+import { mergeSettings, recoverMessage, type Backup } from "./data-contracts";
 import { downloadBackup, planBackupExport, readBackupFile, type ExportPlan } from "./backup";
 import { runToolTurn } from "./tool-turn";
 import {
@@ -54,7 +55,7 @@ import {
 } from "./history-sharing";
 import type { ToolExecution } from "./javascript-tool";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { listModelOptions, streamChat } from "./providers";
+import { listModelOptions, requestHistory, streamChat } from "./providers";
 import {
   checkedLmStudioAddress,
   credentialDestination,
@@ -181,7 +182,7 @@ export function useWorkspace({
   const [exportPlan, setExportPlan] = useState<ExportPlan | null>(null);
   // Keep the chosen snapshot downloadable even if a reply is still streaming.
   useEffect(() => setExportPlan(null), [view]);
-  const [importPreview, setImportPreview] = useState<(BackupV1 & {
+  const [importPreview, setImportPreview] = useState<(Backup & {
     existing: Map<string, Conversation>; previousSettings: AppSettings;
   }) | null>(null);
   const [importPreferences, setImportPreferences] = useState(false);
@@ -489,13 +490,13 @@ export function useWorkspace({
   const files = chat?.draftAttachments || [];
   const hasImage = (attachments?: Attachment[]) =>
     attachments?.some((file) => file.mime.startsWith("image/"));
-  const historyHasImages = chat?.messages.some((message) =>
-    hasImage(message.attachments),
-  );
-  const blockedFor = (target: ResolvedConfig["config"]) =>
+  const visibleMessages = chat ? activePath(chat) : [];
+  const editSource = chat?.editState && asBranchConversation(chat).messages.find((message) => message.id === chat.editState?.sourceId);
+  const draftHistory = chat && editSource ? pathTo(chat, editSource.parentId) : visibleMessages;
+  const blockedFor = (target: ResolvedConfig["config"], history = draftHistory) =>
     !online && target.id !== "lmstudio"
       ? offlineNotice
-      : !target.vision && historyHasImages
+      : !target.vision && history.some((message) => hasImage(message.attachments))
         ? imageSupportNotice
         : undefined;
   const sendBlocked =
@@ -503,7 +504,7 @@ export function useWorkspace({
     (!effective.config.vision && hasImage(files)
       ? imageSupportNotice
       : undefined);
-  const hasMessages = Boolean(chat?.messages.length);
+  const hasMessages = Boolean(visibleMessages.length);
   useLayoutEffect(() => {
     const pane = conversation.current;
     const content = messagesContent.current;
@@ -524,7 +525,7 @@ export function useWorkspace({
       const list = messagesContent.current;
       const current = selectActiveChat(session.get());
       if (list && current)
-        copyConversationSelection(event, list, current.messages);
+        copyConversationSelection(event, list, activePath(current));
     };
     document.addEventListener("copy", copy);
     return () => document.removeEventListener("copy", copy);
@@ -1084,50 +1085,62 @@ export function useWorkspace({
       setNotice(sendBlocked);
       return;
     }
-    if (needsHistoryChoice(chat, effective.config.id) &&
+    if (needsHistoryChoice(chat, effective.config.id, draftHistory) &&
       !(await askToShareHistory(chat, effective.config))) return;
     followReply.current = true;
+    const tree = asBranchConversation(chat);
+    const source = chat.editState && tree.messages.find((message) => message.id === chat.editState?.sourceId);
+    if (chat.editState && !source) { setNotice("The edited message is no longer available."); return; }
+    const parentId = source ? source.parentId ?? null : tree.activeMessageId;
     const user: Message = {
       id: id(),
+      parentId,
       role: "user",
       content: chat.draft,
       attachments: files,
       createdAt: Date.now(),
       status: "complete",
     };
-    const history = [...chat.messages, user];
+    const history = [...pathTo(tree, parentId), user];
     const prepared = prepareReply(effective, history);
     const reply = prepared.message;
+    reply.parentId = user.id;
     const chatId = chat.id;
     const nextTitle =
       chat.title === "New chat"
         ? chat.draft.trim().slice(0, 60) || files[0]?.name || "New chat"
         : chat.title;
     const abort = beginReply(chatId, prepared.request, chat);
-    const saved = await updateChat(chatId, (c) => ({
+    const saved = await updateChat(chatId, (c) => activateBranch({
       ...c,
+      branchVersion: 1,
+      preferredBranches: tree.preferredBranches,
+      activeMessageId: reply.id,
       title: nextTitle,
       cloudHistoryRecipient: cloudRecipient(prepared.target.id),
+      cloudHistoryKnownIds: prepared.target.id === "lmstudio" ? undefined : [...new Set([...(chat.cloudHistoryRecipient === prepared.target.id ? chat.cloudHistoryKnownIds ?? [] : []), ...requestHistory(history).map((message) => message.id), reply.id])],
       draft: "",
       draftAttachments: [],
       editState: undefined,
       updatedAt: Date.now(),
-      messages: [...c.messages, user, reply],
-    }));
+      messages: [...tree.messages, user, reply],
+    }, reply.id));
     if (!saved) {
       updateChat(chatId, (c) => ({
         ...c,
         title: c.title === nextTitle ? chat.title : c.title,
         cloudHistoryRecipient: chat.cloudHistoryRecipient,
+        cloudHistoryKnownIds: chat.cloudHistoryKnownIds,
         draft: c.draft ? `${user.content}\n${c.draft}` : user.content,
         draftAttachments: [
           ...(user.attachments || []),
           ...(c.draftAttachments || []),
         ],
         editState: chat.editState,
-        messages: c.messages.filter(
-          (m) => m.id !== user.id && m.id !== reply.id,
-        ),
+        messages: chat.messages,
+        branchVersion: chat.branchVersion,
+        activeMessageId: chat.activeMessageId,
+        preferredBranches: chat.preferredBranches,
       }));
       finishReply(abort);
       if (session.get().conflicts.has(chatId)) return;
@@ -1138,8 +1151,13 @@ export function useWorkspace({
     }
     await runReply(chatId, history, prepared, abort);
   };
-  const retry = async (original?: RequestSnapshot) => {
+  const retry = async (original?: RequestSnapshot, messageId?: string) => {
     if (!chat || !canStartReply(chat)) return;
+    if (chat.editState) { setNotice("Finish or cancel editing before changing branches."); return; }
+    const tree = asBranchConversation(chat);
+    const targetMessage = tree.messages.find((message) => message.id === (messageId ?? tree.activeMessageId));
+    if (!targetMessage || targetMessage.role !== "assistant" || targetMessage.status === "streaming") return;
+    const history = pathTo(tree, targetMessage.parentId);
     const resolved = original
       ? resolveConfig(
           settings,
@@ -1147,7 +1165,7 @@ export function useWorkspace({
           profileOverride({ ...original, id: original.provider }),
         )
       : effective;
-    const blocked = blockedFor(resolved.config);
+    const blocked = blockedFor(resolved.config, history);
     if (blocked) {
       setNotice(blocked);
       return;
@@ -1157,24 +1175,31 @@ export function useWorkspace({
       openProvider(resolved.config.id);
       return;
     }
-    if (needsHistoryChoice(chat, resolved.config.id) &&
+    if (needsHistoryChoice(chat, resolved.config.id, history) &&
       !(await askToShareHistory(chat, resolved.config))) return;
-    const userIndex = chat.messages.map((message) => message.role).lastIndexOf("user");
-    const history = userIndex >= 0 ? chat.messages.slice(0, userIndex + 1) : chat.messages;
     const prepared = prepareReply(resolved, history);
     const reply = prepared.message;
+    reply.parentId = targetMessage.parentId ?? null;
     const abort = beginReply(chat.id, prepared.request, null);
-    const saved = await updateChat(chat.id, (c) => ({
+    const saved = await updateChat(chat.id, (c) => activateBranch({
       ...c,
-      messages: [...c.messages, reply],
+      branchVersion: 1,
+      preferredBranches: tree.preferredBranches,
+      activeMessageId: reply.id,
+      messages: [...tree.messages, reply],
       cloudHistoryRecipient: cloudRecipient(prepared.target.id),
+      cloudHistoryKnownIds: prepared.target.id === "lmstudio" ? undefined : [...new Set([...(chat.cloudHistoryRecipient === prepared.target.id ? chat.cloudHistoryKnownIds ?? [] : []), ...requestHistory(history).map((message) => message.id), reply.id])],
       updatedAt: Date.now(),
-    }));
+    }, reply.id));
     if (!saved) {
       updateChat(chat.id, (c) => ({
         ...c,
-        messages: c.messages.filter((m) => m.id !== reply.id),
+        messages: chat.messages,
+        branchVersion: chat.branchVersion,
+        activeMessageId: chat.activeMessageId,
+        preferredBranches: chat.preferredBranches,
         cloudHistoryRecipient: chat.cloudHistoryRecipient,
+        cloudHistoryKnownIds: chat.cloudHistoryKnownIds,
       }));
       finishReply(abort);
       if (session.get().conflicts.has(chat.id)) return;
@@ -1200,6 +1225,17 @@ export function useWorkspace({
     const snapshot = chat.editState;
     const saved = await updateChat(chat.id, (current) => ({ ...current, draft: snapshot.originalDraft, draftAttachments: snapshot.originalAttachments, editState: undefined }));
     if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+  };
+  const changeBranch = async (messageId: string, deleting = false) => {
+    if (!chat || !canStartReply(chat)) return;
+    if (chat.editState) { setNotice("Finish or cancel editing before changing branches."); return; }
+    if (!chat.messages.some((message) => message.id === messageId)) return;
+    session.update({ navigating: true });
+    try {
+      const saved = await updateChat(chat.id, (current) => deleting ? removeBranch(current, messageId) : selectBranch(current, messageId));
+      if (!saved) session.update({ threads: session.get().threads.map((item) => item.id === chat.id ? chat : item) });
+      else followReply.current = true;
+    } finally { session.update({ navigating: false }); }
   };
   const testConnection = async () => {
     if (workspaceSignal.aborted) return;
@@ -1717,6 +1753,8 @@ export function useWorkspace({
     setNotice,
     onMessageScroll,
     retry,
+    visibleMessages,
+    changeBranch,
     editMessage,
     cancelEdit,
     desktopInput,

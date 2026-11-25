@@ -9,7 +9,7 @@ export type ExportPlan = {
   omittedServerAddress: boolean;
 };
 
-// Each group is a standalone v1 file. Count the bytes we actually download,
+// Each group is a standalone file. Count the bytes we actually download,
 // including escaped text, separators and the metadata repeated in each file.
 export function planBackupExport(
   chats: Conversation[],
@@ -19,9 +19,10 @@ export function planBackupExport(
 ): ExportPlan {
   const { preferences, omittedServerAddress } = backupPreferences(settings);
   const projects = settings.projects.map(({ id, name }) => ({ id, name }));
+  const version = chats.some((chat) => chat.branchVersion === 1) ? 2 : 1;
   if (
     !validBackup({
-      version: 1,
+      version,
       projects,
       settings: preferences,
       conversations: chats,
@@ -31,7 +32,7 @@ export function planBackupExport(
       "Cannot create a restorable backup: invalid workspace records. No data was changed.",
     );
   const metadata = JSON.stringify({
-    version: 1,
+    version,
     exportedAt,
     projects,
     settings: preferences,

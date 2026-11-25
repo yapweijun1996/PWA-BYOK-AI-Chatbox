@@ -52,6 +52,13 @@ try {
                   status: "complete",
                 },
                 {
+                  id: "follow-up",
+                  role: "user",
+                  content: "Another question",
+                  createdAt: Date.now(),
+                  status: "complete",
+                },
+                {
                   id: "failed",
                   role: "assistant",
                   content: "",
@@ -150,9 +157,12 @@ try {
     assert.ok(
       await page
         .getByRole("button", { name: "Retry", exact: true })
+        .last()
         .isVisible(),
     );
-    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    const retry = page
+      .getByRole("button", { name: "Retry", exact: true })
+      .last();
     if (mobile) assert.ok((await retry.boundingBox()).height >= 44);
     await retry.click();
     const retryDialog = page.getByRole("dialog", { name: "Retry reply?" });

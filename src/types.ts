@@ -20,6 +20,7 @@ export type Attachment = {
 };
 export type Message = {
   id: string;
+  parentId?: string | null;
   role: "user" | "assistant";
   content: string;
   reasoning?: string;
@@ -36,6 +37,9 @@ export type Conversation = {
   title: string;
   updatedAt: number;
   messages: Message[];
+  branchVersion?: 1;
+  activeMessageId?: string | null;
+  preferredBranches?: Record<string, string>;
   draft: string;
   draftAttachments?: Attachment[];
   editState?: { sourceId: string; originalDraft: string; originalAttachments: Attachment[] };
@@ -45,6 +49,7 @@ export type Conversation = {
   configOverride?: RequestOverrides;
   // Device-local consent for replaying this chat; never portable via backups.
   cloudHistoryRecipient?: Exclude<ProviderId, "lmstudio">;
+  cloudHistoryKnownIds?: string[];
 };
 export type WorkspaceProject = { id: string; name: string };
 export type ProviderConfig = {

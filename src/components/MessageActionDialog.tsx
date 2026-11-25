@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { translate, type Locale } from "../i18n";
+import { interpolate, translate, type Locale } from "../i18n";
 import { labels, type ProviderConfig } from "../types";
 import type { RequestSnapshot } from "../request-config";
 
@@ -8,13 +8,15 @@ export function MessageActionDialog({
   kind,
   current,
   original,
+  branchCount,
   onClose,
   onConfirm,
 }: {
   locale: Locale;
-  kind: "retry" | "edit";
+  kind: "retry" | "edit" | "delete";
   current: Readonly<ProviderConfig>;
   original?: RequestSnapshot;
+  branchCount?: number;
   onClose: () => void;
   onConfirm: (original?: RequestSnapshot) => void;
 }) {
@@ -42,7 +44,13 @@ export function MessageActionDialog({
       <div className="workspace-panel">
         <div className="workspace-dialog-heading">
           <h2 id={title}>
-            {t(kind === "retry" ? "Retry reply?" : "Replace current draft?")}
+            {t(
+              kind === "retry"
+                ? "Retry reply?"
+                : kind === "delete"
+                  ? "Delete branch?"
+                  : "Replace current draft?",
+            )}
           </h2>
         </div>
         {kind === "retry" ? (
@@ -93,6 +101,17 @@ export function MessageActionDialog({
               </p>
             )}
           </>
+        ) : kind === "delete" ? (
+          <p id={description}>
+            {branchCount === 1
+              ? t("Delete this message? This cannot be undone.")
+              : interpolate(
+                  t(
+                    "Delete this branch and its {name} messages? This cannot be undone.",
+                  ),
+                  String(branchCount ?? 0),
+                )}
+          </p>
         ) : (
           <p id={description}>
             {t(
@@ -116,7 +135,13 @@ export function MessageActionDialog({
               onConfirm(choice === "original" ? original : undefined)
             }
           >
-            {t(kind === "retry" ? "Retry reply" : "Edit message")}
+            {t(
+              kind === "retry"
+                ? "Retry reply"
+                : kind === "delete"
+                  ? "Delete branch"
+                  : "Edit message",
+            )}
           </button>
         </div>
       </div>

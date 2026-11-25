@@ -44,6 +44,7 @@ export function HistorySharingDialog({
             labels[provider],
           )}
         </p>
+        <p>{t("Only the selected branch and its attachments are sent.")}</p>
         <p>
           {t(
             "Starting an empty chat sends nothing. Your draft and files stay in the original chat.",

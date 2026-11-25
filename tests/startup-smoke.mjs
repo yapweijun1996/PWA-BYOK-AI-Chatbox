@@ -152,7 +152,7 @@ try {
     );
     assert.equal(stats.tokenColor, "#17181b");
     assert.equal(stats.appColor, "rgb(23, 24, 27)");
-    assert.equal(stats.version, 1);
+    assert.equal(stats.version, 2);
     assert.equal(stats.shifts, 0);
     assert.ok(stats.fade < 30);
     assert.deepEqual(errors, []);
@@ -185,7 +185,7 @@ try {
   await cached.goto(url);
   await ready(cached);
   await cached.evaluate(async () => {
-    const request = indexedDB.open("luma-chat", 1);
+    const request = indexedDB.open("luma-chat");
     const db = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

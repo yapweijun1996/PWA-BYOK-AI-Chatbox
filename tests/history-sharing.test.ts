@@ -28,6 +28,7 @@ describe("replaying chat history to a cloud provider", () => {
     const approved = {
       ...chat,
       cloudHistoryRecipient: cloudRecipient("openrouter"),
+      cloudHistoryKnownIds: ["m1"],
     };
     expect(needsHistoryChoice(approved, "openrouter")).toBe(false);
     expect(needsHistoryChoice(approved, "openai")).toBe(true);
@@ -42,6 +43,7 @@ describe("replaying chat history to a cloud provider", () => {
     const portable = portableConversation({
       ...chat,
       cloudHistoryRecipient: "gemini",
+      cloudHistoryKnownIds: ["m1"],
     });
     expect(portable).toEqual(chat);
     expect(needsHistoryChoice(portable, "gemini")).toBe(true);
