@@ -3,6 +3,9 @@
  */
 
 :root {
+  --color-scrollbar-thumb: #777d88;
+  --color-scrollbar-thumb-hover: #555b66;
+  --color-scrollbar-track: rgba(0, 0, 0, 0);
   --color-bg: #f7f7f5;
   --color-surface: #ffffff;
   --color-text: #202124;

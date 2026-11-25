@@ -1,6 +1,18 @@
 * {
   box-sizing: border-box;
 }
+@media (hover: hover) and (pointer: fine) and (forced-colors: none) {
+  @supports (scrollbar-width: thin) and (scrollbar-color: auto) {
+    * { scrollbar-width: thin; scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track); }
+    *:hover { scrollbar-color: var(--color-scrollbar-thumb-hover) var(--color-scrollbar-track); }
+  }
+  @supports not ((scrollbar-width: thin) and (scrollbar-color: auto)) {
+    *::-webkit-scrollbar { width: var(--space-small); height: var(--space-small); }
+    *::-webkit-scrollbar-track { background: var(--color-scrollbar-track); }
+    *::-webkit-scrollbar-thumb { background: var(--color-scrollbar-thumb); border-radius: var(--radius-small); }
+    *::-webkit-scrollbar-thumb:hover { background: var(--color-scrollbar-thumb-hover); }
+  }
+}
 body {
   margin: 0;
   background: var(--color-bg);

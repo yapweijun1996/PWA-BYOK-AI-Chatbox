@@ -1,5 +1,8 @@
 {
   "color": {
+    "scrollbar-thumb": { "$type": "color", "$value": "#777d88" },
+    "scrollbar-thumb-hover": { "$type": "color", "$value": "#555b66" },
+    "scrollbar-track": { "$type": "color", "$value": "#00000000" },
     "bg": {
       "$type": "color",
       "$value": "#f7f7f5"

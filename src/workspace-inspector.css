@@ -20,7 +20,6 @@
   padding: 2px;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
 }
 .inspection-tabs .tab {
   min-height: 44px;

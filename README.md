@@ -113,6 +113,8 @@ npm run test:browser
 
 The authoritative theme tokens are `tokens/light.json` and `tokens/dark.json`. Generate the CSS consumed by the app with the pinned Style Dictionary CLI:
 
+Scrollbar thumb, hover and track colors also come from these theme tokens. Fine-pointer devices use thin scrollbars; touch and forced-color modes retain the browser defaults.
+
 ```sh
 npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/light.config.json
 npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/dark.config.json

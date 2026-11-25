@@ -3,6 +3,9 @@
  */
 
 :root[data-theme="dark"] {
+  --color-scrollbar-thumb: #a1a4af;
+  --color-scrollbar-thumb-hover: #c3c5cd;
+  --color-scrollbar-track: rgba(0, 0, 0, 0);
   --color-bg: #17181b;
   --color-surface: #232428;
   --color-text: #f4f4f5;
