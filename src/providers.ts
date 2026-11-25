@@ -1,3 +1,4 @@
+import { effortFor } from "./reasoning-effort";
 import { responsesHttpHint } from "./responses-errors";
 import { buildResponsesRequest, replay, streamResponsesPrototype } from "./openai-responses";
 import type { OutputItem } from "./openai-responses";
@@ -182,6 +183,7 @@ export function buildRequest(
       body: {
         model: config.model,
         max_tokens: 4096,
+        ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { output_config: { effort: effortFor(config.id, config.reasoningEffort) } } : {}),
         stream: true,
         ...options,
         messages: [
@@ -219,8 +221,8 @@ export function buildRequest(
     return {
       path: `/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`,
       body: {
-        ...(config.requestThoughts
-          ? { generationConfig: { thinkingConfig: { includeThoughts: true } } }
+        ...(config.requestThoughts || effortFor(config.id, config.reasoningEffort) !== "default"
+          ? { generationConfig: { thinkingConfig: { ...(config.requestThoughts ? { includeThoughts: true } : {}), ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { thinkingLevel: effortFor(config.id, config.reasoningEffort).toUpperCase() } : {}) } } }
           : {}),
         ...options,
         contents: [
@@ -260,12 +262,13 @@ export function buildRequest(
         ? { stream_options: { include_usage: true } }
         : {}),
       ...(config.id === "openrouter" ? { usage: { include: true } } : {}),
-      ...(config.id === "openrouter" && config.requestThoughts
-        ? { reasoning: { enabled: true } }
+      ...(config.id === "openrouter" && (config.requestThoughts || effortFor(config.id, config.reasoningEffort) !== "default")
+        ? { reasoning: { ...(config.requestThoughts ? { enabled: true } : {}), ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { effort: effortFor(config.id, config.reasoningEffort) } : {}) } }
         : {}),
       ...(tool && requiresLunaToolCompatibility(config)
         ? { reasoning_effort: "none" }
-        : {}),
+        : config.id !== "openrouter" && effortFor(config.id, config.reasoningEffort) !== "default"
+          ? { reasoning_effort: effortFor(config.id, config.reasoningEffort) } : {}),
       ...options,
       messages: [
         ...completed.map((m) => ({
@@ -410,7 +413,7 @@ export async function streamChat(
         return { items: round.responsesItems, results };
       }),
       requestSummary: config.requestThoughts,
-    } : undefined, config.requestThoughts);
+    } : undefined, config.requestThoughts, effortFor(config.id, config.reasoningEffort));
     const result = await streamResponsesPrototype(
       (payload, requestSignal) => request(config, "/responses", secret, { method: "POST", body: JSON.stringify(payload), signal: requestSignal }),
       body, signal, onText, onReasoning,

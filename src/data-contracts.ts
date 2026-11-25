@@ -1,3 +1,4 @@
+import { cleanModelEfforts, effortFor } from "./reasoning-effort";
 import { defaultSettings, providerIds } from "./types";
 import { attachmentByteLimit } from "./attachments";
 import { checkedLmStudioAddress } from "./credential-destination";
@@ -64,6 +65,7 @@ export function mergeSettings(
       vision: saved?.vision === true,
       reasoningSupported: saved?.reasoningSupported === true,
       requestThoughts: saved?.requestThoughts === true,
+      ...(cleanModelEfforts(providerId, saved?.reasoningEfforts) ? { reasoningEfforts: cleanModelEfforts(providerId, saved?.reasoningEfforts), reasoningEffort: effortFor(providerId, saved?.reasoningEfforts?.[saved?.model ?? ""]) } : {}),
       ...(providerId === "openai" && saved?.openaiApi === "responses" ? { openaiApi: "responses" as const } : {}),
       endpoint:
         providerId === "lmstudio"
@@ -97,7 +99,7 @@ export function backupPreferences(settings: Settings) {
   );
   const providers = Object.fromEntries(
     providerIds.map((id) => {
-      const { model, vision, reasoningSupported, requestThoughts, openaiApi } =
+      const { model, vision, reasoningSupported, requestThoughts, openaiApi, reasoningEfforts } =
         settings.providers[id];
       const endpoint =
         id === "lmstudio"
@@ -111,6 +113,7 @@ export function backupPreferences(settings: Settings) {
           vision,
           reasoningSupported,
           requestThoughts,
+          ...(reasoningEfforts ? { reasoningEfforts } : {}),
           ...(id === "openai" && openaiApi === "responses" ? { openaiApi } : {}),
           ...(endpoint !== undefined ? { endpoint } : {}),
         },

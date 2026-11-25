@@ -24,6 +24,7 @@ export function configureModel(
   return {
     ...config,
     model: option.id,
+    reasoningEffort: config.reasoningEfforts?.[option.id] ?? "default",
     vision: option.vision === true,
     reasoningSupported:
       canRequestReasoning(config.id) && option.reasoning === true,

@@ -12,6 +12,16 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Model default": "模型默认",
+  "none": "无",
+  "minimal": "最低",
+  "low": "低",
+  "medium": "中",
+  "high": "高",
+  "xhigh": "极高",
+  "max": "最高",
+  "Saved per provider and model. Only choose a level supported by the model; unsupported settings may be rejected. Existing conversation overrides keep their saved settings.": "按服务商和模型分别保存。请只选择模型支持的强度，不支持的设置可能被拒绝。已有对话的单独配置会保留原设置。",
+
   "The conversation exceeds the model's context limit. Start a new chat or shorten the input, then retry.": "对话超过模型的上下文限制。请新建对话或缩短输入后重试。",
   "OpenAI quota or credits are exhausted. Check your billing and usage limits before retrying.": "OpenAI 配额或余额已用尽。请检查账单和使用限额后重试。",
   "OpenAI rate limit reached. Wait a moment and retry, or check your rate limits.": "已达到 OpenAI 请求频率上限。请稍后重试，或检查频率限制。",
@@ -27,7 +37,7 @@ export const zh: Record<string, string> = {
 
   "OpenAI API mode": "OpenAI API 模式",
   "Responses API is experimental and has been tested with a mock interface. Tool history is stored on this device and sent with the active branch.": "Responses API 为实验功能，已使用模拟接口测试。工具历史保存在本设备，并随当前分支发送。",
-  "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning.": "GPT-6 Luna 启用本地工具时会将推理强度设为 none（无）。关闭工具可使用模型默认推理设置。",
+  "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off or use Responses API to apply the selected effort.": "GPT-6 Luna 启用本地工具时会将推理强度设为 none（无）。关闭工具或使用 Responses API 可应用所选强度。",
   "Future": "未来",
   "Saving changes…": "正在保存更改…",
   "Opening conversation…": "正在打开对话…",

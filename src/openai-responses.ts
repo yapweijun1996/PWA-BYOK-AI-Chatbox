@@ -125,6 +125,7 @@ export function buildResponsesRequest(
     requestSummary?: boolean;
   },
   requestSummary = false,
+  effort: import("./reasoning-effort").ReasoningEffort = "default",
 ) {
   const completed: Message[] = [];
   for (const message of history) {
@@ -179,7 +180,7 @@ export function buildResponsesRequest(
     store: false,
     include: ["reasoning.encrypted_content"],
     ...(options ? { tools, tool_choice: options.allowCalls ? "auto" : "none" } : {}),
-    ...((options?.requestSummary || requestSummary) ? { reasoning: { summary: "auto" } } : {}),
+    ...((options?.requestSummary || requestSummary || effort !== "default") ? { reasoning: { ...((options?.requestSummary || requestSummary) ? { summary: "auto" } : {}), ...(effort !== "default" ? { effort } : {}) } } : {}),
   };
 }
 

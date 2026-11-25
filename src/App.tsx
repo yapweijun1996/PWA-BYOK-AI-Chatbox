@@ -1,3 +1,4 @@
+import { effortFor, effortOptions } from "./reasoning-effort";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Paperclip,
@@ -551,7 +552,7 @@ function App({
               blockedReason={chat ? composerBlocked : undefined}
               compatibilityHint={
                 chat && javascriptEnabled && requiresLunaToolCompatibility(config)
-                  ? "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning."
+                  ? "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off or use Responses API to apply the selected effort."
                   : undefined
               }
               editing={Boolean(chat?.editState)}
@@ -755,6 +756,16 @@ function App({
                       placeholder={t("Enter a model ID or test connection")}
                     />
                   </label>
+                  <label className="field">
+                    {t("Reasoning effort")}
+                    <select disabled={!config.model.trim()} value={effortFor(config.id, config.reasoningEfforts?.[config.model])} onChange={(e) => {
+                      const effort = effortFor(config.id, e.target.value);
+                      void updateConfig({ reasoningEfforts: { ...config.reasoningEfforts, [config.model]: effort }, reasoningEffort: effort });
+                    }}>
+                      {effortOptions(config.id).map((effort) => <option key={effort} value={effort}>{t(effort === "default" ? "Model default" : effort)}</option>)}
+                    </select>
+                  </label>
+                  <p className="hint">{t("Saved per provider and model. Only choose a level supported by the model; unsupported settings may be rejected. Existing conversation overrides keep their saved settings.")}</p>
                   <datalist id="model-list">
                     {models.map(({ id }) => (
                       <option key={id} value={id} />

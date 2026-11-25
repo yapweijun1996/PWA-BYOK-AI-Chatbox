@@ -1,5 +1,15 @@
 // Malay translations for interface, provider and diagnostic messages.
 export const msExtra: Record<string, string> = {
+  "Model default": "Lalai model",
+  "none": "Tiada",
+  "minimal": "Minimum",
+  "low": "Rendah",
+  "medium": "Sederhana",
+  "high": "Tinggi",
+  "xhigh": "Sangat tinggi",
+  "max": "Maksimum",
+  "Saved per provider and model. Only choose a level supported by the model; unsupported settings may be rejected. Existing conversation overrides keep their saved settings.": "Disimpan mengikut penyedia dan model. Pilih hanya tahap yang disokong oleh model; tetapan yang tidak disokong mungkin ditolak. Tetapan khusus perbualan sedia ada akan dikekalkan.",
+
   "The conversation exceeds the model's context limit. Start a new chat or shorten the input, then retry.": "Perbualan melebihi had konteks model. Mulakan sembang baharu atau pendekkan input, kemudian cuba lagi.",
   "OpenAI quota or credits are exhausted. Check your billing and usage limits before retrying.": "Kuota atau kredit OpenAI telah habis. Periksa bil dan had penggunaan sebelum mencuba lagi.",
   "OpenAI rate limit reached. Wait a moment and retry, or check your rate limits.": "Had kadar OpenAI telah dicapai. Tunggu sebentar dan cuba lagi, atau periksa had kadar anda.",

@@ -1,0 +1,43 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright-core";
+import { chromePath } from "./browser-launch.mjs";
+const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+try {
+  const page = await browser.newPage({ locale: "en-US", viewport: { width: 390, height: 750 } });
+  const requests = [];
+  await page.route("https://api.openai.com/v1/**", async (route) => {
+    const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    requests.push(route.request().postDataJSON());
+    const output = [{ type: "message", id: "message_1", role: "assistant", content: [{ type: "output_text", text: "OK", annotations: [] }] }];
+    const events = [{ type: "response.output_text.delta", delta: "OK" }, { type: "response.completed", response: { status: "completed", output } }];
+    return route.fulfill({ headers: { ...headers, "Content-Type": "text/event-stream" }, body: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n" });
+  });
+  await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
+  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("button", { name: "Configure a provider" }).click();
+  await page.getByRole("button", { name: "OpenAI", exact: true }).click();
+  const model = page.getByLabel("Model ID");
+  const effort = page.getByLabel("Reasoning effort");
+  await model.fill("gpt-6-luna");
+  await page.getByLabel("OpenAI API mode").selectOption("responses");
+  await effort.selectOption("high");
+  await model.fill("another-model");
+  assert.equal(await effort.inputValue(), "default");
+  await effort.selectOption("low");
+  await model.fill("gpt-6-luna");
+  assert.equal(await effort.inputValue(), "high");
+  await page.getByRole("button", { name: "Set as default provider" }).click();
+  await page.getByPlaceholder("Enter key for this session").fill("test-only-key");
+  await page.getByRole("button", { name: "Use key", exact: true }).click();
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Hi");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await page.getByText("OK", { exact: true }).waitFor();
+  assert.equal(requests[0].reasoning.effort, "high");
+  await page.reload();
+  await page.setViewportSize({ width: 1000, height: 740 });
+  await page.getByRole("button", { name: "Settings", exact: true }).first().click();
+  assert.equal(await page.getByLabel("Reasoning effort").inputValue(), "high");
+  console.log("PASS: model-specific effort selection, Responses request and local persistence");
+} finally { await browser.close(); }

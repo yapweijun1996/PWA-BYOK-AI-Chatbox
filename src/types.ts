@@ -61,6 +61,8 @@ export type ProviderConfig = {
   reasoningSupported?: boolean;
   requestThoughts?: boolean;
   openaiApi?: "chat_completions" | "responses";
+  reasoningEffort?: import("./reasoning-effort").ReasoningEffort;
+  reasoningEfforts?: Record<string, import("./reasoning-effort").ReasoningEffort>;
 };
 export type Cipher = {
   destination?: string; // LM Studio only; older vaults require explicit binding on unlock.

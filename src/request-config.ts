@@ -1,3 +1,5 @@
+import { effortFor, validEffort } from "./reasoning-effort";
+import type { ReasoningEffort } from "./reasoning-effort";
 import { providerBaseUrl, requestsStreamUsage } from "./providers";
 import { asRecord } from "./response-telemetry";
 import { defaultSettings, providerIds } from "./types";
@@ -9,7 +11,7 @@ export type RequestOverrides = Readonly<
       ProviderConfig,
       "model" | "vision" | "reasoningSupported" | "requestThoughts"
     >
-  > & { provider?: ProviderId; openaiApi?: "chat_completions" | "responses" }
+  > & { provider?: ProviderId; openaiApi?: "chat_completions" | "responses"; reasoningEffort?: ReasoningEffort }
 >;
 const layers = ["request", "conversation", "global", "default"] as const;
 export type ConfigSource = (typeof layers)[number];
@@ -75,6 +77,8 @@ export function resolveConfig(
       vision: vision === true,
       reasoningSupported: support === true,
       requestThoughts: thoughts === true,
+      reasoningEffort: effortFor(provider, fromModel(requested)?.reasoningEffort ?? fromModel(scoped)?.reasoningEffort ?? global?.reasoningEfforts?.[model]),
+      ...(global?.reasoningEfforts ? { reasoningEfforts: global.reasoningEfforts } : {}),
       ...(provider === "openai" ? { openaiApi: requested?.openaiApi ?? scoped?.openaiApi ?? global?.openaiApi ?? "chat_completions" } : {}),
     },
     sources: {
@@ -126,6 +130,7 @@ export type RequestSnapshot = Readonly<{
   usageMode: (typeof usageModes)[number];
   javascript?: boolean;
   openaiApi?: "chat_completions" | "responses";
+  reasoningEffort?: ReasoningEffort;
   sources: ResolvedConfig["sources"];
 }>;
 
@@ -153,6 +158,7 @@ export function requestFacts({
     reasoningSupported: config.reasoningSupported === true,
     requestThoughts: config.requestThoughts === true,
     target,
+    reasoningEffort: config.reasoningEffort ?? "default",
     ...(config.id === "openai" ? { openaiApi: config.openaiApi ?? "chat_completions" } : {}),
     usageMode: config.id === "openai" && config.openaiApi === "responses"
       ? "provider implicit"
@@ -182,7 +188,7 @@ export function captureRequest(
 export function profileOverride(
   config: Pick<
     ProviderConfig,
-    "id" | "model" | "vision" | "reasoningSupported" | "requestThoughts" | "openaiApi"
+    "id" | "model" | "vision" | "reasoningSupported" | "requestThoughts" | "openaiApi" | "reasoningEffort"
   >,
 ): RequestOverrides {
   return {
@@ -192,6 +198,7 @@ export function profileOverride(
     reasoningSupported: config.reasoningSupported === true,
     requestThoughts: config.requestThoughts === true,
     ...(config.id === "openai" ? { openaiApi: config.openaiApi ?? "chat_completions" } : {}),
+    reasoningEffort: config.reasoningEffort ?? "default",
   };
 }
 
@@ -201,10 +208,11 @@ export function validOverrides(value: unknown): value is RequestOverrides {
     !!data &&
     Object.keys(data).every(
       (key) =>
-        key === "provider" || key === "openaiApi" || (fields as readonly string[]).includes(key),
+        key === "provider" || key === "openaiApi" || key === "reasoningEffort" || (fields as readonly string[]).includes(key),
     ) &&
     (data.provider === undefined ||
       providerIds.includes(data.provider as ProviderId)) &&
+    (data.reasoningEffort === undefined || validEffort(data.reasoningEffort)) &&
     (data.openaiApi === undefined || data.openaiApi === "chat_completions" || data.openaiApi === "responses") &&
     (data.model === undefined || typeof data.model === "string") &&
     fields
@@ -227,6 +235,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     "usageMode",
     "javascript",
     "openaiApi",
+    "reasoningEffort",
     "sources",
   ];
   return (
@@ -240,6 +249,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     targets.includes(data.target as RequestSnapshot["target"]) &&
     usageModes.includes(data.usageMode as RequestSnapshot["usageMode"]) &&
     (data.javascript === undefined || typeof data.javascript === "boolean") &&
+    (data.reasoningEffort === undefined || validEffort(data.reasoningEffort)) &&
     (data.openaiApi === undefined || data.openaiApi === "chat_completions" || data.openaiApi === "responses") &&
     !!sources &&
     Object.keys(sources).length === sourceFields.length &&
