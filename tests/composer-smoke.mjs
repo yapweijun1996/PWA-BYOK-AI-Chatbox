@@ -70,15 +70,18 @@ try {
   const selector = form.getByRole("button", { name: /^Choose model/ });
   assert.equal(await send.isDisabled(), true);
   await input.focus();
-  assert.notEqual(
+  assert.equal(
     await input.evaluate((element) => getComputedStyle(element).outlineStyle),
     "none",
   );
   assert.match(await input.getAttribute("aria-describedby"), /.+/);
   assert.equal(
     await form.evaluate((element) => getComputedStyle(element).outlineStyle),
-    "solid",
+    "none",
   );
+  await form.evaluate((element) => element.setAttribute("data-dragging", "true"));
+  assert.equal(await form.evaluate((element) => getComputedStyle(element).outlineStyle), "solid");
+  await form.evaluate((element) => element.setAttribute("data-dragging", "false"));
   assert.equal(
     await input.evaluate((element) => getComputedStyle(element).resize),
     "none",

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { translate } from "../i18n";
 import type { Locale } from "../i18n";
@@ -14,6 +14,7 @@ export const ResponseInspector = memo(function ResponseInspector({
   locale: Locale;
 }) {
   const t = (text: string) => translate(locale, text);
+  const [explainSources, setExplainSources] = useState(false);
   const telemetry = message.telemetry;
   const usage = telemetry?.usage;
   const cost = telemetry?.cost;
@@ -73,92 +74,111 @@ export const ResponseInspector = memo(function ResponseInspector({
       ? [[t("Cost"), cost.source === "estimated" ? `≈${costText}` : costText]]
       : []),
   ];
-  const fields = [
-    [
-      t("Provider"),
-      telemetry ? labels[telemetry.provider] || missing : missing,
-    ],
-    [t("Model"), telemetry?.model || missing],
-    ...(telemetry?.servedModel && telemetry.servedModel !== telemetry.model
-      ? [[t("Served model"), telemetry.servedModel, reported]]
-      : []),
-    [
-      "TPS",
-      tps,
-      throughput?.source === "provider"
-        ? t("Provider timings: generated tokens ÷ generation duration")
-        : t(
-            "Client estimate: reported output tokens ÷ time between first and last generated deltas",
-          ),
-    ],
-    ["TTFT", ttft, measured],
-    ["TTFV", formatTime(telemetry?.ttfvMs), measured],
-    [t("Total duration"), duration, measured],
-    [t("Input tokens"), formatCount(usage?.input), reported],
-    [t("Output tokens"), formatCount(usage?.output), reported],
-    [t("Total tokens"), formatCount(usage?.total), reported],
-    [t("Reasoning tokens"), formatCount(usage?.reasoning), reported],
-    [t("Cached tokens"), formatCount(usage?.cached), reported],
-    ...(generation
-      ? [
-          [t("Generated tokens"), formatCount(generation.tokens), reported],
-          [
-            t("Generation duration"),
-            formatTime(generation.durationMs),
-            reported,
-          ],
-          [
-            t("Prompt evaluation tokens"),
-            formatCount(generation.promptEvaluated),
-            reported,
-          ],
-          [
-            t("Timing cache tokens"),
-            formatCount(generation.cacheTokens),
-            reported,
-          ],
-        ]
-      : []),
-    [
-      t("API cost (USD)"),
-      costText,
-      local
-        ? undefined
-        : cost?.source === "estimated"
-          ? t("Catalog estimate")
-          : reported,
-    ],
-    [t("Reasoning effort"), telemetry?.reasoningEffort || missing, reported],
-    [t("Finish reason"), telemetry?.finishReason || missing, reported],
-    [t("Timestamp"), timestampText],
-  ];
-  const groups = [
-    [
-      t("Model information"),
-      [t("Provider"), t("Model"), t("Served model"), t("Reasoning effort")],
-    ],
-    [
-      t("Speed and timing"),
-      ["TPS", "TTFT", "TTFV", t("Total duration"), t("Generation duration")],
-    ],
-    [
-      t("Token usage"),
-      [
-        t("Input tokens"),
-        t("Output tokens"),
-        t("Total tokens"),
-        t("Reasoning tokens"),
-        t("Cached tokens"),
-        t("Generated tokens"),
-        t("Prompt evaluation tokens"),
-        t("Timing cache tokens"),
+  const groups: Array<{
+    key: string;
+    heading: string;
+    fields: Array<[string, string, string?]>;
+  }> = [
+    {
+      key: "model",
+      heading: t("Model information"),
+      fields: [
+        [
+          t("Provider"),
+          telemetry ? labels[telemetry.provider] || missing : missing,
+        ],
+        [t("Model"), telemetry?.model || missing],
+        ...(telemetry?.servedModel && telemetry.servedModel !== telemetry.model
+          ? [
+              [t("Served model"), telemetry.servedModel, reported] as [
+                string,
+                string,
+                string,
+              ],
+            ]
+          : []),
+        [
+          t("Reasoning effort"),
+          telemetry?.reasoningEffort || missing,
+          reported,
+        ],
       ],
-    ],
-    [
-      t("Cost and status"),
-      [t("API cost (USD)"), t("Finish reason"), t("Timestamp")],
-    ],
-  ] as const;
+    },
+    {
+      key: "timing",
+      heading: t("Speed and timing"),
+      fields: [
+        [
+          "TPS",
+          tps,
+          throughput?.source === "provider"
+            ? t("Provider timings: generated tokens ÷ generation duration")
+            : t(
+                "Client estimate: reported output tokens ÷ time between first and last generated deltas",
+              ),
+        ],
+        ["TTFT", ttft, measured],
+        ["TTFV", formatTime(telemetry?.ttfvMs), measured],
+        [t("Total duration"), duration, measured],
+        ...(generation
+          ? [
+              [
+                t("Generation duration"),
+                formatTime(generation.durationMs),
+                reported,
+              ] as [string, string, string],
+            ]
+          : []),
+      ],
+    },
+    {
+      key: "tokens",
+      heading: t("Token usage"),
+      fields: [
+        [t("Input tokens"), formatCount(usage?.input), reported],
+        [t("Output tokens"), formatCount(usage?.output), reported],
+        [t("Total tokens"), formatCount(usage?.total), reported],
+        [t("Reasoning tokens"), formatCount(usage?.reasoning), reported],
+        [t("Cached tokens"), formatCount(usage?.cached), reported],
+        ...(generation
+          ? [
+              [
+                t("Generated tokens"),
+                formatCount(generation.tokens),
+                reported,
+              ] as [string, string, string],
+              [
+                t("Prompt evaluation tokens"),
+                formatCount(generation.promptEvaluated),
+                reported,
+              ] as [string, string, string],
+              [
+                t("Timing cache tokens"),
+                formatCount(generation.cacheTokens),
+                reported,
+              ] as [string, string, string],
+            ]
+          : []),
+      ],
+    },
+    {
+      key: "status",
+      heading: t("Cost and status"),
+      fields: [
+        [
+          t("API cost (USD)"),
+          costText,
+          local
+            ? undefined
+            : cost?.source === "estimated"
+              ? t("Catalog estimate")
+              : reported,
+        ],
+        [t("Finish reason"), telemetry?.finishReason || missing, reported],
+        [t("Timestamp"), timestampText],
+      ],
+    },
+  ];
   const sourceLabel = (source: string) => {
     if (source === reported) return t("Provider");
     if (source === measured) return t("Client");
@@ -199,6 +219,21 @@ export const ResponseInspector = memo(function ResponseInspector({
       </summary>
       <div className="response-inspector-content">
         <h3>{title}</h3>
+        <button
+          type="button"
+          className="response-explain-button"
+          aria-expanded={explainSources}
+          onClick={() => setExplainSources((value) => !value)}
+        >
+          {t("Explain metric sources")}
+        </button>
+        {explainSources && (
+          <p className="response-source-legend">
+            {t(
+              "Provider values come from the selected provider. Client values are measured or estimated in this browser. Estimates are not billing records.",
+            )}
+          </p>
+        )}
         {Boolean(message.toolExecutions?.length) && (
           <p>
             {t(
@@ -206,27 +241,23 @@ export const ResponseInspector = memo(function ResponseInspector({
             )}
           </p>
         )}
-        {groups.map(([heading, labels]) => (
-          <section className="response-group" key={heading}>
+        {groups.map(({ key, heading, fields }) => (
+          <section className="response-group" key={key}>
             <h4>{heading}</h4>
             <dl>
-              {fields
-                .filter(
-                  ([label]) => label !== undefined && labels.includes(label),
-                )
-                .map(([label, value, source]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
-                    {source && value !== missing && (
-                      <dd className="response-source">
-                        <span role="note" title={source} aria-label={source}>
-                          {sourceLabel(source)}
-                        </span>
-                      </dd>
-                    )}
-                  </div>
-                ))}
+              {fields.map(([label, value, source]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                  {source && value !== missing && (
+                    <dd className="response-source">
+                      <span role="note" title={source} aria-label={source}>
+                        {sourceLabel(source)}
+                      </span>
+                    </dd>
+                  )}
+                </div>
+              ))}
             </dl>
           </section>
         ))}

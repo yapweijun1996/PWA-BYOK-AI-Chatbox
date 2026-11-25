@@ -11,7 +11,9 @@ export function resolveLanguage(
       : systemLanguage.toLowerCase().startsWith("ms") ? "ms" : "en"
     : preference;
 }
-const zh: Record<string, string> = {
+export const zh: Record<string, string> = {
+  "Explain metric sources": "说明指标来源",
+  "Provider values come from the selected provider. Client values are measured or estimated in this browser. Estimates are not billing records.": "服务商数值来自所选服务商；客户端数值由本浏览器测量或估算。估算值不是账单记录。",
   "Malay": "马来语",
   "Language options": "语言选项",
   "New chat from topbar": "从顶部栏新建对话",
@@ -709,6 +711,20 @@ export function translateNotice(locale: Locale, text: string): string {
     if (timezone) return `Zon masa tidak sah: ${timezone[1]}`;
     const imported = text.match(/^Imported (\d+) conversations\.$/);
     if (imported) return `${imported[1]} perbualan diimport.`;
+    const catalog = text.match(/^Model list loaded \((\d+)\)\. This does not verify your key or chat access\. Select one or enter its ID\.$/);
+    if (catalog) return `Senarai model dimuatkan (${catalog[1]}). Ini tidak mengesahkan kunci atau akses sembang anda. Pilih model atau masukkan IDnya.`;
+    const usage = text.match(/^(.+) used(?: of approximately (.+))?$/);
+    if (usage) return usage[2] ? `${usage[1]} digunakan daripada kira-kira ${usage[2]}` : `${usage[1]} digunakan`;
+    const fileType = text.match(/^(.*): use an image or plain text file\.$/);
+    if (fileType) return `${fileType[1]}: gunakan imej atau fail teks biasa.`;
+    const fileSize = text.match(/^(.*): files must be 5 MB or smaller\.$/);
+    if (fileSize) return `${fileSize[1]}: saiz fail mestilah 5 MB atau kurang.`;
+    const unreadableImage = text.match(/^(.*): this image could not be read\.$/);
+    if (unreadableImage) return `${unreadableImage[1]}: imej ini tidak dapat dibaca.`;
+    if (text.startsWith("Connection failed.")) return text.includes("LM Studio")
+      ? "Sambungan gagal. Periksa alamat LM Studio, rangkaian, kebenaran pelayar, CORS dan tetapan tembok api. Pada telefon, localhost merujuk kepada telefon itu sendiri."
+      : "Sambungan gagal. Periksa rangkaian dan sama ada penyedia membenarkan permintaan terus daripada pelayar (CORS).";
+    if (text.startsWith("Storage error:")) return "Storan setempat gagal. Kandungan yang kelihatan masih berada pada skrin; eksport sandaran sebelum memuat semula.";
     return translate(locale, text);
   }
   const timezone = text.match(/^Invalid time zone specified: (.+)$/i);

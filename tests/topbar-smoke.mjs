@@ -95,7 +95,12 @@ try {
   assert.equal(await page.locator("html").getAttribute("lang"), "ms");
   await page.reload();
   await page.locator('html[lang="ms"][data-startup="ready"]').waitFor();
-  await page.locator(".topbar-language summary").click();
+  const languageTrigger = page.locator(".topbar-language summary");
+  await languageTrigger.press("Enter");
+  assert.equal(await page.locator(".language-menu").getByRole("button", { name: "Bahasa Melayu" }).getAttribute("aria-pressed"), "true");
+  await page.keyboard.press("Escape");
+  assert.equal(await languageTrigger.evaluate((element) => document.activeElement === element), true);
+  await languageTrigger.press("Enter");
   await page.locator(".language-menu").getByRole("button", { name: "Bahasa Cina Ringkas" }).click();
   await waitForSavedSettings(page, { language: "zh-CN" });
   assert.equal(await page.locator("html").getAttribute("lang"), "zh-CN");

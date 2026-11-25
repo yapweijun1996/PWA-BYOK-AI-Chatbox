@@ -127,6 +127,12 @@ try {
       .locator("dd")
       .first();
   await inspector.locator("summary").press("Enter");
+  const explanationButton = inspector.getByRole("button", { name: "Explain metric sources" });
+  await explanationButton.press("Enter");
+  assert.equal(await explanationButton.getAttribute("aria-expanded"), "true");
+  await inspector.getByText("Provider values come from the selected provider.", { exact: false }).waitFor();
+  await explanationButton.press("Enter");
+  assert.equal(await explanationButton.getAttribute("aria-expanded"), "false");
   assert.equal(await field("Provider").innerText(), "LM Studio");
   assert.equal(await field("Model").innerText(), "reasoning-model");
   assert.notEqual(await field("TTFT").innerText(), "N/A");
