@@ -24,6 +24,7 @@ export type Message = {
   reasoning?: string;
   createdAt: number;
   status?: "complete" | "streaming" | "interrupted" | "error";
+  error?: string;
   attachments?: Attachment[];
   telemetry?: ResponseTelemetry;
   request?: RequestSnapshot;

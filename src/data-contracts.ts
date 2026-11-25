@@ -231,6 +231,7 @@ export function validBackup(value: unknown): value is BackupV1 {
               m.status,
             )) ||
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
+          (m.error !== undefined && typeof m.error !== "string") ||
           (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
           (m.toolExecutions !== undefined &&
             (m.role !== "assistant" ||

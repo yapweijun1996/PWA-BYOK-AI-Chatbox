@@ -876,6 +876,7 @@ export function useWorkspace({
     setNotice("");
     let content = "";
     let reasoning = "";
+    let failureReason: string | undefined;
     let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
     let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
     let executions: ToolExecution[] = [];
@@ -891,6 +892,7 @@ export function useWorkspace({
         content,
         reasoning,
         status,
+        ...(status === "error" && failureReason ? { error: failureReason } : {}),
         telemetry: roundTelemetry ?? tracker.snapshot(),
         ...(executions.length ? { toolExecutions: executions } : {}),
       };
@@ -971,7 +973,9 @@ export function useWorkspace({
       terminal = abort.signal.aborted ? "interrupted" : "complete";
     } catch (e) {
       terminal = abort.signal.aborted ? "interrupted" : "error";
-      if (isCurrentReply(abort) && terminal === "error") setNotice(errorText(e));
+      if (isCurrentReply(abort) && terminal === "error") {
+        failureReason = errorText(e);
+      }
     } finally {
       // Stop the streaming heartbeat before waiting on disk, including on Stop/error.
       window.clearInterval(timer);

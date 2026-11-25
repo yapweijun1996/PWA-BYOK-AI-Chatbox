@@ -94,14 +94,15 @@ try {
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("First message");
   await page.getByRole("button", { name: "Send message" }).click();
-  await page.getByText("Planning the answer.").waitFor();
+  await page.locator("details.reasoning summary").waitFor();
+  assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
   assert.equal(await page.getByText("The final answer.").count(), 0);
   await page
     .locator("details.reasoning summary")
     .getByText("Thinking…")
     .waitFor();
   await page.locator("details.reasoning summary").click();
-  assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
+  assert.equal(await page.getByText("Planning the answer.").isVisible(), true);
   const inspector = page.locator(".response-inspector").first();
   const field = (name) =>
     inspector
@@ -159,10 +160,12 @@ try {
     "Local inference — no API charge",
   );
   const completedDuration = await field("Total duration").innerText();
-  await page.locator("details.reasoning summary").click();
   await page.getByText("Planning the answer.").waitFor();
   await page.waitForTimeout(500);
   await page.reload();
+  await page.locator("details.reasoning summary").waitFor();
+  assert.equal(await page.getByText("Planning the answer.").isVisible(), false);
+  await page.locator("details.reasoning summary").click();
   await page.getByText("Planning the answer.").waitFor();
   await page.getByText("The final answer.").waitFor();
   await inspector.locator("summary").click();

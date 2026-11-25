@@ -184,7 +184,13 @@ try {
   const stoppedMetrics = await stoppedFooter.innerText();
   assert.match(stoppedMetrics, /TTFT\s+\d/);
   assert.match(stoppedMetrics, /Duration\s+\d/);
-  assert.match(stoppedMetrics, /Tokens\s+N\/A/);
+  assert.doesNotMatch(stoppedMetrics, /Tokens\s+N\/A/);
+  await stoppedFooter.click();
+  const stoppedInspector = stoppedFooter.locator("..");
+  assert.equal(
+    await stoppedInspector.locator("dl > div").filter({ has: page.getByText("Total tokens", { exact: true }) }).locator("dd").first().innerText(),
+    "N/A",
+  );
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   assert.equal(
     await page.getByText("Partial answer", { exact: true }).count(),

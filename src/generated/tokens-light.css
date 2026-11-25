@@ -31,15 +31,15 @@
   --radius-small: 8px;
   --radius-medium: 12px;
   --radius-large: 16px;
-  --font-body: 16px;
-  --font-small: 13px;
+  --font-body: 12px;
+  --font-small: 12px;
   --font-title: 32px;
   --font-caption: 12px;
-  --font-label: 14px;
+  --font-label: 12px;
   --font-lead: 18px;
   --font-brand: 21px;
   --font-icon: 22px;
   --font-metric: 24px;
   --font-heading: 28px;
-  --font-mobile-caption: 11px;
+  --font-mobile-caption: 12px;
 }

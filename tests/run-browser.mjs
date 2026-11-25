@@ -62,6 +62,7 @@ try {
   await ready();
   for (const file of [
     "tests/startup-smoke.mjs",
+    "tests/responsive-smoke.mjs",
     "tests/browser-smoke.mjs",
     "tests/reasoning-smoke.mjs",
     "tests/tool-execution-smoke.mjs",

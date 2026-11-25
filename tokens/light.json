@@ -120,11 +120,11 @@
   "font": {
     "body": {
       "$type": "dimension",
-      "$value": "16px"
+      "$value": "12px"
     },
     "small": {
       "$type": "dimension",
-      "$value": "13px"
+      "$value": "12px"
     },
     "title": {
       "$type": "dimension",
@@ -136,7 +136,7 @@
     },
     "label": {
       "$type": "dimension",
-      "$value": "14px"
+      "$value": "12px"
     },
     "lead": {
       "$type": "dimension",
@@ -160,7 +160,7 @@
     },
     "mobile-caption": {
       "$type": "dimension",
-      "$value": "11px"
+      "$value": "12px"
     }
   }
 }

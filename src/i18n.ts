@@ -86,6 +86,7 @@ const zh: Record<string, string> = {
     "聊天或设置已更改，请重新发送。",
   "Use this model for the current chat": "在当前对话使用此模型",
   "Retry with original model": "使用原模型重试",
+  "More options": "更多选项",
   "Usage request mode": "用量回传请求方式",
   "Credential state": "凭据状态",
   "Available for session": "当前会话可用",

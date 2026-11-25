@@ -233,8 +233,15 @@ try {
   await page.getByRole("button", { name: "Send message" }).click();
   await errorWrite.held();
   await page.getByText("Response failed").waitFor();
+  await page.locator(".response-error").getByText("Provider returned HTTP 503.").waitFor();
   assert.equal(await page.getByRole("button", { name: "Retry", exact: true }).count(), 0);
   await errorWrite.release("commit");
+  await page.getByText("Saved locally").last().waitFor();
+  await page.reload();
+  await page.locator(".response-error").getByText("Provider returned HTTP 503.").waitFor();
+  await page.locator(".retry-options summary").click();
+  assert.equal(await page.getByRole("button", { name: "Retry with original model" }).isVisible(), true);
+  await page.locator(".retry-options summary").click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByText("Hello from local model").nth(1).waitFor();

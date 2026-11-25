@@ -63,13 +63,11 @@ export const ResponseInspector = memo(function ResponseInspector({
   const duration = formatTime(telemetry?.durationMs);
   const title = t("Response inspector");
   const metrics = [
-    ["TPS", tps],
-    ["TTFT", ttft],
-    [t("Duration"), duration],
-    usage?.total === undefined && generation
-      ? [t("Generated tokens"), formatCount(generation.tokens)]
-      : [t("Tokens"), formatCount(usage?.total)],
-    [t("Cost"), cost?.source === "estimated" ? `≈${costText}` : costText],
+    ...(throughput ? [["TPS", tps]] : []),
+    ...(telemetry?.ttftMs !== undefined ? [["TTFT", ttft]] : []),
+    ...(telemetry?.durationMs !== undefined ? [[t("Duration"), duration]] : []),
+    ...(usage?.total !== undefined ? [[t("Tokens"), formatCount(usage.total)]] : []),
+    ...(cost ? [[t("Cost"), cost.source === "estimated" ? `≈${costText}` : costText]] : []),
   ];
   const fields = [
     [
@@ -134,10 +132,11 @@ export const ResponseInspector = memo(function ResponseInspector({
   return (
     <details className="response-inspector">
       <summary
-        aria-label={`${title}: ${metrics.map(([label, value]) => `${label} ${value}`).join(", ")}`}
+        aria-label={metrics.length ? `${title}: ${metrics.map(([label, value]) => `${label} ${value}`).join(", ")}` : title}
         title={title}
       >
         <span className="response-metrics">
+          {metrics.length === 0 && title}
           {metrics.map(([label, value]) => (
             <span className="response-metric" key={label}>
               <span>{label}</span> <strong>{value}</strong>

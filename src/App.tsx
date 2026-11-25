@@ -16,6 +16,7 @@ import {
   Settings as SettingsIcon,
   SquarePen,
   ScanLine,
+  UserRound,
 } from "lucide-react";
 import { version } from "../package.json";
 import { Sidebar } from "./components/Sidebar";
@@ -55,7 +56,7 @@ function Reasoning({
   locale: Locale;
   onNotice: (text: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const t = (text: string) => translate(locale, text);
   return (
     <details
@@ -413,7 +414,7 @@ function App({
                       data-message-id={m.id}
                     >
                       <div className="avatar">
-                        {m.role === "user" ? t("U") : <Sparkles size={19} />}
+                        {m.role === "user" ? <UserRound size={19} aria-hidden="true" /> : <Sparkles size={19} aria-hidden="true" />}
                       </div>
                       <div className="bubble">
                         <div className="message-meta">
@@ -468,8 +469,9 @@ function App({
                           </div>
                         )}
                         {m.status === "error" && (
-                          <div className="status-label">
-                            {t("Response failed")}
+                          <div className="status-label response-error" role="status">
+                            <strong>{t("Response failed")}</strong>
+                            {m.error && <span>{translateNotice(locale, m.error)}</span>}
                           </div>
                         )}
                         {m.role === "assistant" &&
@@ -521,13 +523,16 @@ function App({
                                 {t("Retry")}
                               </button>
                               {m.request && (
-                                <button
-                                  className="secondary retry"
-                                  disabled={working || conflicts.has(chat.id)}
-                                  onClick={() => void retry(m.request)}
-                                >
-                                  {t("Retry with original model")}
-                                </button>
+                                <details className="retry-options">
+                                  <summary>{t("More options")}</summary>
+                                  <button
+                                    className="secondary retry"
+                                    disabled={working || conflicts.has(chat.id)}
+                                    onClick={() => void retry(m.request)}
+                                  >
+                                    {t("Retry with original model")}
+                                  </button>
+                                </details>
                               )}
                             </div>
                           )}

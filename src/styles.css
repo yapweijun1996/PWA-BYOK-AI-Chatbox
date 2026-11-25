@@ -119,6 +119,8 @@ select:focus-visible {
   background: var(--color-surface);
 }
 .topbar > strong {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -129,10 +131,12 @@ select:focus-visible {
   gap: 10px;
   align-items: center;
   min-width: 0;
+  flex: 0 1 auto;
   margin-left: auto;
 }
 .top-actions .model-pill {
   min-width: 0;
+  overflow: hidden;
 }
 .top-actions .model-pill svg {
   flex: none;
@@ -224,6 +228,9 @@ select:focus-visible {
 }
 .conversation {
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   overflow-anchor: none;
   flex: 1;
   min-height: 0;
@@ -238,10 +245,14 @@ select:focus-visible {
   align-items: flex-start;
   gap: 14px;
   margin-bottom: 28px;
+  min-width: 0;
 }
 .message.user .avatar {
   background: var(--color-user-bg);
   color: var(--color-user-text);
+}
+.message.user {
+  flex-direction: row-reverse;
 }
 .avatar {
   width: 38px;
@@ -261,8 +272,11 @@ select:focus-visible {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
+  overflow-wrap: anywhere;
 }
 .user .bubble {
+  flex: 0 1 auto;
+  max-width: 85%;
   background: var(--color-soft);
   border-color: transparent;
 }
@@ -391,6 +405,21 @@ select:focus-visible {
   color: var(--color-muted);
   margin-top: 10px;
 }
+.response-error {
+  align-items: flex-start;
+  flex-direction: column;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+.retry-options summary {
+  cursor: pointer;
+  padding: 10px 0;
+  color: var(--color-muted);
+}
+.retry-options .retry {
+  display: flex;
+  margin-top: 0;
+}
 .welcome {
   max-width: 520px;
   text-align: center;
@@ -454,6 +483,7 @@ select:focus-visible {
 }
 .composer-actions .model-pill {
   min-width: 0;
+  flex: 0 1 240px;
   min-height: 36px;
   max-width: min(240px, 100%);
   font-size: var(--font-small);
@@ -821,6 +851,12 @@ select:focus-visible {
 .small {
   font-size: var(--font-small);
 }
+@media (max-width: 1100px) {
+  .top-actions .local-pill,
+  .top-actions .connection-state {
+    display: none;
+  }
+}
 .mobile,
 .scrim {
   display: none;
@@ -834,11 +870,15 @@ select:focus-visible {
   }
   .topbar {
     height: calc(64px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) max(var(--space-base), env(safe-area-inset-right)) 0 max(var(--space-base), env(safe-area-inset-left));
+    gap: 4px;
+    padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
   }
   .topbar > strong {
-    font-size: var(--font-body);
+    font-size: var(--font-label);
+    flex: 1 1 0;
   }
+  .top-actions { gap: 2px; flex: 0 1 55%; }
+  .top-actions .model-pill { padding-inline: 6px; }
   .local-pill {
     display: none;
   }
@@ -851,23 +891,37 @@ select:focus-visible {
     font-size: var(--font-small);
   }
   .messages {
-    padding: var(--space-large) 14px;
+    padding: 16px max(10px, env(safe-area-inset-right)) 20px max(10px, env(safe-area-inset-left));
   }
   .message {
     gap: var(--space-small);
+    margin-bottom: 16px;
   }
   .avatar {
     width: 32px;
     height: 32px;
   }
   .bubble {
-    padding: var(--space-base);
+    padding: 10px;
   }
   .response-inspector > summary {
     min-height: 44px;
   }
   .composer-wrap {
-    padding-inline: var(--space-base);
+    padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
+  }
+  .composer {
+    padding: 6px;
+  }
+  .composer-actions {
+    gap: 2px;
+  }
+  .composer-actions .model-pill {
+    padding-inline: 7px;
+  }
+  .composer textarea {
+    min-height: 38px;
+    padding: 6px;
   }
   .composer textarea,
   input,
@@ -894,7 +948,8 @@ select:focus-visible {
     height: 44px;
   }
   .privacy {
-    font-size: var(--font-mobile-caption);
+    font-size: var(--font-caption);
+    margin-top: 4px;
   }
   .page {
     padding: 22px var(--space-medium) 50px;
