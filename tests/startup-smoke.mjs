@@ -11,6 +11,28 @@ const hasMark = (page, name) =>
     (mark) => performance.getEntriesByName(mark, "mark").length > 0,
     `luma:startup:${name}`,
   );
+// Wall-clock durations include runner preemption. Observe task ordering instead.
+const observeRevealTask = (page, simulatePause = false) => page.addInitScript((pause) => {
+  const originalMark = performance.mark.bind(performance);
+  let revealTaskEnded = false;
+  window.testRevealTask = { sawReveal: false, readyInSameTask: null };
+  performance.mark = (name, options) => {
+    const mark = originalMark(name, options);
+    if (name === "luma:startup:attempt-1:reveal") {
+      window.testRevealTask.sawReveal = true;
+      revealTaskEnded = false;
+      queueMicrotask(() => { revealTaskEnded = true; });
+      // Emulate a slow CI runner between marks without creating an asynchronous boundary.
+      if (pause) {
+        const deadline = performance.now() + 50;
+        while (performance.now() < deadline) { /* simulate preemption */ }
+      }
+    } else if (name === "luma:startup:attempt-1:ready") {
+      window.testRevealTask.readyInSameTask = window.testRevealTask.sawReveal && !revealTaskEnded;
+    }
+    return mark;
+  };
+}, simulatePause);
 const setUp = { locale: "en-US", serviceWorkers: "block" };
 const browser = await chromium.launch({
   executablePath: chromePath(),
@@ -25,6 +47,7 @@ try {
     reducedMotion: "reduce",
     viewport: { width: 320, height: 568 },
   });
+  await observeRevealTask(cold, true);
   const scripts = Promise.withResolvers();
   const styles = Promise.withResolvers();
   const errors = [];
@@ -134,9 +157,8 @@ try {
           "reveal",
           "ready",
         ].map(timeline),
-        fade: performance.getEntriesByName(
-          "luma:startup:attempt-1:splash-fade",
-        )[0].duration,
+        reducedReveal: window.testRevealTask,
+        fade: performance.getEntriesByName("luma:startup:attempt-1:splash-fade")[0].duration,
         tokenColor: getComputedStyle(document.body)
           .getPropertyValue("--color-bg")
           .trim(),
@@ -154,7 +176,8 @@ try {
     assert.equal(stats.appColor, "rgb(23, 24, 27)");
     assert.equal(stats.version, 2);
     assert.equal(stats.shifts, 0);
-    assert.ok(stats.fade < 30);
+    assert.deepEqual(stats.reducedReveal, { sawReveal: true, readyInSameTask: true });
+    assert.ok(stats.fade >= 30, "the simulated slow runner must exercise the old threshold");
     assert.deepEqual(errors, []);
     console.log(
       `Startup timing with gated assets: FCP ${Math.round(stats.fcp)} ms, interactive ${Math.round(stats.interactive)} ms, layout shift ${stats.shifts}`,
@@ -170,6 +193,7 @@ try {
     colorScheme: "dark",
     viewport: { width: 1440, height: 900 },
   });
+  await observeRevealTask(cached);
   await cached.addInitScript(() => {
     window.addEventListener("luma:startup:entry", () => {
       window.testEntryTheme = document.documentElement.dataset.theme;
@@ -316,6 +340,10 @@ try {
           .duration > 0,
     ),
   );
+  assert.deepEqual(await cached.evaluate(() => window.testRevealTask), {
+    sawReveal: true,
+    readyInSameTask: false,
+  });
   await cached.close();
 
   const delayed = await browser.newPage(setUp);
