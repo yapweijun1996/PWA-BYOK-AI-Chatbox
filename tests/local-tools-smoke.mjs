@@ -169,7 +169,7 @@ try {
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Clear all local data" }).click();
   await page.getByText("Local data cleared.", { exact: true }).waitFor();
-  assert.equal(await page.getByText("delete-with-workspace", { exact: true }).count(), 0);
+  await page.getByText("delete-with-workspace", { exact: true }).waitFor({ state: "detached" });
   console.log(
     "PASS: five local tools, provider continuation, attachments, persistence and memory management",
   );
