@@ -288,7 +288,7 @@ function App({
         {view === "chat" && (
           <>
             <section
-              className="conversation"
+              className={`conversation${!chat || chat.messages.length === 0 ? " conversation-empty" : ""}`}
               data-conversation-id={active}
               aria-label={t("Conversation")}
               ref={conversation}
@@ -491,6 +491,7 @@ function App({
                     className="icon composer-reasoning"
                     type="button"
                     aria-label={t("Local tools")}
+                    aria-description={t("Enable local JavaScript, time, calculation, file, text and memory tools. Results are sent to the selected model.")}
                     aria-pressed={javascriptEnabled}
                     disabled={!chat || working}
                     title={t(

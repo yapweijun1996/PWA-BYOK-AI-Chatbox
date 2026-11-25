@@ -1,6 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowUp, FileText, Lock, Plus, Square, X } from "lucide-react";
+import {
+  ArrowUp,
+  FileText,
+  Lock,
+  Maximize2,
+  Minimize2,
+  Plus,
+  Square,
+  X,
+} from "lucide-react";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import { formatSize } from "../format-size";
@@ -56,6 +65,7 @@ export function Composer({
   const composing = useRef(false);
   const lastComposition = useRef(-Infinity);
   const [dragging, setDragging] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const commandListId = useId();
   const [dismissedDraft, setDismissedDraft] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState(0);
@@ -79,6 +89,16 @@ export function Composer({
   const stopping = phase === "stopping";
   const saving = phase === "saving";
   const busyLabel = saving ? t("Saving message…") : t("Stopping…");
+  const toggleExpanded = () => {
+    const input = textarea.current;
+    const start = input?.selectionStart ?? 0;
+    const end = input?.selectionEnd ?? start;
+    setExpanded((previous) => !previous);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(start, end);
+    });
+  };
 
   useEffect(() => {
     shell.current
@@ -137,11 +157,45 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
+      {expanded && <div className="composer-backdrop" aria-hidden="true" />}
       <form
         className="composer"
         ref={shell}
+        data-expanded={expanded}
+        role={expanded ? "dialog" : undefined}
+        aria-modal={expanded || undefined}
+        aria-label={expanded ? t("Expanded message editor") : undefined}
         data-dragging={dragging && canAttach}
         onSubmit={(event) => event.preventDefault()}
+        onKeyDown={(event) => {
+          if (
+            !expanded ||
+            (event.target as HTMLElement).closest("dialog[open]")
+          )
+            return;
+          if (event.key === "Escape" && !matches.length) {
+            event.preventDefault();
+            toggleExpanded();
+          }
+          if (event.key === "Tab") {
+            const items = Array.from(
+              shell.current?.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), textarea:not(:disabled), [href], input:not([type="hidden"]):not(:disabled)',
+              ) || [],
+            ).filter((item) => item.offsetParent !== null);
+            if (!items.length) return;
+            if (event.shiftKey && document.activeElement === items[0]) {
+              event.preventDefault();
+              items[items.length - 1].focus();
+            } else if (
+              !event.shiftKey &&
+              document.activeElement === items[items.length - 1]
+            ) {
+              event.preventDefault();
+              items[0].focus();
+            }
+          }
+        }}
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes("Files")) return;
           event.preventDefault();
@@ -249,6 +303,23 @@ export function Composer({
                 : t(blockedReason || "")}
           </p>
         )}
+        <button
+          className="icon composer-expand"
+          type="button"
+          aria-label={t(
+            expanded ? "Close expanded editor" : "Expand message editor",
+          )}
+          title={t(
+            expanded ? "Close expanded editor" : "Expand message editor",
+          )}
+          onClick={toggleExpanded}
+        >
+          {expanded ? (
+            <Minimize2 size={18} aria-hidden="true" />
+          ) : (
+            <Maximize2 size={18} aria-hidden="true" />
+          )}
+        </button>
         <textarea
           ref={textarea}
           rows={1}
@@ -351,6 +422,9 @@ export function Composer({
             type="button"
             title={t("Attach image or text")}
             aria-label={t("Attach image or text")}
+            aria-description={t(
+              "Choose images or text files, or drag and drop files here. You can also paste images.",
+            )}
             onClick={() => fileInput.current?.click()}
             disabled={!canAttach}
           >
@@ -412,6 +486,11 @@ export function Composer({
           )}
         </span>
       </p>
+      {enterSends && (
+        <p className="composer-hint">
+          {t("Enter to send · Shift+Enter for a new line")}
+        </p>
+      )}
     </div>
   );
 }

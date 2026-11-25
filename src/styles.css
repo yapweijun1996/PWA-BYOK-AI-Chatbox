@@ -530,6 +530,9 @@ select:focus-visible {
   margin: auto;
   padding: 12vh var(--space-large);
 }
+.conversation-empty { display: flex; align-items: flex-end; flex: 0 1 48%; }
+.conversation-empty .welcome { margin: auto auto 0; padding: 24px var(--space-large); }
+.conversation-empty + .composer-wrap { margin-bottom: auto; }
 .welcome-icon {
   width: 52px;
   height: 52px;
@@ -625,8 +628,8 @@ select:focus-visible {
   border: 0;
   outline: 0;
   color: var(--color-text);
-  padding: var(--space-extra-small) var(--space-small);
-  font-size: var(--font-label);
+  padding: var(--space-extra-small) 44px var(--space-extra-small) var(--space-small);
+  font-size: 14px;
   line-height: 1.5;
 }
 .composer-actions {
@@ -637,11 +640,20 @@ select:focus-visible {
 }
 .composer-actions .model-pill {
   min-width: 0;
-  flex: 0 1 240px;
+  flex: 0 1 150px;
+  order: 2;
+  margin-inline-start: auto;
   min-height: 36px;
-  max-width: min(240px, 100%);
+  max-width: min(150px, 100%);
   font-size: var(--font-small);
 }
+.composer-actions .send { order: 3; margin-inline-start: 0; }
+.composer-expand { position: absolute; top: 8px; inset-inline-end: 8px; z-index: 1; width: 32px; height: 32px; }
+.composer-backdrop { position: fixed; inset: 0; z-index: 100; background: var(--color-scrim); }
+.composer[data-expanded="true"] { position: fixed; z-index: 101; inset: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) auto max(20px, env(safe-area-inset-left)); width: min(900px, calc(100% - 40px)); height: calc(var(--app-viewport-height, 100dvh) - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))); margin: auto; display: flex; flex-direction: column; }
+.composer[data-expanded="true"] textarea { flex: 1 1 0; min-height: 0; max-height: none; }
+.composer[data-expanded="true"] .slash-menu { bottom: auto; top: 40px; }
+.composer-hint { margin: 3px 0 0; color: var(--color-muted); font-size: var(--font-caption); text-align: center; }
 .composer-actions .model-pill svg,
 .composer-attach,
 .composer-reasoning {
@@ -1096,7 +1108,7 @@ select:focus-visible {
   }
   .composer textarea {
     min-height: 38px;
-    padding: 6px;
+    padding: 6px 44px 6px 6px;
   }
   .composer textarea,
   input,
@@ -1126,6 +1138,9 @@ select:focus-visible {
     font-size: var(--font-caption);
     margin-top: 4px;
   }
+  .composer-expand { width: 44px; height: 44px; top: 2px; inset-inline-end: 2px; }
+  .composer[data-expanded="true"] { inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) auto max(8px, env(safe-area-inset-left)); width: auto; height: calc(var(--app-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom))); }
+  .composer[data-expanded="true"] textarea { min-height: 0; }
   .page {
     padding: 22px var(--space-medium) 50px;
   }

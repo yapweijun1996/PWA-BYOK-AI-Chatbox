@@ -79,6 +79,10 @@ try {
     "none",
   );
   const defaultHeight = (await input.boundingBox()).height;
+  assert.equal(
+    await input.evaluate((element) => getComputedStyle(element).fontSize),
+    "14px",
+  );
   await input.fill("One\nTwo\nThree\nFour\nFive\nSix");
   assert.ok((await input.boundingBox()).height > defaultHeight);
   await input.fill("Long draft\n".repeat(50));
@@ -89,12 +93,39 @@ try {
         element.scrollHeight > element.clientHeight,
     ),
   );
+  await input.focus();
+  await input.evaluate((element) => element.setSelectionRange(4, 9));
+  await page.getByRole("button", { name: "Expand message editor" }).click();
+  await page.getByRole("dialog", { name: "Expanded message editor" }).waitFor();
+  assert.equal(await input.inputValue(), "Long draft\n".repeat(50));
+  assert.deepEqual(
+    await input.evaluate((element) => [
+      element.selectionStart,
+      element.selectionEnd,
+    ]),
+    [4, 9],
+  );
+  assert.ok((await input.boundingBox()).height > 320);
+  await input.press("Escape");
+  await page
+    .getByRole("dialog", { name: "Expanded message editor" })
+    .waitFor({ state: "hidden" });
+  assert.deepEqual(
+    await input.evaluate((element) => [
+      element.selectionStart,
+      element.selectionEnd,
+    ]),
+    [4, 9],
+  );
   await input.fill("");
   assert.equal((await input.boundingBox()).height, defaultHeight);
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "LM Studio", exact: true }).click();
-  await applyServerAddress(page, `http://127.0.0.1:${server.address().port}/v1`);
+  await applyServerAddress(
+    page,
+    `http://127.0.0.1:${server.address().port}/v1`,
+  );
   await page.getByRole("button", { name: "Back to chat" }).click();
   await selector.click();
   const dialog = page.getByRole("dialog", { name: "Choose model" });
@@ -141,6 +172,22 @@ try {
   assert.ok(landscapeSend.y + landscapeSend.height <= 320);
   await page.setViewportSize({ width: 320, height: 540 });
   await input.fill("Mobile draft");
+  assert.equal(
+    await input.evaluate((element) => getComputedStyle(element).fontSize),
+    "16px",
+  );
+  await page.getByRole("button", { name: "Expand message editor" }).click();
+  const expanded = page.getByRole("dialog", {
+    name: "Expanded message editor",
+  });
+  const expandedBounds = await expanded.boundingBox();
+  assert.ok(
+    expandedBounds.x >= 0 &&
+      expandedBounds.x + expandedBounds.width <= 320 &&
+      expandedBounds.y + expandedBounds.height <= 540,
+  );
+  await page.getByRole("button", { name: "Close expanded editor" }).click();
+  assert.equal(await input.inputValue(), "Mobile draft");
   await input.press("End");
   await input.press("Enter");
   assert.equal(await input.inputValue(), "Mobile draft\n");
@@ -179,7 +226,11 @@ try {
   assert.equal(await input.inputValue(), "Draft typed during streaming");
   await page.getByRole("button", { name: "Stop generating" }).click();
   await page.getByText("Stopped or interrupted", { exact: true }).waitFor();
-  await page.locator(".message.assistant").first().getByText("Saved locally", { exact: true }).waitFor();
+  await page
+    .locator(".message.assistant")
+    .first()
+    .getByText("Saved locally", { exact: true })
+    .waitFor();
   const stoppedFooter = page.locator(".response-inspector summary").first();
   const stoppedMetrics = await stoppedFooter.innerText();
   assert.match(stoppedMetrics, /TTFT\s+\d/);
@@ -188,7 +239,12 @@ try {
   await stoppedFooter.click();
   const stoppedInspector = stoppedFooter.locator("..");
   assert.equal(
-    await stoppedInspector.locator("dl > div").filter({ has: page.getByText("Total tokens", { exact: true }) }).locator("dd").first().innerText(),
+    await stoppedInspector
+      .locator("dl > div")
+      .filter({ has: page.getByText("Total tokens", { exact: true }) })
+      .locator("dd")
+      .first()
+      .innerText(),
     "N/A",
   );
   assert.equal(await input.inputValue(), "Draft typed during streaming");

@@ -11,6 +11,11 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Expanded message editor": "展开的消息编辑器",
+  "Expand message editor": "展开消息编辑器",
+  "Close expanded editor": "关闭展开的编辑器",
+  "Enter to send · Shift+Enter for a new line": "Enter 发送 · Shift+Enter 换行",
+  "Choose images or text files, or drag and drop files here. You can also paste images.": "选择图片或文本文件，也可拖放文件或粘贴图片。",
   "Installing update…": "正在安装更新…",
   "Saving your work and restarting Luma Chat…": "正在保存内容并重新启动 Luma Chat…",
   "An update is ready. Select the update button to install it.": "更新已准备好。点击更新按钮进行安装。",
