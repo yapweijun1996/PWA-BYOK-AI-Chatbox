@@ -222,8 +222,29 @@
   height: 100%;
   object-fit: contain;
 }
+.rich-image-box[data-state="loaded"] {
+  display: inline-block;
+  inline-size: auto;
+  max-inline-size: min(100%, 480px);
+  aspect-ratio: auto;
+  vertical-align: middle;
+}
+.rich-image-box[data-state="loaded"] img {
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 480px;
+}
 .rich-image-box:not([data-state="loaded"]) img {
   visibility: hidden;
+}
+.rich-image-feedback {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-small);
+  padding: var(--space-base);
 }
 .rich-image-status,
 .rich-image-disabled {

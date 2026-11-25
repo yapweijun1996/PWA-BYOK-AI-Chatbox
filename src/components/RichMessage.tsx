@@ -185,6 +185,7 @@ function MessageImage({
   const [state, setState] = useState<"idle" | "loading" | "loaded" | "failed">(
     "idle",
   );
+  const [attempt, setAttempt] = useState(0);
   if (state === "idle")
     return (
       <button
@@ -206,6 +207,7 @@ function MessageImage({
     <span className="rich-image-box" data-state={state}>
       {state !== "failed" && (
         <img
+          key={attempt}
           src={src}
           alt={alt}
           title={title}
@@ -217,10 +219,20 @@ function MessageImage({
         />
       )}
       {state !== "loaded" && (
-        <span className="rich-image-status" role="status">
-          {translate(
-            locale,
-            state === "failed" ? "Image unavailable." : "Loading image…",
+        <span className="rich-image-feedback">
+          <span className="rich-image-status" role="status">
+            {translate(
+              locale,
+              state === "failed" ? "Image unavailable." : "Loading image…",
+            )}
+          </span>
+          {state === "failed" && (
+            <button className="rich-image-action" type="button" onClick={() => {
+              setAttempt((value) => value + 1);
+              setState("loading");
+            }}>
+              {translate(locale, "Retry")}
+            </button>
           )}
         </span>
       )}

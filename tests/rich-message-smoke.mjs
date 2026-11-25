@@ -79,6 +79,7 @@ try {
     async (route) => {
       imageRequests++;
       assert.equal(route.request().headers().referer, undefined);
+      if (imageRequests === 1) return route.abort("failed");
       await route.fulfill({ body: pixel, contentType: "image/png" });
     },
   );
@@ -162,8 +163,14 @@ try {
   await reply
     .getByRole("button", { name: "Load image: Example chart" })
     .click();
-  await reply.getByRole("img", { name: "Example chart" }).waitFor();
+  await reply.getByText("Image unavailable.").waitFor();
   assert.equal(imageRequests, 1);
+  await reply.locator(".rich-image-box").getByRole("button", { name: "Retry" }).click();
+  await reply.getByRole("img", { name: "Example chart" }).waitFor();
+  await reply.locator('.rich-image-box[data-state="loaded"]').waitFor();
+  const imageSize = await reply.getByRole("img", { name: "Example chart" }).boundingBox();
+  assert.ok(Math.abs(imageSize.width - imageSize.height) < 1);
+  assert.equal(imageRequests, 2);
   assert.deepEqual(failures, []);
 
   await page.setViewportSize({ width: 320, height: 675 });
@@ -228,7 +235,7 @@ try {
     ),
   );
   assert.equal(await reply.getByRole("table").count(), 1);
-  assert.equal(imageRequests, 1);
+  assert.equal(imageRequests, 2);
   assert.deepEqual(failures, []);
   console.log(
     "PASS: streamed Markdown and math, stable code DOM and scroll intent, raw IndexedDB source, opt-in images, 320px overflow, offline KaTeX fonts",
