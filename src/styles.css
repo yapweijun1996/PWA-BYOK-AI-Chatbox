@@ -104,6 +104,11 @@ select:focus-visible {
   color: var(--color-text);
 }
 .main {
+  --chat-layout-width: 860px;
+  --message-avatar-size: 38px;
+  --message-gap: var(--space-base);
+  --chat-inset-start: var(--space-large);
+  --chat-inset-end: var(--space-large);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -352,14 +357,14 @@ select:focus-visible {
   min-height: 0;
 }
 .messages {
-  max-width: 860px;
+  max-width: var(--chat-layout-width);
   margin: 0 auto;
-  padding: var(--space-extra-large) var(--space-large) 36px;
+  padding: var(--space-extra-large) var(--chat-inset-end) 36px var(--chat-inset-start);
 }
 .message {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-base);
+  gap: var(--message-gap);
   margin-bottom: var(--space-large);
   min-width: 0;
 }
@@ -372,8 +377,8 @@ select:focus-visible {
   flex-direction: row-reverse;
 }
 .avatar {
-  width: 38px;
-  height: 38px;
+  width: var(--message-avatar-size);
+  height: var(--message-avatar-size);
   flex: none;
   display: grid;
   place-items: center;
@@ -518,7 +523,7 @@ select:focus-visible {
 .response-inspector-content {
   background: var(--color-bg);
   border-radius: var(--radius-small);
-  padding: var(--space-base);
+  padding: var(--space-medium);
 }
 .response-inspector-content h3 {
   margin: 0 0 var(--space-small);
@@ -527,16 +532,22 @@ select:focus-visible {
 }
 .response-inspector-content dl {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
-  gap: var(--space-small);
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: var(--space-base) var(--space-medium);
   margin: 0;
 }
+.response-group { margin-top: var(--space-medium); }
+.response-group + .response-group { padding-top: var(--space-base); border-top: 1px solid var(--color-border); }
+.response-group h4 { margin: 0 0 var(--space-small); color: var(--color-text); font-size: var(--font-small); }
+.response-group dl > div { min-width: 0; }
+.response-group dt { color: var(--color-muted); overflow-wrap: anywhere; }
 .response-inspector-content dd {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
 .response-inspector-content .response-source {
   color: var(--color-muted);
+  line-height: 1.45;
 }
 .response-inspector-content p {
   margin: var(--space-small) 0 0;
@@ -586,11 +597,12 @@ select:focus-visible {
 }
 .composer-wrap {
   flex: none;
-  width: min(800px, 100%);
+  width: min(var(--chat-layout-width), 100%);
   margin: 0 auto;
-  padding: 0 var(--space-large)
-    max(var(--space-base), env(safe-area-inset-bottom));
+  padding: 0 var(--chat-inset-end) max(var(--space-base), env(safe-area-inset-bottom))
+    calc(var(--chat-inset-start) + var(--message-avatar-size) + var(--message-gap));
 }
+.conversation-empty + .composer-wrap { width: min(800px, 100%); padding-inline: var(--chat-inset-start) var(--chat-inset-end); }
 .composer {
   position: relative;
   background: var(--color-surface);
@@ -1094,6 +1106,7 @@ select:focus-visible {
   display: none;
 }
 @media (max-width: 767px) {
+  .main { --message-avatar-size: 32px; --message-gap: var(--space-small); --chat-inset-start: max(10px, env(safe-area-inset-left)); --chat-inset-end: max(10px, env(safe-area-inset-right)); }
   .message-action { min-width: 44px; min-height: 44px; justify-content: center; }
   .user .bubble { max-width: calc(100% - 40px); }
   .message-actions { gap: 2px; }
@@ -1128,24 +1141,21 @@ select:focus-visible {
     font-size: var(--font-small);
   }
   .messages {
-    padding: 16px max(10px, env(safe-area-inset-right)) 20px max(10px, env(safe-area-inset-left));
+    padding: 16px var(--chat-inset-end) 20px var(--chat-inset-start);
   }
   .message {
-    gap: var(--space-small);
+    gap: var(--message-gap);
     margin-bottom: 16px;
   }
   .avatar {
-    width: 32px;
-    height: 32px;
+    width: var(--message-avatar-size);
+    height: var(--message-avatar-size);
   }
   .bubble {
     padding: 10px;
   }
   .response-inspector > summary {
     min-height: 44px;
-  }
-  .composer-wrap {
-    padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
   }
   .composer {
     padding: 6px;

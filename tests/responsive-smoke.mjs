@@ -143,6 +143,10 @@ try {
     const attachment = page.locator(".attachment-label");
     assert.ok(await attachment.isVisible());
     assert.ok(await attachment.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+    const composerBounds = await page.locator(".composer").boundingBox();
+    const bubbleBounds = await page.locator(".message.assistant .bubble").first().boundingBox();
+    assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
+    assert.ok(Math.abs(composerBounds.x + composerBounds.width - bubbleBounds.x - bubbleBounds.width) <= 1, `${width}: composer and bubble right edges`);
     const conversation = page.locator(".conversation");
     assert.ok(
       await conversation.evaluate((el) => el.scrollHeight > el.clientHeight),
@@ -155,6 +159,17 @@ try {
       el.scrollTop = el.scrollHeight;
     });
     assert.ok(await conversation.evaluate((el) => el.scrollTop > 0));
+    const lastMessage = await page.locator(".message").last().boundingBox();
+    const conversationBounds = await conversation.boundingBox();
+    assert.ok(lastMessage.y + lastMessage.height <= conversationBounds.y + conversationBounds.height + 1);
+    assert.ok(conversationBounds.y + conversationBounds.height <= composerBounds.y + 1);
+    const inspector = page.locator(".response-inspector").last();
+    await inspector.locator("summary").press("Enter");
+    for (const heading of ["Model information", "Speed and timing", "Token usage", "Cost and status"]) {
+      await inspector.getByRole("heading", { name: heading }).waitFor();
+    }
+    assert.ok(await inspector.locator(".response-inspector-content").evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+    await inspector.locator("summary").press("Enter");
     const summary = page.locator(".reasoning summary");
     const preview = page.locator(".reasoning-preview");
     assert.match(await preview.innerText(), /最新 reasoning tail/);

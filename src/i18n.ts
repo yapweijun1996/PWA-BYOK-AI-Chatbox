@@ -11,6 +11,10 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Model information": "模型信息",
+  "Speed and timing": "速度与时间",
+  "Token usage": "Token 用量",
+  "Cost and status": "费用与状态",
   "Wrap": "换行",
   "Wrap code": "代码自动换行",
   "Scroll horizontally to see more": "横向滚动查看更多",

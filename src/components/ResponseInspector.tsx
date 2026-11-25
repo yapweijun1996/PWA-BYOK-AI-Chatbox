@@ -66,8 +66,12 @@ export const ResponseInspector = memo(function ResponseInspector({
     ...(throughput ? [["TPS", tps]] : []),
     ...(telemetry?.ttftMs !== undefined ? [["TTFT", ttft]] : []),
     ...(telemetry?.durationMs !== undefined ? [[t("Duration"), duration]] : []),
-    ...(usage?.total !== undefined ? [[t("Tokens"), formatCount(usage.total)]] : []),
-    ...(cost ? [[t("Cost"), cost.source === "estimated" ? `≈${costText}` : costText]] : []),
+    ...(usage?.total !== undefined
+      ? [[t("Tokens"), formatCount(usage.total)]]
+      : []),
+    ...(cost
+      ? [[t("Cost"), cost.source === "estimated" ? `≈${costText}` : costText]]
+      : []),
   ];
   const fields = [
     [
@@ -128,11 +132,42 @@ export const ResponseInspector = memo(function ResponseInspector({
     [t("Finish reason"), telemetry?.finishReason || missing, reported],
     [t("Timestamp"), timestampText],
   ];
+  const groups = [
+    [
+      t("Model information"),
+      [t("Provider"), t("Model"), t("Served model"), t("Reasoning effort")],
+    ],
+    [
+      t("Speed and timing"),
+      ["TPS", "TTFT", "TTFV", t("Total duration"), t("Generation duration")],
+    ],
+    [
+      t("Token usage"),
+      [
+        t("Input tokens"),
+        t("Output tokens"),
+        t("Total tokens"),
+        t("Reasoning tokens"),
+        t("Cached tokens"),
+        t("Generated tokens"),
+        t("Prompt evaluation tokens"),
+        t("Timing cache tokens"),
+      ],
+    ],
+    [
+      t("Cost and status"),
+      [t("API cost (USD)"), t("Finish reason"), t("Timestamp")],
+    ],
+  ] as const;
 
   return (
     <details className="response-inspector">
       <summary
-        aria-label={metrics.length ? `${title}: ${metrics.map(([label, value]) => `${label} ${value}`).join(", ")}` : title}
+        aria-label={
+          metrics.length
+            ? `${title}: ${metrics.map(([label, value]) => `${label} ${value}`).join(", ")}`
+            : title
+        }
         title={title}
       >
         <span className="response-metrics">
@@ -154,17 +189,26 @@ export const ResponseInspector = memo(function ResponseInspector({
             )}
           </p>
         )}
-        <dl>
-          {fields.map(([label, value, source]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-              {source && value !== missing && (
-                <dd className="response-source">{source}</dd>
-              )}
-            </div>
-          ))}
-        </dl>
+        {groups.map(([heading, labels]) => (
+          <section className="response-group" key={heading}>
+            <h4>{heading}</h4>
+            <dl>
+              {fields
+                .filter(
+                  ([label]) => label !== undefined && labels.includes(label),
+                )
+                .map(([label, value, source]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                    {source && value !== missing && (
+                      <dd className="response-source">{source}</dd>
+                    )}
+                  </div>
+                ))}
+            </dl>
+          </section>
+        ))}
         <p>
           {t(
             "TTFT starts at the request and ends at the first generated text or reasoning delta. TTFV ends at the first nonblank answer text. Neither measures provider compute time.",
