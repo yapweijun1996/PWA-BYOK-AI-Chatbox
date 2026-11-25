@@ -68,6 +68,7 @@ try {
     "tests/browser-smoke.mjs",
     "tests/anthropic-browser-smoke.mjs",
     "tests/branching-smoke.mjs",
+    "tests/branch-isolation-smoke.mjs",
     "tests/search-branches-smoke.mjs",
     "tests/reasoning-smoke.mjs",
     "tests/tool-execution-smoke.mjs",

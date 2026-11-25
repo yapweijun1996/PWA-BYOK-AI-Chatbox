@@ -46,7 +46,27 @@ try {
                 createdAt: 1,
                 status: "complete",
               },
+              {
+                id: "arch-reply",
+                role: "assistant",
+                content: "Archived secret follow up",
+                createdAt: 2,
+                status: "complete",
+              },
             ],
+          });
+          chats.put({
+            id: "bulk",
+            title: "Bulk search",
+            updatedAt: 1,
+            draft: "",
+            messages: Array.from({ length: 105 }, (_, index) => ({
+              id: `bulk-${index}`,
+              role: "user",
+              content: `bulk-keyword <img src=x onerror=alert(1)> ${index}`,
+              createdAt: index + 1,
+              status: "complete",
+            })),
           });
           chats.put({
             id: "target",
@@ -113,6 +133,28 @@ try {
   };
   await page.setViewportSize({ width: 320, height: 700 });
   await openSearch("hidden needle");
+  assert.equal(await dialog.locator(".search-group").count(), 1);
+  assert.equal(
+    await dialog.locator("mark").first().textContent(),
+    "Hidden needle",
+  );
+  const lightColor = await dialog
+    .locator(".search-group")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(
+    () => document.documentElement.dataset.theme === "dark",
+  );
+  assert.notEqual(
+    await dialog
+      .locator(".search-group")
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+    lightColor,
+  );
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.waitForFunction(
+    () => document.documentElement.dataset.theme === "light",
+  );
   assert.ok(
     await dialog.evaluate(
       (element) =>
@@ -267,10 +309,21 @@ try {
 
   await openSearch("archived secret");
   await dialog.getByRole("button", { name: "Archived", exact: true }).click();
+  assert.equal(
+    await dialog.getByRole("button", { name: "Restore Archived item" }).count(),
+    1,
+  );
+  assert.equal(
+    await dialog
+      .getByRole("button", { name: /Archived item.*Archived secret/ })
+      .count(),
+    2,
+  );
   await search.press("ArrowDown");
   assert.equal(
     await dialog
       .getByRole("button", { name: /Archived item.*Archived secret/ })
+      .first()
       .evaluate((element) => element.matches(":focus")),
     true,
   );
@@ -369,6 +422,69 @@ try {
     .waitFor();
   assert.equal(await page.locator('[data-message-id="a"]').count(), 1);
   await other.close();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.bringToFront();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Search conversations", exact: true })
+    .click();
+  await search.fill("bulk-keyword");
+  assert.equal(await dialog.locator(".search-group").count(), 1);
+  assert.equal(await dialog.locator(".search-result-open").count(), 100);
+  await dialog
+    .getByText("Showing the first 100 results. Refine your search to see more.")
+    .waitFor();
+  assert.equal(await dialog.locator("img").count(), 0);
+  const chinese = await browser.newPage({
+    locale: "zh-CN",
+    viewport: { width: 320, height: 700 },
+  });
+  await chinese.goto(base);
+  await chinese.locator('html[data-startup="ready"]').waitFor();
+  await chinese.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open("luma-chat");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction("conversations", "readwrite");
+          tx.objectStore("conversations").put({
+            id: "zh",
+            title: "研究",
+            updatedAt: 1,
+            draft: "",
+            messages: [
+              {
+                id: "zh-message",
+                role: "user",
+                content: "搜索关键词",
+                createdAt: 1,
+                status: "complete",
+              },
+            ],
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await chinese.reload();
+  await chinese.locator('html[data-startup="ready"]').waitFor();
+  await chinese.keyboard.press("Control+k");
+  const chineseDialog = chinese.getByRole("dialog", { name: "搜索对话" });
+  await chineseDialog
+    .getByRole("searchbox", { name: "搜索对话" })
+    .fill("关键词");
+  await chineseDialog
+    .getByRole("button", { name: /研究.*消息匹配.*关键词/ })
+    .waitFor();
+  assert.equal(await chineseDialog.locator("mark").textContent(), "关键词");
+  await chinese.close();
   console.log(
     "PASS: branch search, shared ancestors, drafts, editing guard, rollback and cross-tab conflict",
   );

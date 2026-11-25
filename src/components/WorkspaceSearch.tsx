@@ -1,9 +1,37 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ArchiveRestore, MessageSquare, Search, X } from "lucide-react";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import type { Conversation, WorkspaceProject } from "../types";
 import { searchWorkspace, type WorkspaceSearchResult } from "../workspace";
+
+const resultLimit = 100;
+function highlighted(text: string, query: string) {
+  const needle = query.trim();
+  const folded = text.toLowerCase();
+  const target = needle.toLowerCase();
+  if (
+    !target ||
+    folded.length !== text.length ||
+    target.length !== needle.length
+  )
+    return text;
+  const parts: ReactNode[] = [];
+  let start = 0;
+  for (;;) {
+    const index = folded.indexOf(target, start);
+    if (index < 0) break;
+    parts.push(
+      text.slice(start, index),
+      <mark key={index}>{text.slice(index, index + target.length)}</mark>,
+    );
+    start = index + target.length;
+  }
+  if (!parts.length) return text;
+  parts.push(text.slice(start));
+  return parts;
+}
 
 export type SearchMode = "active" | "archived";
 type Props = {
@@ -40,9 +68,37 @@ export function WorkspaceSearch({
     "idle" | "pending" | "failed"
   >("idle");
   const results = useMemo(
-    () => searchWorkspace(chats, query, mode === "archived", projects),
+    () =>
+      searchWorkspace(
+        chats,
+        query,
+        mode === "archived",
+        projects,
+        resultLimit + 1,
+      ),
     [chats, query, mode, projects],
   );
+  const visibleResults = results.slice(0, resultLimit);
+  const groups = useMemo(() => {
+    const result = new Map<
+      string,
+      {
+        chat: Conversation;
+        conversation?: WorkspaceSearchResult;
+        messages: WorkspaceSearchResult[];
+      }
+    >();
+    for (const entry of results.slice(0, resultLimit)) {
+      const group = result.get(entry.chat.id) ?? {
+        chat: entry.chat,
+        messages: [],
+      };
+      if (entry.message) group.messages.push(entry);
+      else group.conversation = entry;
+      result.set(entry.chat.id, group);
+    }
+    return [...result.values()];
+  }, [results]);
   const close = () => {
     if (!openingRef.current) dialog.current?.close();
   };
@@ -93,10 +149,10 @@ export function WorkspaceSearch({
         if (
           event.key === "Enter" &&
           event.target === field.current &&
-          results[0]
+          visibleResults[0]
         ) {
           event.preventDefault();
-          void choose(results[0]);
+          void choose(visibleResults[0]);
           return;
         }
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -176,76 +232,108 @@ export function WorkspaceSearch({
           </button>
         </div>
         <ul className="workspace-results">
-          {results.map((result) => {
-            const { chat, message, snippet } = result;
+          {groups.map(({ chat, conversation, messages }) => {
             const title =
               chat.title === "New chat" ? t("New chat") : chat.title;
             const project = projects.find(({ id }) => id === chat.projectId);
             return (
-              <li
-                className="search-result"
-                key={JSON.stringify([chat.id, message?.id ?? null])}
-              >
-                <button
-                  className="search-result-open"
-                  disabled={restoreState === "pending" || opening}
-                  aria-label={
-                    message
-                      ? `${title} · ${t("Message match")} · ${t(message.role === "user" ? "You" : "Luma Chat")} · ${snippet}${Number.isFinite(new Date(message.createdAt).getTime()) ? ` · ${new Date(message.createdAt).toLocaleString(locale)}` : ""}`
-                      : `${title} · ${t("Conversation match")}${project ? ` · ${project.name}` : ""}`
-                  }
-                  onClick={() => void choose(result)}
-                >
-                  <MessageSquare size={16} aria-hidden="true" />
-                  <span>
-                    {title}
-                    {project && <small>{project.name}</small>}
-                    <small>
-                      {message
-                        ? `${t("Message match")} · ${t(message.role === "user" ? "You" : "Luma Chat")}`
-                        : t("Conversation match")}
-                    </small>
-                    {message && (
-                      <small className="search-message-snippet">
-                        {snippet}
-                      </small>
-                    )}
-                    {message &&
-                      Number.isFinite(
-                        new Date(message.createdAt).getTime(),
-                      ) && (
-                        <small>
-                          <time
-                            dateTime={new Date(message.createdAt).toISOString()}
+              <li className="search-group" key={chat.id} aria-label={title}>
+                <div className="search-group-heading">
+                  {conversation ? (
+                    <button
+                      className="search-result-open search-conversation"
+                      disabled={restoreState === "pending" || opening}
+                      aria-label={`${title} · ${t("Conversation match")}${project ? ` · ${project.name}` : ""}`}
+                      onClick={() => void choose(conversation)}
+                    >
+                      <MessageSquare size={16} aria-hidden="true" />
+                      <span>
+                        <strong>{highlighted(title, query)}</strong>
+                        {project && (
+                          <small>{highlighted(project.name, query)}</small>
+                        )}
+                        <small>{t("Conversation match")}</small>
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="search-conversation search-group-label">
+                      <MessageSquare size={16} aria-hidden="true" />
+                      <span>
+                        <strong>{title}</strong>
+                        {project && <small>{project.name}</small>}
+                      </span>
+                    </div>
+                  )}
+                  {mode === "archived" && (
+                    <button
+                      className="icon"
+                      aria-label={interpolate(t("Restore {name}"), title)}
+                      disabled={
+                        restoreDisabled || restoreState === "pending" || opening
+                      }
+                      onClick={async () => {
+                        setRestoreState("pending");
+                        field.current?.focus();
+                        setRestoreState(
+                          (await onRestore(chat.id)) ? "idle" : "failed",
+                        );
+                      }}
+                    >
+                      <ArchiveRestore size={18} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+                {messages.length > 0 && (
+                  <ul className="search-message-list">
+                    {messages.map((result) => {
+                      const message = result.message!;
+                      const snippet = result.snippet ?? "";
+                      const date = new Date(message.createdAt);
+                      const validDate = Number.isFinite(date.getTime());
+                      return (
+                        <li key={message.id}>
+                          <button
+                            className="search-result-open search-message"
+                            disabled={restoreState === "pending" || opening}
+                            aria-label={`${title} · ${t("Message match")} · ${t(message.role === "user" ? "You" : "Luma Chat")} · ${snippet}${validDate ? ` · ${date.toLocaleString(locale)}` : ""}`}
+                            onClick={() => void choose(result)}
                           >
-                            {new Date(message.createdAt).toLocaleString(locale)}
-                          </time>
-                        </small>
-                      )}
-                  </span>
-                </button>
-                {mode === "archived" && (
-                  <button
-                    className="icon"
-                    aria-label={interpolate(t("Restore {name}"), title)}
-                    disabled={
-                      restoreDisabled || restoreState === "pending" || opening
-                    }
-                    onClick={async () => {
-                      setRestoreState("pending");
-                      field.current?.focus();
-                      setRestoreState(
-                        (await onRestore(chat.id)) ? "idle" : "failed",
+                            <span className="search-message-body">
+                              <span className="search-message-meta">
+                                <span>
+                                  {t(
+                                    message.role === "user"
+                                      ? "You"
+                                      : "Luma Chat",
+                                  )}
+                                </span>
+                                {validDate && (
+                                  <time dateTime={date.toISOString()}>
+                                    {date.toLocaleString(locale)}
+                                  </time>
+                                )}
+                              </span>
+                              <span className="search-message-snippet">
+                                {highlighted(snippet, query)}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
                       );
-                    }}
-                  >
-                    <ArchiveRestore size={18} aria-hidden="true" />
-                  </button>
+                    })}
+                  </ul>
                 )}
               </li>
             );
           })}
         </ul>
+        {results.length > resultLimit && (
+          <p className="hint" role="status">
+            {t(
+              "Showing the first 100 results. Refine your search to see more.",
+            )}
+          </p>
+        )}
         {opening && (
           <p className="hint" role="status">
             {t("Opening search result…")}

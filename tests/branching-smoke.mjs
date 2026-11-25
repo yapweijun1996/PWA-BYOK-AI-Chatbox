@@ -155,6 +155,18 @@ try {
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   assert.equal(await edited.count(), 1);
   await edited.getByRole("button", { name: "Delete branch" }).click();
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === "conversations") { IDBObjectStore.prototype.put = original; throw new DOMException("Simulated delete failure", "QuotaExceededError"); }
+      return original.apply(this, args);
+    };
+  });
+  await dialog.getByRole("button", { name: "Delete branch", exact: true }).click();
+  await page.getByText(/Storage error:/).waitFor();
+  await page.getByText("Answer 5", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Dismiss message" }).click();
+  await edited.getByRole("button", { name: "Delete branch" }).click();
   await dialog
     .getByRole("button", { name: "Delete branch", exact: true })
     .click();

@@ -90,7 +90,9 @@ export function searchWorkspace(
   query: string,
   archived: boolean,
   projects: WorkspaceProject[],
+  maxResults = Number.POSITIVE_INFINITY,
 ): WorkspaceSearchResult[] {
+  if (maxResults <= 0) return [];
   const needle = query.trim().toLowerCase();
   const names = new Map(
     projects.map((project) => [project.id, project.name.toLowerCase()]),
@@ -103,8 +105,10 @@ export function searchWorkspace(
       !needle ||
       chat.title.toLowerCase().includes(needle) ||
       Boolean(chat.projectId && names.get(chat.projectId)?.includes(needle))
-    )
+    ) {
       result.push({ chat });
+      if (result.length >= maxResults) return result;
+    }
     if (!needle) continue;
     for (const message of chat.messages) {
       const index = message.content.toLowerCase().indexOf(needle);
@@ -120,6 +124,7 @@ export function searchWorkspace(
         message,
         snippet: `${start ? "…" : ""}${message.content.slice(start, end).replace(/\s+/g, " ")}${end < message.content.length ? "…" : ""}`,
       });
+      if (result.length >= maxResults) return result;
     }
   }
   return result;

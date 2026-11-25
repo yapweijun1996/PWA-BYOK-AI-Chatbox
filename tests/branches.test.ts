@@ -79,6 +79,23 @@ describe("message branches", () => {
     expect(activePath(result).map((m) => m.id)).toEqual(["u", "a"]);
     expect(validBranchConversation(result)).toBe(true);
   });
+  it("deletes an inactive subtree without changing the selected path", () => {
+    const tree = asBranchConversation(old);
+    const result = removeBranch(tree, "a");
+    expect(activePath(result).map((message) => message.id)).toEqual([
+      "u",
+      "b",
+      "u2",
+      "c",
+    ]);
+    expect(result.messages.map((message) => message.id)).toEqual([
+      "u",
+      "b",
+      "u2",
+      "c",
+    ]);
+    expect(validBranchConversation(result)).toBe(true);
+  });
   it("validates branch references and requires v2 backups", () => {
     const tree = asBranchConversation(old);
     expect(validBackup({ version: 1, conversations: [tree] })).toBe(false);

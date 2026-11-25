@@ -83,6 +83,8 @@ describe("workspace data contracts", () => {
     expect(results[1].snippet).toContain("needle shared");
     expect(results[1].snippet!.length).toBeLessThanOrEqual(162);
     expect(searchWorkspace([c], "", false, [])).toEqual([{ chat: c }]);
+    expect(searchWorkspace([c], "needle", false, [], 2)).toHaveLength(2);
+    expect(searchWorkspace([c], "needle", false, [], 0)).toEqual([]);
   });
 
   it("restores bounded preferences and accepts existing version-1 backups", () => {

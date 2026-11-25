@@ -11,6 +11,7 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Showing the first 100 results. Refine your search to see more.": "仅显示前 100 条结果，请细化搜索以查看更多。",
   "Message match": "消息匹配",
   "Conversation match": "会话匹配",
   "Opening search result…": "正在打开搜索结果…",
