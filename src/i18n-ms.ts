@@ -1,6 +1,9 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Future": "Akan datang",
+  "Saving changes…": "Menyimpan perubahan…",
+  "Opening conversation…": "Membuka perbualan…",
   "Install update": "Pasang kemas kini",
   ...msExtra,
   "Explain metric sources": "Terangkan sumber metrik",

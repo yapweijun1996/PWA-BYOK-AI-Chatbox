@@ -3,6 +3,7 @@ import { mergeSettings, validBackup } from "../src/data-contracts";
 import { restoreConversations } from "../src/startup";
 import {
   groupConversations,
+  groupRecentByDate,
   mergeProjects,
   normalizeSidebarWidth,
   searchConversations,
@@ -21,6 +22,28 @@ const chat = (id: string, patch: Partial<Conversation> = {}): Conversation => ({
 });
 
 describe("workspace data contracts", () => {
+  it("groups recent conversations using local calendar dates without losing invalid or future dates", () => {
+    const now = new Date(2026, 2, 15, 12);
+    const midnight = new Date(2026, 2, 15).getTime();
+    const boundary = new Date(2026, 2, 8).getTime();
+    const items = [
+      chat("future", { updatedAt: new Date(2026, 2, 16).getTime() }),
+      chat("today", { updatedAt: midnight }),
+      chat("yesterday", { updatedAt: midnight - 1 }),
+      chat("boundary", { updatedAt: boundary }),
+      chat("older", { updatedAt: boundary - 1 }),
+      chat("invalid", { updatedAt: NaN }),
+    ];
+    const groups = groupRecentByDate(items, now);
+    expect(groups.Future.map((item) => item.id)).toEqual(["future"]);
+    expect(groups.Today.map((item) => item.id)).toEqual(["today"]);
+    expect(groups["Previous 7 days"].map((item) => item.id)).toEqual([
+      "yesterday",
+      "boundary",
+    ]);
+    expect(groups.Earlier.map((item) => item.id)).toEqual(["older", "invalid"]);
+    expect(Object.values(groups).flat()).toHaveLength(items.length);
+  });
   it("classifies archived, pinned, project and recent chats without duplicating or hiding history", () => {
     const archived = chat("archived", {
       archived: true,

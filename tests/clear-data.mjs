@@ -108,10 +108,12 @@ export async function exerciseClearData(browser, url) {
     await section(page, "Local data");
     await chooseFile("preview.json");
     await prefs.check();
+    await page.evaluate(() => localStorage.setItem("luma.sidebar.collapsedProjects.v1", '["test-project"]'));
     const before = await storedCounts(page);
     await confirmClear(page, false);
     assert.equal(await prefs.isChecked(), true);
     assert.deepEqual(await storedCounts(page), before);
+    assert.notEqual(await page.evaluate(() => localStorage.getItem("luma.sidebar.collapsedProjects.v1")), null);
 
     // A synchronous failure scheduling the second store clear must abort the first.
     await page.evaluate(() => {
@@ -129,6 +131,7 @@ export async function exerciseClearData(browser, url) {
       .getByText("Could not clear local data. Nothing was deleted. Try again.")
       .waitFor();
     assert.deepEqual(await storedCounts(page), before);
+    assert.notEqual(await page.evaluate(() => localStorage.getItem("luma.sidebar.collapsedProjects.v1")), null);
     assert.equal(await prefs.isChecked(), true);
     await section(page, "AI providers");
     assert.equal(await key.inputValue(), "fixture-unsubmitted-key");
@@ -202,6 +205,7 @@ export async function exerciseClearData(browser, url) {
     await release(page, "encrypt"); // Must not queue a vault write behind the delete.
     await release(page, "commit");
     await page.getByText("Local data cleared.", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => localStorage.getItem("luma.sidebar.collapsedProjects.v1")), null);
     await preview.waitFor({ state: "detached" });
     assert.deepEqual(await storedCounts(page), [0, 0]);
     await section(page, "AI providers");

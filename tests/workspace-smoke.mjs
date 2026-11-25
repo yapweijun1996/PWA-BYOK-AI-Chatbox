@@ -15,11 +15,12 @@ const browser = await chromium.launch({
   args: ["--no-sandbox"],
 });
 try {
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     locale: "en-US",
     acceptDownloads: true,
   });
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(url);
@@ -95,6 +96,27 @@ try {
   await product
     .getByRole("button", { name: "Release notes", exact: true })
     .waitFor();
+  const projectToggle = sidebar.locator(".workspace-project-toggle").first();
+  assert.equal(await projectToggle.getAttribute("aria-expanded"), "true");
+  await projectToggle.press("Enter");
+  assert.equal(await projectToggle.getAttribute("aria-expanded"), "false");
+  assert.equal(await product.isVisible(), false);
+  const otherPage = await page.context().newPage();
+  await otherPage.goto(url);
+  const otherToggle = otherPage.locator(".workspace-project-toggle").first();
+  await otherPage.locator('html[data-startup="ready"]').waitFor();
+  assert.equal(await otherToggle.getAttribute("aria-expanded"), "false");
+  await otherToggle.click();
+  await page.waitForFunction(() => document.querySelector(".workspace-project-toggle")?.getAttribute("aria-expanded") === "true");
+  await otherToggle.click();
+  await page.waitForFunction(() => document.querySelector(".workspace-project-toggle")?.getAttribute("aria-expanded") === "false");
+  await otherPage.close();
+  await page.reload();
+  await page.locator('html[data-startup="ready"]').waitFor();
+  assert.equal(await projectToggle.getAttribute("aria-expanded"), "false");
+  await projectToggle.press("Enter");
+  await product.getByRole("button", { name: "Release notes", exact: true }).waitFor();
+  assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
   await sidebar
     .getByRole("button", { name: "Project actions for Product" })
     .click();
@@ -148,6 +170,8 @@ try {
   await actions("Release notes").click();
   await menu.getByRole("button", { name: "Archive conversation" }).click();
   await archiveWrite.held();
+  await sidebar.locator(".history-item[aria-busy='true'], .history-name[aria-busy='true']").first().waitFor();
+  await sidebar.locator(".sidebar-loader").first().waitFor();
   assert.ok(await activeReleaseNotes.isVisible());
   assert.equal(await draft.inputValue(), "Do not lose this workspace draft");
   await archiveWrite.release("abort");
@@ -368,6 +392,18 @@ try {
   );
   await restored.close();
   await exerciseCrossTabEditing(browser, url);
+  for (const [locale, menuLabel, workspaceLabel] of [["en-US", "Open menu", "Workspace"], ["zh-CN", "打开菜单", "工作区"], ["ms-MY", "Buka menu", "Ruang kerja"]]) {
+    const mobileContext = await browser.newContext({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, locale });
+    const mobilePage = await mobileContext.newPage();
+    await mobilePage.goto(url);
+    await mobilePage.locator('html[data-startup="ready"]').waitFor();
+    await mobilePage.getByRole("button", { name: menuLabel }).click();
+    const mobileSidebar = mobilePage.getByRole("dialog", { name: workspaceLabel });
+    await mobileSidebar.waitFor();
+    assert.ok(await mobileSidebar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+    assert.ok(await mobileSidebar.locator(".workspace-action:visible, .workspace-more:visible").evaluateAll((nodes) => nodes.every((node) => node.getBoundingClientRect().height >= 44)));
+    await mobileContext.close();
+  }
 
   console.log(
     "PASS: workspace search, keyboard actions, pinning, projects, archive/restore, verified backup, desktop resize/collapse, and mobile drawer/delete",

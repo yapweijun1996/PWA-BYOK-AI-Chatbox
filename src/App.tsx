@@ -294,24 +294,22 @@ function App({
         onClose={closeDrawer}
         onCreate={create}
         onChoose={choose}
+        onNotice={setNotice}
         onSearch={setSearchMode}
         onSettings={openSettings}
         onWidthChange={(width) => void saveSettings({ sidebarWidth: width })}
         onChat={organizeChat}
-        onDeleteChat={(chatId) => void remove(chatId)}
-        onSaveProject={(name, projectId, chatId) =>
-          void saveProject(name, projectId, chatId)
-        }
+        onDeleteChat={remove}
+        onSaveProject={saveProject}
         onDeleteProject={deleteProject}
       />
-      {mobileDrawer && (
-        <button
-          className="scrim"
-          tabIndex={-1}
-          aria-hidden="true"
-          onClick={closeDrawer}
-        />
-      )}
+      <button
+        className="scrim"
+        data-open={mobileDrawer}
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={closeDrawer}
+      />
       <main className="main" inert={mobileDrawer || undefined}>
         <Topbar workspace={workspace} />
         {conflicts.size > 0 && (

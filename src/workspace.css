@@ -46,6 +46,7 @@
   border-radius: var(--radius-small);
   text-align: start;
   font-size: var(--font-label);
+  transition: background-color 160ms ease, color 160ms ease;
 }
 .workspace-action svg,
 .workspace-options svg,
@@ -62,6 +63,13 @@
 }
 .workspace-action.new-chat {
   font-weight: 650;
+}
+.workspace-action.new-chat:hover { background: var(--color-surface); }
+.history-item.selected { box-shadow: inset 3px 0 0 var(--color-accent); }
+.history-item.selected .history-name { font-weight: 650; color: var(--color-text); }
+.history-item { transition: background-color 160ms ease; }
+@media (forced-colors: active) {
+  .history-item.selected { outline: 2px solid Highlight; outline-offset: -2px; }
 }
 .workspace-action kbd {
   margin-inline-start: auto;
@@ -102,14 +110,24 @@
   justify-content: space-between;
   border-radius: var(--radius-small);
 }
-.workspace-project-header > span {
+.workspace-project-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-inline-start: 8px;
+  flex: 1;
+  gap: 4px;
+  min-height: 36px;
+  padding: 4px;
   min-width: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  text-align: start;
   font-size: var(--font-label);
 }
+.workspace-project-toggle:hover { background: var(--color-soft); }
+.workspace-project-chevron { transition: transform 160ms ease; }
+.workspace-project-toggle[aria-expanded="true"] .workspace-project-chevron { transform: rotate(90deg); }
+.workspace-project-count { margin-inline-start: auto; color: var(--color-muted); font-size: var(--font-caption); }
 .workspace-project-header strong {
   text-overflow: ellipsis;
   overflow: hidden;
@@ -127,9 +145,13 @@
   margin: 2px 8px 4px;
   font-size: var(--font-caption);
 }
+.recent-group-label { position: sticky; top: 0; z-index: 1; margin: 0; padding: 4px 8px; background: var(--color-bg); color: var(--color-muted); font-size: var(--font-caption); font-weight: 500; }
+.recent-group + .recent-group { margin-top: 4px; }
 .history-name {
   flex: 1;
 }
+.sidebar-loader { flex: none; margin-inline-start: auto; animation: sidebar-spin 1s linear infinite; }
+@keyframes sidebar-spin { to { transform: rotate(360deg); } }
 .history-name span {
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -205,6 +227,7 @@
     margin-inline-start: auto;
   }
   .workspace-action,
+  .workspace-project-toggle,
   .history-name,
   .workspace-more,
   .sidebar .close,
@@ -227,8 +250,16 @@
     z-index: 4;
     inset: 0;
     background: var(--color-scrim);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 160ms ease-out, visibility 0s linear 160ms;
     border: 0;
   }
+  .app .scrim[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-loader { animation: none; }
 }
 .workspace-dialog {
   --dialog-left: max(12px, env(safe-area-inset-left));

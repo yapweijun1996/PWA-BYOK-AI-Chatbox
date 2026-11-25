@@ -12,6 +12,9 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Future": "未来",
+  "Saving changes…": "正在保存更改…",
+  "Opening conversation…": "正在打开对话…",
   "Install update": "安装更新",
   "Explain metric sources": "说明指标来源",
   "Provider values come from the selected provider. Client values are measured or estimated in this browser. Estimates are not billing records.": "服务商数值来自所选服务商；客户端数值由本浏览器测量或估算。估算值不是账单记录。",

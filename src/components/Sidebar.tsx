@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  ChevronRight,
   Folder,
   FolderPlus,
+  LoaderCircle,
   MoreHorizontal,
   Search,
   Settings,
@@ -14,12 +16,17 @@ import type { Locale } from "../i18n";
 import type { Conversation, WorkspaceProject } from "../types";
 import {
   groupConversations,
+  groupRecentByDate,
   normalizeSidebarWidth,
   sidebarWidth,
 } from "../workspace";
 import { WorkspaceActions } from "./WorkspaceActions";
 import type { ChatOrganization, WorkspaceRequest } from "./WorkspaceActions";
 import type { SearchMode } from "./WorkspaceSearch";
+import {
+  collapsedProjectsKey,
+  sidebarPreferencesCleared,
+} from "../sidebar-preferences";
 
 type Props = {
   locale: Locale;
@@ -34,15 +41,31 @@ type Props = {
   working: boolean;
   onClose: () => void;
   onCreate: () => void;
-  onChoose: (id: string) => void;
+  onChoose: (id: string) => Promise<true | undefined>;
+  onNotice: (text: string) => void;
   onSearch: (mode: SearchMode) => void;
   onSettings: () => void;
   onWidthChange: (width: number) => void;
-  onChat: (id: string, patch: ChatOrganization) => void;
-  onDeleteChat: (id: string) => void;
-  onSaveProject: (name: string, id?: string, chatId?: string) => void;
-  onDeleteProject: (id: string) => void;
+  onChat: (id: string, patch: ChatOrganization) => Promise<boolean>;
+  onDeleteChat: (id: string) => Promise<void>;
+  onSaveProject: (name: string, id?: string, chatId?: string) => Promise<void>;
+  onDeleteProject: (id: string) => Promise<boolean> | undefined;
 };
+
+function readCollapsedProjects(): string[] {
+  try {
+    const value: unknown = JSON.parse(
+      localStorage.getItem(collapsedProjectsKey) || "[]",
+    );
+    return Array.isArray(value)
+      ? value
+          .filter((id): id is string => typeof id === "string")
+          .slice(0, 5000)
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 export function Sidebar({
   locale,
@@ -58,6 +81,7 @@ export function Sidebar({
   onClose,
   onCreate,
   onChoose,
+  onNotice,
   onSearch,
   onSettings,
   onWidthChange,
@@ -73,6 +97,27 @@ export function Sidebar({
   );
   const [request, setRequest] = useState<WorkspaceRequest | null>(null);
   const [previewWidth, setPreviewWidth] = useState<number>();
+  const [collapsedProjects, setCollapsedProjects] = useState(
+    readCollapsedProjects,
+  );
+  const [clock, setClock] = useState(() => Date.now());
+  const [pendingChat, setPendingChat] = useState<string>();
+  const [showPending, setShowPending] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string>();
+  const [showActionBusy, setShowActionBusy] = useState(false);
+  const actionLock = useRef(false);
+  const pending = useRef(false);
+  const recentGroups = useMemo(
+    () => groupRecentByDate(recent, new Date(clock)),
+    [recent, clock],
+  );
+  const activeCounts = useMemo(() => {
+    const result = new Map<string, number>();
+    for (const chat of chats)
+      if (!chat.archived && chat.projectId)
+        result.set(chat.projectId, (result.get(chat.projectId) || 0) + 1);
+    return result;
+  }, [chats]);
   const drag = useRef<{ pointer: number; x: number; width: number } | null>(
     null,
   );
@@ -80,6 +125,72 @@ export function Sidebar({
   const closeButton = useRef<HTMLButtonElement>(null);
   const showing = desktop ? !collapsed : open;
   const mobileOpen = !desktop && open;
+  useEffect(() => {
+    const updateClock = () => setClock(Date.now());
+    const interval = window.setInterval(updateClock, 60_000);
+    window.addEventListener("focus", updateClock);
+    const syncProjects = (event: StorageEvent) => {
+      if (event.key === collapsedProjectsKey || event.key === null)
+        setCollapsedProjects(readCollapsedProjects());
+    };
+    window.addEventListener("storage", syncProjects);
+    const clearProjects = () => setCollapsedProjects([]);
+    window.addEventListener(sidebarPreferencesCleared, clearProjects);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", updateClock);
+      window.removeEventListener("storage", syncProjects);
+      window.removeEventListener(sidebarPreferencesCleared, clearProjects);
+    };
+  }, []);
+  const toggleProject = (id: string) => {
+    setCollapsedProjects((current) => {
+      const next = current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id];
+      try {
+        localStorage.setItem(collapsedProjectsKey, JSON.stringify(next));
+      } catch {
+        /* Keep this tab usable if storage is unavailable. */
+      }
+      return next;
+    });
+  };
+  const selectChat = async (id: string) => {
+    if (pending.current) return;
+    pending.current = true;
+    setPendingChat(id);
+    const timer = window.setTimeout(() => setShowPending(true), 180);
+    try {
+      await onChoose(id);
+    } catch {
+      onNotice("Could not open this conversation. Your work is unchanged.");
+    } finally {
+      window.clearTimeout(timer);
+      pending.current = false;
+      setPendingChat(undefined);
+      setShowPending(false);
+    }
+  };
+  const runAction = async (
+    key: string,
+    action: () => Promise<unknown> | undefined,
+  ) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    setActionBusy(key);
+    const timer = window.setTimeout(() => setShowActionBusy(true), 180);
+    try {
+      await action();
+    } catch {
+      onNotice("Something went wrong.");
+    } finally {
+      window.clearTimeout(timer);
+      actionLock.current = false;
+      setActionBusy(undefined);
+      setShowActionBusy(false);
+    }
+  };
   useLayoutEffect(() => {
     if (mobileOpen) closeButton.current?.focus();
   }, [mobileOpen]);
@@ -122,27 +233,42 @@ export function Sidebar({
       >
         <button
           className="history-name"
+          aria-busy={
+            pendingChat === chat.id ||
+            actionBusy === `chat:${chat.id}` ||
+            undefined
+          }
           aria-current={selected ? "page" : undefined}
           title={title}
-          onClick={() => onChoose(chat.id)}
+          onClick={() => void selectChat(chat.id)}
         >
           <span>{title}</span>
+          {((pendingChat === chat.id && showPending) ||
+            (actionBusy === `chat:${chat.id}` && showActionBusy)) && (
+            <LoaderCircle
+              className="sidebar-loader"
+              size={18}
+              aria-hidden="true"
+            />
+          )}
         </button>
         <button
           className="icon workspace-more"
           data-workspace-anchor={`chat:${chat.id}`}
           aria-label={interpolate(t("Actions for {name}"), title)}
           aria-haspopup="dialog"
+          aria-disabled={Boolean(actionBusy) || undefined}
           aria-expanded={request?.kind === "chat" && request.id === chat.id}
-          onClick={(event) =>
+          onClick={(event) => {
+            if (actionLock.current) return;
             setRequest({
               kind: "chat",
               id: chat.id,
               anchor: event.currentTarget,
-            })
-          }
+            });
+          }}
         >
-          <MoreHorizontal size={17} aria-hidden="true" />
+          <MoreHorizontal size={18} aria-hidden="true" />
         </button>
       </li>
     );
@@ -220,7 +346,7 @@ export function Sidebar({
       </div>
       <div className="workspace-start">
         <button className="workspace-action new-chat" onClick={onCreate}>
-          <SquarePen size={17} aria-hidden="true" />
+          <SquarePen size={18} aria-hidden="true" />
           {t("New chat")}
         </button>
         <button
@@ -228,7 +354,7 @@ export function Sidebar({
           aria-haspopup="dialog"
           onClick={() => onSearch("active")}
         >
-          <Search size={17} aria-hidden="true" />
+          <Search size={18} aria-hidden="true" />
           {t("Search conversations")}
           <kbd aria-hidden="true">
             {navigator.platform.startsWith("Mac") ? "⌘ K" : "Ctrl K"}
@@ -236,6 +362,13 @@ export function Sidebar({
         </button>
       </div>
       <nav className="history" aria-label={t("Conversations")}>
+        <span className="visually-hidden" role="status">
+          {showPending
+            ? t("Opening conversation…")
+            : showActionBusy
+              ? t("Saving changes…")
+              : ""}
+        </span>
         <section aria-label={t("Pinned")}>
           <h2 className="history-label">{t("Pinned")}</h2>
           {pinned.length ? (
@@ -252,12 +385,23 @@ export function Sidebar({
             <button
               className="icon workspace-more"
               aria-label={t("New project")}
+              aria-busy={actionBusy === "projects" || undefined}
+              aria-disabled={Boolean(actionBusy) || undefined}
               aria-haspopup="dialog"
-              onClick={(event) =>
-                setRequest({ kind: "create", anchor: event.currentTarget })
-              }
+              onClick={(event) => {
+                if (!actionLock.current)
+                  setRequest({ kind: "create", anchor: event.currentTarget });
+              }}
             >
-              <FolderPlus size={17} aria-hidden="true" />
+              {actionBusy === "projects" && showActionBusy ? (
+                <LoaderCircle
+                  className="sidebar-loader"
+                  size={18}
+                  aria-hidden="true"
+                />
+              ) : (
+                <FolderPlus size={18} aria-hidden="true" />
+              )}
             </button>
           </div>
           {!projects.length && (
@@ -266,10 +410,25 @@ export function Sidebar({
           {projects.map((project) => (
             <div className="workspace-project" key={project.id}>
               <div className="workspace-project-header">
-                <span title={project.name}>
-                  <Folder size={16} aria-hidden="true" />
+                <button
+                  className="workspace-project-toggle"
+                  type="button"
+                  title={project.name}
+                  aria-expanded={!collapsedProjects.includes(project.id)}
+                  aria-controls={`project-${encodeURIComponent(project.id)}`}
+                  onClick={() => toggleProject(project.id)}
+                >
+                  <ChevronRight
+                    className="workspace-project-chevron"
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  <Folder size={18} aria-hidden="true" />
                   <strong>{project.name}</strong>
-                </span>
+                  <span className="workspace-project-count">
+                    {activeCounts.get(project.id) || 0}
+                  </span>
+                </button>
                 <button
                   className="icon workspace-more"
                   aria-label={interpolate(
@@ -281,18 +440,35 @@ export function Sidebar({
                   aria-expanded={
                     request?.kind === "project" && request.id === project.id
                   }
-                  onClick={(event) =>
+                  aria-busy={
+                    actionBusy === `project:${project.id}` || undefined
+                  }
+                  aria-disabled={Boolean(actionBusy) || undefined}
+                  onClick={(event) => {
+                    if (actionLock.current) return;
                     setRequest({
                       kind: "project",
                       id: project.id,
                       anchor: event.currentTarget,
-                    })
-                  }
+                    });
+                  }}
                 >
-                  <MoreHorizontal size={17} aria-hidden="true" />
+                  {actionBusy === `project:${project.id}` && showActionBusy ? (
+                    <LoaderCircle
+                      className="sidebar-loader"
+                      size={18}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <MoreHorizontal size={18} aria-hidden="true" />
+                  )}
                 </button>
               </div>
-              <ul aria-label={project.name}>
+              <ul
+                id={`project-${encodeURIComponent(project.id)}`}
+                aria-label={project.name}
+                hidden={collapsedProjects.includes(project.id)}
+              >
                 {folders.get(project.id)?.map(row)}
               </ul>
             </div>
@@ -301,7 +477,17 @@ export function Sidebar({
         <section aria-label={t("Recent")}>
           <h2 className="history-label">{t("Recent")}</h2>
           {recent.length ? (
-            <ul>{recent.map(row)}</ul>
+            <>
+              {(["Future", "Today", "Previous 7 days", "Earlier"] as const).map(
+                (label) =>
+                  recentGroups[label].length > 0 && (
+                    <div className="recent-group" key={label}>
+                      <h3 className="recent-group-label">{t(label)}</h3>
+                      <ul>{recentGroups[label].map(row)}</ul>
+                    </div>
+                  ),
+              )}
+            </>
           ) : (
             <p className="workspace-empty muted">
               {t("No recent conversations.")}
@@ -315,11 +501,11 @@ export function Sidebar({
           aria-haspopup="dialog"
           onClick={() => onSearch("archived")}
         >
-          <Archive size={17} aria-hidden="true" />
+          <Archive size={18} aria-hidden="true" />
           {t("Archived")}
         </button>
         <button className="workspace-action" onClick={onSettings}>
-          <Settings size={17} aria-hidden="true" />
+          <Settings size={18} aria-hidden="true" />
           {t("Settings")}
         </button>
       </div>
@@ -398,12 +584,22 @@ export function Sidebar({
             projectHasChats={Boolean(
               selectedProject && counts.get(selectedProject.id),
             )}
-            working={working}
+            working={working || Boolean(actionBusy)}
             onClose={dismissActions}
-            onChat={onChat}
-            onDeleteChat={onDeleteChat}
-            onSaveProject={onSaveProject}
-            onDeleteProject={onDeleteProject}
+            onChat={(id, patch) =>
+              void runAction(`chat:${id}`, () => onChat(id, patch))
+            }
+            onDeleteChat={(id) =>
+              void runAction(`chat:${id}`, () => onDeleteChat(id))
+            }
+            onSaveProject={(name, id, chatId) =>
+              void runAction(id ? `project:${id}` : "projects", () =>
+                onSaveProject(name, id, chatId),
+              )
+            }
+            onDeleteProject={(id) =>
+              void runAction(`project:${id}`, () => onDeleteProject(id))
+            }
           />
         )}
     </aside>

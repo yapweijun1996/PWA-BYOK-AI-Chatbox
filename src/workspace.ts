@@ -5,6 +5,37 @@ export const sidebarWidth = { min: 224, default: 264, max: 440 } as const;
 export const projectNameLimit = 80;
 export const chatTitleLimit = 160;
 
+export function groupRecentByDate(chats: Conversation[], now = new Date()) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const week = new Date(today);
+  week.setDate(week.getDate() - 7);
+  const result: Record<
+    "Future" | "Today" | "Previous 7 days" | "Earlier",
+    Conversation[]
+  > = {
+    Future: [],
+    Today: [],
+    "Previous 7 days": [],
+    Earlier: [],
+  };
+  for (const chat of chats) {
+    const timestamp = chat.updatedAt;
+    const group = !Number.isFinite(timestamp)
+      ? "Earlier"
+      : timestamp >= tomorrow.getTime()
+        ? "Future"
+        : timestamp >= today.getTime()
+          ? "Today"
+          : timestamp >= week.getTime()
+            ? "Previous 7 days"
+            : "Earlier";
+    result[group].push(chat);
+  }
+  return result;
+}
+
 export function normalizeSidebarWidth(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(sidebarWidth.min, Math.min(sidebarWidth.max, Math.round(value)))

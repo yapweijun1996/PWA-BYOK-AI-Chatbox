@@ -11,6 +11,7 @@ import { version } from "../package.json";
 import type { SearchMode } from "./components/WorkspaceSearch";
 import type { ChatOrganization } from "./components/WorkspaceActions";
 import { mergeProjects, mostRecentVisible } from "./workspace";
+import { clearSidebarPreferences } from "./sidebar-preferences";
 import { canRequestReasoning, configureModel } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { formatSize } from "./format-size";
@@ -600,7 +601,7 @@ export function useWorkspace({
     }
   };
   const create = () => void navigateChat();
-  const choose = (chatId: string) => void navigateChat(chatId);
+  const choose = (chatId: string) => navigateChat(chatId);
   const openSearchResult = async (chatId: string, messageId?: string): Promise<string | undefined> => {
     if (!messageId) return (await navigateChat(chatId)) ? undefined : "Could not open this conversation. Your work is unchanged.";
     const initial = session.get();
@@ -756,7 +757,7 @@ export function useWorkspace({
         )
       : [...settings.projects, { id: key, name }];
     if ((await saveSettings({ projects })) && chatId)
-      organizeChat(chatId, { projectId: key });
+      await organizeChat(chatId, { projectId: key });
   };
   const deleteProject = (projectId: string) => {
     if (
@@ -765,7 +766,7 @@ export function useWorkspace({
         .threads.some((conversation) => conversation.projectId === projectId)
     )
       return;
-    void saveSettings((current) => ({
+    return saveSettings((current) => ({
       projects: current.projects.filter((project) => project.id !== projectId),
     }));
   };
@@ -1656,6 +1657,7 @@ export function useWorkspace({
       setInspecting(false);
       setDrawer(false);
       rememberTheme(defaultSettings.theme);
+      clearSidebarPreferences();
       refreshStorage();
       setNotice("Local data cleared.");
     } finally {
