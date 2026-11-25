@@ -359,8 +359,8 @@ select:focus-visible {
 .message {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 28px;
+  gap: var(--space-base);
+  margin-bottom: var(--space-large);
   min-width: 0;
 }
 .message[data-search-match="true"] .bubble { outline: 2px solid var(--color-focus); outline-offset: 3px; }
@@ -385,7 +385,7 @@ select:focus-visible {
 .bubble {
   min-width: 0;
   flex: 1;
-  padding: var(--space-medium) 18px;
+  padding: var(--space-medium);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
@@ -408,11 +408,12 @@ select:focus-visible {
 .message-meta strong {
   color: var(--color-text);
 }
+.message-meta time { flex: none; white-space: nowrap; }
 .reasoning {
-  margin: 0 0 14px;
-  padding: 10px 14px;
-  border-left: 3px solid var(--color-border);
-  border-radius: 0 var(--radius-small) var(--radius-small) 0;
+  min-width: 0;
+  margin: 0 0 var(--space-base);
+  border-inline-start: 3px solid var(--color-border);
+  border-radius: var(--radius-small);
   background: var(--color-bg);
   color: var(--color-muted);
   font-size: var(--font-label);
@@ -422,13 +423,19 @@ select:focus-visible {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  min-height: 36px;
+  padding: var(--space-small) var(--space-base);
+  border-radius: var(--radius-small);
   list-style: none;
   color: var(--color-text);
   cursor: pointer;
   font-weight: 600;
 }
 .reasoning summary::-webkit-details-marker { display: none; }
+.reasoning summary:hover { background: var(--color-soft); }
+.reasoning summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
 .reasoning-chevron, .reasoning-label, .reasoning-progress { flex: none; }
+.reasoning-chevron { transition: transform 150ms ease; }
 .reasoning[open] .reasoning-chevron { transform: rotate(90deg); }
 .reasoning-progress { color: var(--color-muted); font-weight: normal; }
 .reasoning-dots { display: inline-flex; min-width: 10px; }
@@ -439,7 +446,7 @@ select:focus-visible {
 .reasoning-preview { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; text-align: left; color: var(--color-muted); font-weight: normal; }
 .reasoning[open] .reasoning-preview { display: none; }
 .reasoning .rich-message {
-  margin-top: 10px;
+  padding: 0 var(--space-base) var(--space-base);
 }
 .message-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
 .message.assistant .message-actions { justify-content: flex-end; }
@@ -542,6 +549,9 @@ select:focus-visible {
   color: var(--color-muted);
   margin-top: 10px;
 }
+.attachment-label { min-width: 0; align-items: flex-start; }
+.attachment-label svg { flex: none; }
+.attachment-label span { min-width: 0; overflow-wrap: anywhere; }
 .response-error {
   align-items: flex-start;
   flex-direction: column;
@@ -1082,7 +1092,9 @@ select:focus-visible {
   display: none;
 }
 @media (max-width: 767px) {
-  .message-action { min-height: 44px; }
+  .message-action { min-width: 44px; min-height: 44px; justify-content: center; }
+  .reasoning summary { min-height: 44px; padding-inline: var(--space-small); }
+  .reasoning .rich-message { padding-inline: var(--space-small); }
   .editing-banner { flex-wrap: wrap; }
   .desktop-toggle {
     display: none;

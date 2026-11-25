@@ -438,8 +438,8 @@ function App({
                         ) : null}
                         {m.attachments?.map((a) => (
                           <div className="attachment-label" key={a.id}>
-                            <Paperclip size={14} />
-                            {a.name} · {formatSize(a.size)}
+                            <Paperclip size={14} aria-hidden="true" />
+                            <span>{a.name} · {formatSize(a.size)}</span>
                           </div>
                         ))}
                         {m.status === "interrupted" && (

@@ -40,6 +40,7 @@ try {
                   id: "user",
                   role: "user",
                   content: "A long prompt ".repeat(80),
+                  attachments: [{ id: "long-file", name: "longfilename".repeat(25) + ".txt", mime: "text/plain", size: 1, data: "x" }],
                   createdAt: Date.now(),
                   status: "complete",
                 },
@@ -47,7 +48,7 @@ try {
                   id: "answer",
                   role: "assistant",
                   content: "A long response ".repeat(100),
-                  reasoning: "Private reasoning details",
+                  reasoning: "Private reasoning details 中文内容 ".repeat(30) + "最新 reasoning tail",
                   createdAt: Date.now(),
                   status: "complete",
                 },
@@ -139,6 +140,9 @@ try {
           `${width}: ${JSON.stringify(item)}`,
         );
     }
+    const attachment = page.locator(".attachment-label");
+    assert.ok(await attachment.isVisible());
+    assert.ok(await attachment.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
     const conversation = page.locator(".conversation");
     assert.ok(
       await conversation.evaluate((el) => el.scrollHeight > el.clientHeight),
@@ -151,8 +155,25 @@ try {
       el.scrollTop = el.scrollHeight;
     });
     assert.ok(await conversation.evaluate((el) => el.scrollTop > 0));
-    await page.locator(".reasoning summary").click();
+    const summary = page.locator(".reasoning summary");
+    const preview = page.locator(".reasoning-preview");
+    assert.match(await preview.innerText(), /最新 reasoning tail/);
+    assert.equal(await preview.evaluate((el) => getComputedStyle(el).whiteSpace), "nowrap");
+    if (mobile) assert.ok((await summary.boundingBox()).height >= 44);
+    await summary.focus();
+    assert.equal(await summary.evaluate((el) => el.matches(":focus-visible")), true);
+    await page.keyboard.press("Enter");
     await page.locator(".reasoning .rich-message").getByText("Private reasoning details").waitFor();
+    assert.equal(await preview.isVisible(), false);
+    await page.keyboard.press("Space");
+    assert.equal(await page.locator(".reasoning").evaluate((el) => el.open), false);
+    assert.equal(await preview.isVisible(), true);
+    if (mobile) {
+      for (const action of await page.locator(".message-actions button").all()) {
+        const bounds = await action.boundingBox();
+        assert.ok(bounds.width >= 44 && bounds.height >= 44, `${width}: ${JSON.stringify(bounds)}`);
+      }
+    }
     assert.equal(await page.locator(".message.assistant .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
     assert.notEqual(await page.locator(".message.user .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
 
