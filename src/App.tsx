@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Menu,
   Paperclip,
@@ -40,6 +40,7 @@ import type { Locale } from "./i18n";
 import type { InitialAppState } from "./startup";
 import { labels, providerIds as providers } from "./types";
 import { useWorkspace, settingsSections } from "./use-workspace";
+import type { SlashCommand } from "./slash-commands";
 import "./generated/tokens-light.css";
 import "./generated/tokens-dark.css";
 import "./styles.css";
@@ -192,6 +193,26 @@ function App({
     pwa,
     redact,
   } = useWorkspace({ initial, onInitialCommit });
+  const modelTrigger = useRef<HTMLButtonElement>(null);
+  const runCommand = (command: SlashCommand) => {
+    switch (command) {
+      case "new":
+        create();
+        break;
+      case "search":
+        setSearchMode("active");
+        break;
+      case "model":
+        modelTrigger.current?.click();
+        break;
+      case "settings":
+        openSettings();
+        break;
+      case "js":
+        toggleJavaScript();
+        break;
+    }
+  };
   return (
     <div className="app">
       <Sidebar
@@ -563,9 +584,12 @@ function App({
               processingFiles={processingFiles}
               phase={phase}
               blockedReason={chat ? composerBlocked : undefined}
+              commandsEnabled={Boolean(chat) && !working && !navigating && !processingFiles && !conflicts.has(active) && !replySave}
+              onCommand={runCommand}
               modelControl={
                 <>
                   <ModelSelector
+                    triggerRef={modelTrigger}
                     locale={locale}
                     autoFocusSearch={desktopInput}
                     provider={config.id}

@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
@@ -18,6 +19,7 @@ export function ModelSelector({
   onLoad,
   onSelect,
   onSettings,
+  triggerRef,
 }: {
   locale: Locale;
   autoFocusSearch: boolean;
@@ -27,6 +29,7 @@ export function ModelSelector({
   onLoad: (provider: ProviderId) => Promise<ModelOption[]>;
   onSelect: (provider: ProviderId, option: ModelOption) => void;
   onSettings: () => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const t = (text: string) => translate(locale, text);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -71,7 +74,10 @@ export function ModelSelector({
       <button
         className="model-pill"
         type="button"
-        ref={trigger}
+        ref={(element) => {
+          trigger.current = element;
+          if (triggerRef) triggerRef.current = element;
+        }}
         title={selected?.id || name}
         aria-label={selected ? `${t("Choose model")} · ${name}` : name}
         aria-haspopup="dialog"

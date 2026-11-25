@@ -68,6 +68,7 @@ try {
     "tests/tool-execution-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",
+    "tests/slash-commands-smoke.mjs",
     "tests/pages-subpath.mjs",
     "tests/update-smoke.mjs",
     "tests/ui-preferences.mjs",

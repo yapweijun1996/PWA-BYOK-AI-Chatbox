@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowUp, FileText, Lock, Plus, Square, X } from "lucide-react";
 import { interpolate, translate } from "../i18n";
@@ -7,6 +7,8 @@ import { formatSize } from "../format-size";
 import type { Attachment } from "../types";
 
 import type { ActiveReply } from "../workspace-state";
+import { slashCommands } from "../slash-commands";
+import type { SlashCommand } from "../slash-commands";
 
 export type ReplyPhase = "idle" | ActiveReply["phase"];
 
@@ -20,6 +22,8 @@ type Props = {
   phase: ReplyPhase;
   blockedReason?: string;
   modelControl: ReactNode;
+  commandsEnabled: boolean;
+  onCommand: (command: SlashCommand) => void;
   onDraft: (draft: string) => void;
   onFiles: (files: File[]) => void;
   onRemove: (id: string) => void;
@@ -37,6 +41,8 @@ export function Composer({
   phase,
   blockedReason,
   modelControl,
+  commandsEnabled,
+  onCommand,
   onDraft,
   onFiles,
   onRemove,
@@ -50,12 +56,35 @@ export function Composer({
   const composing = useRef(false);
   const lastComposition = useRef(-Infinity);
   const [dragging, setDragging] = useState(false);
+  const commandListId = useId();
+  const [dismissedDraft, setDismissedDraft] = useState<string>();
+  const [selectedCommand, setSelectedCommand] = useState(0);
+  const commandQuery = /^\/([a-z]*)$/i.exec(draft);
+  const matches =
+    commandsEnabled && commandQuery && draft !== dismissedDraft
+      ? slashCommands.filter(({ name }) =>
+          name.startsWith(commandQuery[1].toLowerCase()),
+        )
+      : [];
+  const commandIndex = Math.min(selectedCommand, matches.length - 1);
+  const executeCommand = (command: SlashCommand) => {
+    onDraft("");
+    setDismissedDraft(undefined);
+    setSelectedCommand(0);
+    onCommand(command);
+  };
   const canAttach = enabled && phase === "idle" && !processingFiles;
   const canSend =
     canAttach && !blockedReason && Boolean(draft.trim() || files.length);
   const stopping = phase === "stopping";
   const saving = phase === "saving";
   const busyLabel = saving ? t("Saving message…") : t("Stopping…");
+
+  useEffect(() => {
+    shell.current
+      ?.querySelector('[role="option"][aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedCommand, matches.length]);
 
   const resize = () => {
     const input = textarea.current;
@@ -133,6 +162,42 @@ export function Composer({
           if (canAttach) onFiles(Array.from(event.dataTransfer.files));
         }}
       >
+        {matches.length > 0 && (
+          <div className="slash-menu">
+            <div className="slash-menu-heading">
+              <span>{t("Slash commands")}</span>
+              <button
+                type="button"
+                className="icon"
+                aria-label={t("Close slash commands")}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => setDismissedDraft(draft)}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div
+              role="listbox"
+              id={commandListId}
+              aria-label={t("Slash commands")}
+            >
+              {matches.map((command, index) => (
+                <button
+                  key={command.name}
+                  id={`${commandListId}-${command.name}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === commandIndex}
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => executeCommand(command.name)}
+                >
+                  <strong>/{command.name}</strong>
+                  <span>{t(command.description)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {files.length > 0 && (
           <div className="file-list">
             {files.map((file) => (
@@ -189,11 +254,22 @@ export function Composer({
           rows={1}
           placeholder={t("Ask anything...")}
           aria-label={t("Message")}
+          aria-autocomplete="list"
+          aria-controls={matches.length ? commandListId : undefined}
+          aria-activedescendant={
+            matches.length
+              ? `${commandListId}-${matches[commandIndex].name}`
+              : undefined
+          }
           value={draft}
           disabled={!enabled}
           readOnly={saving}
           enterKeyHint={enterSends ? "send" : "enter"}
-          onChange={(event) => onDraft(event.target.value)}
+          onChange={(event) => {
+            setSelectedCommand(0);
+            setDismissedDraft(undefined);
+            onDraft(event.target.value);
+          }}
           onCompositionStart={() => {
             composing.current = true;
           }}
@@ -203,16 +279,45 @@ export function Composer({
           }}
           onKeyDown={(event) => {
             if (
+              composing.current ||
+              event.nativeEvent.isComposing ||
+              event.nativeEvent.keyCode === 229 ||
+              performance.now() - lastComposition.current < 100
+            )
+              return;
+            if (
+              matches.length &&
+              !event.altKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.shiftKey
+            ) {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const direction = event.key === "ArrowDown" ? 1 : -1;
+                setSelectedCommand(
+                  (commandIndex + direction + matches.length) % matches.length,
+                );
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDismissedDraft(draft);
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                event.preventDefault();
+                executeCommand(matches[commandIndex].name);
+                return;
+              }
+            }
+            if (
               !enterSends ||
               event.key !== "Enter" ||
               event.shiftKey ||
               event.altKey ||
               event.ctrlKey ||
-              event.metaKey ||
-              composing.current ||
-              event.nativeEvent.isComposing ||
-              event.nativeEvent.keyCode === 229 ||
-              performance.now() - lastComposition.current < 100
+              event.metaKey
             )
               return;
             if (phase !== "idle") return;
@@ -279,14 +384,20 @@ export function Composer({
               className="send"
               type="button"
               aria-label={
-                phase === "finalizing"
-                  ? t("Saving reply locally…")
-                  : saving
-                    ? busyLabel
-                    : t("Send message")
+                matches.length
+                  ? t("Run command")
+                  : phase === "finalizing"
+                    ? t("Saving reply locally…")
+                    : saving
+                      ? busyLabel
+                      : t("Send message")
               }
-              disabled={!canSend}
-              onClick={onSend}
+              disabled={!canSend && !matches.length}
+              onClick={() =>
+                matches.length
+                  ? executeCommand(matches[commandIndex].name)
+                  : onSend()
+              }
             >
               <ArrowUp size={20} aria-hidden="true" />
             </button>
