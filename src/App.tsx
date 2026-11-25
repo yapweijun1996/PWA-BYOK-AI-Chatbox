@@ -574,7 +574,7 @@ function App({
                     )}
                     onClick={toggleJavaScript}
                   >
-                    <Code2 size={17} aria-hidden="true" />
+                    <Code2 size={18} aria-hidden="true" />
                     <span>{t("Tools")}</span>
                   </button>
                   <span className="visually-hidden" id={toolsHelpId}>

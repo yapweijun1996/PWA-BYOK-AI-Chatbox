@@ -535,7 +535,7 @@ export function Composer({
             onClick={() => fileInput.current?.click()}
             disabled={!canAttach}
           >
-            <Plus size={20} aria-hidden="true" />
+            <Plus size={18} aria-hidden="true" />
           </button>
           <span id={attachmentHelpId} className="visually-hidden">
             {t(
@@ -563,7 +563,7 @@ export function Composer({
               disabled={stopping}
               onClick={onStop}
             >
-              <Square size={17} aria-hidden="true" />
+              <Square size={18} aria-hidden="true" />
             </button>
           ) : (
             <button
@@ -585,7 +585,7 @@ export function Composer({
                   : onSend()
               }
             >
-              <ArrowUp size={20} aria-hidden="true" />
+              <ArrowUp size={18} aria-hidden="true" />
             </button>
           )}
         </div>
