@@ -8,6 +8,8 @@ The top bar provides model selection, conversation actions, language and theme c
 
 The composer grows with the draft and can be expanded for longer prompts. The expanded editor uses the same locally saved draft and attachments; close it with its button or Escape. The model selector and local tools control remain available in either size. Desktop Enter sends and Shift+Enter adds a line; mobile Enter adds a line. The local tools control enables browser-side tools whose results are sent to the selected provider.
 
+Draft attachments show their count, file names, type and size, with image thumbnails where available. The attachment list scrolls when needed; keyboard focus moves to the next attachment or the message field after removal. Image and plain text files are limited to 5 MB each.
+
 Use the [feature map](FEATURE-MAP.md) to find a capability, its implementation, and its limits. For the source review, prioritized bugs, implementation tasks, and release criteria, see the [engineering roadmap](ROADMAP.md). It distinguishes committed functionality from work in progress; it is not a release announcement.
 
 ## Run locally

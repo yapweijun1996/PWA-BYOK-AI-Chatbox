@@ -252,47 +252,70 @@ export function Composer({
             </div>
           </div>
         )}
+        <span className="visually-hidden" role="status" aria-atomic="true">
+          {files.length
+            ? `${t("Attachments")} · ${files.length}`
+            : t("No attachments")}
+        </span>
         {files.length > 0 && (
-          <div className="file-list">
-            {files.map((file) => (
-              <div className="file-chip" key={file.id}>
-                {/^data:image\/(png|jpeg|gif|webp);base64,/i.test(file.data) &&
-                file.mime.startsWith("image/") ? (
-                  <img
-                    src={file.data}
-                    alt=""
-                    width={36}
-                    height={36}
-                    decoding="async"
-                  />
-                ) : (
-                  <FileText size={18} aria-hidden="true" />
-                )}
-                <span className="file-details">
-                  <span className="file-name" title={file.name}>
-                    {file.name}
+          <section className="attachment-area" aria-label={t("Attachments")}>
+            <div className="attachment-heading" aria-hidden="true">
+              {t("Attachments")} · {files.length}
+            </div>
+            <ul className="file-list">
+              {files.map((file) => (
+                <li className="file-chip" key={file.id}>
+                  {/^data:image\/(png|jpeg|gif|webp);base64,/i.test(
+                    file.data,
+                  ) && file.mime.startsWith("image/") ? (
+                    <img
+                      src={file.data}
+                      alt=""
+                      width={36}
+                      height={36}
+                      decoding="async"
+                    />
+                  ) : (
+                    <FileText size={18} aria-hidden="true" />
+                  )}
+                  <span className="file-details">
+                    <span className="file-name" title={file.name}>
+                      {file.name}
+                    </span>
+                    <small>
+                      {t(
+                        file.mime.startsWith("image/")
+                          ? "Image attachment"
+                          : "Text attachment",
+                      )}{" "}
+                      · {formatSize(file.size)}
+                    </small>
                   </span>
-                  <small>
-                    {t(
-                      file.mime.startsWith("image/")
-                        ? "Image attachment"
-                        : "Text attachment",
-                    )}{" "}
-                    · {formatSize(file.size)}
-                  </small>
-                </span>
-                <button
-                  className="icon"
-                  type="button"
-                  disabled={!enabled || saving}
-                  aria-label={interpolate(t("Remove {name}"), file.name)}
-                  onClick={() => onRemove(file.id)}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-          </div>
+                  <button
+                    className="icon"
+                    type="button"
+                    disabled={!enabled || saving}
+                    aria-label={interpolate(t("Remove {name}"), file.name)}
+                    title={interpolate(t("Remove {name}"), file.name)}
+                    onClick={(event) => {
+                      const item = event.currentTarget.closest("li");
+                      const next =
+                        item?.nextElementSibling?.querySelector<HTMLButtonElement>(
+                          "button",
+                        ) ??
+                        item?.previousElementSibling?.querySelector<HTMLButtonElement>(
+                          "button",
+                        );
+                      onRemove(file.id);
+                      (next ?? textarea.current)?.focus();
+                    }}
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         {(processingFiles || blockedReason || saving || stopping) && (
           <p className="composer-status" role="status">
@@ -420,10 +443,10 @@ export function Composer({
           <button
             className="icon composer-attach"
             type="button"
-            title={t("Attach image or text")}
+            title={t("Attach images or text files · 5 MB per file")}
             aria-label={t("Attach image or text")}
             aria-description={t(
-              "Choose images or text files, or drag and drop files here. You can also paste images.",
+              "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.",
             )}
             onClick={() => fileInput.current?.click()}
             disabled={!canAttach}

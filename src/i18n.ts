@@ -11,6 +11,9 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "No attachments": "没有附件",
+  "Attach images or text files · 5 MB per file": "添加图片或文本文件 · 每个文件不超过 5 MB",
+  "Choose images or text files up to 5 MB each, or drag and drop files here. You can also paste images.": "选择每个不超过 5 MB 的图片或文本文件，也可拖放文件或粘贴图片。",
   "Expanded message editor": "展开的消息编辑器",
   "Expand message editor": "展开消息编辑器",
   "Close expanded editor": "关闭展开的编辑器",

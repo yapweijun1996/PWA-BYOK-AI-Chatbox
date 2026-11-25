@@ -810,20 +810,25 @@ select:focus-visible {
   color: var(--color-muted);
   font-size: var(--font-small);
 }
+.attachment-area { min-width: 0; margin-bottom: var(--space-extra-small); }
+.attachment-heading { margin: 0 var(--space-extra-small); color: var(--color-muted); font-size: var(--font-caption); }
 .file-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-small);
-  max-height: min(100px, 18dvh);
+  max-height: min(128px, 18dvh);
   overflow-y: auto;
   padding: var(--space-extra-small);
-  margin-bottom: var(--space-extra-small);
+  margin: 0;
+  list-style: none;
 }
 .file-chip {
   display: flex;
   align-items: center;
   gap: var(--space-extra-small);
   min-width: 0;
+  flex: 0 1 240px;
+  min-height: 44px;
   max-width: min(240px, 100%);
   background: var(--color-soft);
   border-radius: var(--radius-small);
@@ -852,6 +857,7 @@ select:focus-visible {
 .file-details small {
   color: var(--color-muted);
 }
+.file-chip:focus-within .file-name { white-space: normal; overflow-wrap: anywhere; }
 .page {
   overflow: auto;
   padding: 34px 30px 60px;
@@ -1134,6 +1140,7 @@ select:focus-visible {
   .file-chip button {
     min-height: 44px;
   }
+  .file-chip { flex-basis: 100%; max-width: 100%; }
   .composer-reasoning span {
     display: none;
   }

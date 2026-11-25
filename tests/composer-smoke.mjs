@@ -330,7 +330,60 @@ try {
       new DragEvent("drop", { dataTransfer, bubbles: true, cancelable: true }),
     );
   }, longFile);
+  await page.getByRole("button", { name: `Remove ${longFile}` }).waitFor();
+  await form.locator('input[type="file"]').setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("second attachment"),
+  });
+  const attachmentArea = form.getByRole("region", { name: "Attachments" });
+  await attachmentArea.getByText("Attachments · 2").waitFor();
+  assert.equal(await attachmentArea.getByRole("listitem").count(), 2);
+  assert.equal(
+    await attachmentArea.getByText(longFile, { exact: true }).count(),
+    1,
+  );
+  assert.equal(
+    await form.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+    true,
+  );
   await page.getByRole("button", { name: `Remove ${longFile}` }).click();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Remove notes.txt" })
+      .evaluate((element) => document.activeElement === element),
+    true,
+  );
+  await attachmentArea.getByText("Attachments · 1").waitFor();
+  await page.getByRole("button", { name: "Remove notes.txt" }).click();
+  assert.equal(
+    await input.evaluate((element) => document.activeElement === element),
+    true,
+  );
+  assert.equal(await form.locator(".file-chip").count(), 0);
+  await form.locator('input[type="file"]').setInputFiles(
+    ["one.txt", "two.txt", "three.txt", "four.txt"].map((name) => ({
+      name,
+      mimeType: "text/plain",
+      buffer: Buffer.from(name),
+    })),
+  );
+  await attachmentArea.getByText("Attachments · 4").waitFor();
+  assert.equal(
+    await form
+      .locator(".file-list")
+      .evaluate((element) => element.scrollHeight > element.clientHeight),
+    true,
+  );
+  await page.getByRole("button", { name: "Expand message editor" }).click();
+  await page.getByRole("dialog", { name: "Expanded message editor" }).waitFor();
+  assert.equal(await form.locator(".file-chip").count(), 4);
+  await page.getByRole("button", { name: "Close expanded editor" }).click();
+  for (const name of ["one.txt", "two.txt", "three.txt", "four.txt"]) {
+    await page.getByRole("button", { name: `Remove ${name}` }).click();
+  }
   assert.equal(await form.locator(".file-chip").count(), 0);
   await form.locator('input[type="file"]').setInputFiles({
     name: "invalid.png",
