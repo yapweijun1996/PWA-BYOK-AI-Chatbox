@@ -248,22 +248,38 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
             data-update-state={updateState}
             onClick={() => void workspace.check()}
           >
-            <UpdateIcon size={18} aria-hidden="true" />
-          </IconButton>
-          <span className="update-version" aria-hidden="true">
-            v{version}
-          </span>
-          {updateState !== "idle" && (
-            <span className="update-state-label" aria-hidden="true">
-              {availableVersion && `v${availableVersion} · `}
-              {t(updateShortLabels[updateState])}
+            <span className="update-icon" aria-hidden="true">
+              <UpdateIcon size={18} />
             </span>
-          )}
+            <span className="update-version" aria-hidden="true">
+              v{version}
+            </span>
+            {updateState !== "idle" && (
+              <span className="update-state-label" aria-hidden="true">
+                {availableVersion && `v${availableVersion} · `}
+                {t(updateShortLabels[updateState])}
+              </span>
+            )}
+          </IconButton>
         </div>
-        <span id="topbar-update-status" className="visually-hidden" role="status">
+        <span
+          id="topbar-update-status"
+          className="visually-hidden"
+          role="status"
+        >
           {updateText}
         </span>
-        <details className="topbar-language" ref={languageMenu}>
+        <details
+          className="topbar-language"
+          ref={languageMenu}
+          onBlur={(event) => {
+            if (
+              event.relatedTarget &&
+              !event.currentTarget.contains(event.relatedTarget)
+            )
+              event.currentTarget.open = false;
+          }}
+        >
           <summary
             className="topbar-icon"
             aria-label={`${t("Change language")} · ${languageText}`}
@@ -374,7 +390,17 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
         >
           <SquarePen size={18} aria-hidden="true" />
         </IconButton>
-        <details className="topbar-more" ref={overflow}>
+        <details
+          className="topbar-more"
+          ref={overflow}
+          onBlur={(event) => {
+            if (
+              event.relatedTarget &&
+              !event.currentTarget.contains(event.relatedTarget)
+            )
+              event.currentTarget.open = false;
+          }}
+        >
           <summary
             className="topbar-icon"
             aria-label={t("More actions")}

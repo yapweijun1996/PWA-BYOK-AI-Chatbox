@@ -157,7 +157,7 @@ try {
       .locator("svg")
       .evaluate((icon) => getComputedStyle(icon).animationName);
   updateGate = Promise.withResolvers();
-  await check.click();
+  await check.locator(".update-version").click();
   await toast.getByText("Checking for updates…").waitFor();
   assert.equal(await check.getAttribute("data-update-state"), "checking");
   assert.equal(
@@ -181,7 +181,7 @@ try {
   await button(page, "Dismiss message").click();
   assert.equal(await toast.textContent(), "");
   await context.setOffline(true);
-  await check.click();
+  await check.locator(".update-state-label").click();
   await toast
     .getByText("You are offline. Reconnect to check for updates.")
     .waitFor();
