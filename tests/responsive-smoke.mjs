@@ -119,6 +119,9 @@ try {
         };
       });
     });
+    const updateBounds = await page.locator(".update-group").boundingBox();
+    const languageBounds = await page.locator(".topbar-language").boundingBox();
+    assert.ok(updateBounds.x + updateBounds.width <= languageBounds.x + 1, `${width}: update must precede language`);
     for (const item of layout) {
       assert.ok(
         item.left >= -1 && item.right <= width + 1,

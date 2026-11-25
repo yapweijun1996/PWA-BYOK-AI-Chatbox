@@ -109,8 +109,10 @@ try {
   await waitForSavedSettings(page, { language: "system" });
   assert.equal(await page.locator(".topbar .model-pill").count(), 0);
   const updateBounds = await page.locator(".update-group").boundingBox();
+  const languageBounds = await page.locator(".topbar-language").boundingBox();
   const newBounds = await page.locator(".topbar-new").boundingBox();
-  assert.ok(updateBounds.x < newBounds.x);
+  assert.ok(updateBounds.x + updateBounds.width <= languageBounds.x);
+  assert.ok(languageBounds.x < newBounds.x);
   const chatsBefore = await page.locator(".history-name").count();
   await page.locator(".topbar-new").click();
   await page.waitForFunction((count) => document.querySelectorAll(".history-name").length === count + 1, chatsBefore);

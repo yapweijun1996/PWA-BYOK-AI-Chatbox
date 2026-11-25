@@ -210,32 +210,6 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       >
         <Menu size={18} aria-hidden="true" />
       </IconButton>
-      <div className="update-group">
-        <IconButton
-          className="update-control"
-          label={workspace.updateLabel}
-          title={`${workspace.updateLabel} · ${updateText}`}
-          aria-describedby="topbar-update-status"
-          aria-busy={workspace.checking}
-          aria-disabled={workspace.checking}
-          data-update-state={updateState}
-          onClick={() => void workspace.check()}
-        >
-          <UpdateIcon size={18} aria-hidden="true" />
-        </IconButton>
-        <span className="update-version" aria-hidden="true">
-          v{version}
-        </span>
-        {updateState !== "idle" && (
-          <span className="update-state-label" aria-hidden="true">
-            {availableVersion && `v${availableVersion} · `}
-            {t(updateShortLabels[updateState])}
-          </span>
-        )}
-      </div>
-      <span id="topbar-update-status" className="visually-hidden" role="status">
-        {updateText}
-      </span>
       <strong className="topbar-title">
         {view === "chat" && chat ? (
           <button
@@ -263,6 +237,32 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
         )}
       </strong>
       <div className="top-actions">
+        <div className="update-group">
+          <IconButton
+            className="update-control"
+            label={workspace.updateLabel}
+            title={`${workspace.updateLabel} · ${updateText}`}
+            aria-describedby="topbar-update-status"
+            aria-busy={workspace.checking}
+            aria-disabled={workspace.checking}
+            data-update-state={updateState}
+            onClick={() => void workspace.check()}
+          >
+            <UpdateIcon size={18} aria-hidden="true" />
+          </IconButton>
+          <span className="update-version" aria-hidden="true">
+            v{version}
+          </span>
+          {updateState !== "idle" && (
+            <span className="update-state-label" aria-hidden="true">
+              {availableVersion && `v${availableVersion} · `}
+              {t(updateShortLabels[updateState])}
+            </span>
+          )}
+        </div>
+        <span id="topbar-update-status" className="visually-hidden" role="status">
+          {updateText}
+        </span>
         <details className="topbar-language" ref={languageMenu}>
           <summary
             className="topbar-icon"
