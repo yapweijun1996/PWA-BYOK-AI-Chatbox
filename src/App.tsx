@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
@@ -605,16 +606,19 @@ function App({
                     onSelect={selectModel}
                     onSettings={openSettings}
                   />
-                  <select
-                    className="composer-effort"
-                    aria-label={t("Reasoning effort")}
-                    title={t("Reasoning effort")}
-                    value={effortFor(config.id, config.reasoningEffort)}
-                    disabled={!chat || !config.model.trim() || working || navigating || processingFiles}
-                    onChange={(event) => setModelEffort(event.target.value)}
-                  >
-                    {effortOptions(config.id).map((effort) => <option key={effort} value={effort}>{t(effort === "default" ? "Model default" : effort)}</option>)}
-                  </select>
+                  <span className="composer-effort-wrap">
+                    <select
+                      className="composer-effort"
+                      aria-label={t("Reasoning effort")}
+                      title={t("Reasoning effort")}
+                      value={effortFor(config.id, config.reasoningEffort)}
+                      disabled={!chat || !config.model.trim() || working || navigating || processingFiles}
+                      onChange={(event) => setModelEffort(event.target.value)}
+                    >
+                      {effortOptions(config.id).map((effort) => <option key={effort} value={effort}>{t(effort === "default" ? "Model default" : effort)}</option>)}
+                    </select>
+                    <ChevronDown size={18} aria-hidden="true" />
+                  </span>
                 </>
               }
               onDraft={editDraft}

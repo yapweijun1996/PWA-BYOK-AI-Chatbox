@@ -29,7 +29,13 @@ try {
       const privacy = document.querySelector(".privacy span");
       const textNode = [...privacy.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
       const range = document.createRange(); range.selectNodeContents(textNode);
-      return { width: innerWidth, documentWidth: document.documentElement.scrollWidth, composer: rect(document.querySelector(".composer")), row: rect(row), rowScroll: row.scrollWidth, rowClient: row.clientWidth, children, icon: rect(privacy.querySelector("svg")), firstText: rect({ getBoundingClientRect: () => range.getClientRects()[0] }) };
+      const select = row.querySelector(".composer-effort");
+      const style = getComputedStyle(select);
+      const canvas = document.createElement("canvas").getContext("2d");
+      canvas.font = style.font;
+      const labelWidth = canvas.measureText(select.selectedOptions[0].textContent).width;
+      const labelSpace = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { labelWidth, labelSpace, arrow: rect(row.querySelector(".composer-effort-wrap svg")), width: innerWidth, documentWidth: document.documentElement.scrollWidth, composer: rect(document.querySelector(".composer")), row: rect(row), rowScroll: row.scrollWidth, rowClient: row.clientWidth, effortFontSize: parseFloat(getComputedStyle(row.querySelector(".composer-effort")).fontSize), children, icon: rect(privacy.querySelector("svg")), firstText: rect({ getBoundingClientRect: () => range.getClientRects()[0] }) };
     });
     assert.equal(data.documentWidth, width, `${stage} ${width}: horizontal overflow`);
     assert.ok(Math.abs(data.composer.left - (width - data.composer.right)) <= 1, `${stage} ${width}: composer not centered`);
@@ -40,16 +46,22 @@ try {
     }
     const model = data.children.find(item => item.selector === ".model-pill").rect;
     const effort = data.children.find(item => item.selector === ".composer-effort").rect;
+    assert.ok(data.labelWidth <= data.labelSpace + 1, `${stage} ${width}: selected effort label clipped`);
+    assert.ok(data.arrow.width === 18 && data.arrow.height === 18, `${stage} ${width}: dropdown icon size`);
+    assert.ok(data.effortFontSize >= 16, `${stage} ${width}: effort font risks iOS zoom`);
+    const send = data.children.find(item => item.selector === ".send").rect;
+    assert.ok(Math.abs(effort.top - model.top) <= 1 && Math.abs(effort.bottom - model.bottom) <= 1, `${stage} ${width}: effort and model heights differ`);
+    assert.ok(Math.abs(effort.top - send.top) <= 1 && Math.abs(effort.bottom - send.bottom) <= 1, `${stage} ${width}: effort and send heights differ`);
     assert.ok(model.width >= 90, `${stage} ${width}: model name too narrow`);
-    if (width <= 420) assert.ok(effort.width >= 120, `${stage} ${width}: effort label too narrow`);
+    if (width <= 520) assert.ok(effort.width >= 132, `${stage} ${width}: effort label too narrow`);
     assert.ok(Math.abs(data.firstText.top - data.icon.top) < 8, `${stage} ${width}: privacy icon detached`);
   };
-  for (const width of [320, 360, 390, 430]) await check(width, "empty");
+  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 600]) await check(width, "empty");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Hello");
   await page.getByRole("button", { name: "Send message" }).click();
   await page.getByText("Hello", { exact: true }).last().waitFor();
   await page.locator(".message.assistant").getByText("Saved locally").waitFor();
-  for (const width of [320, 360, 390, 430]) await check(width, "conversation");
+  for (const width of [320, 360, 390, 421, 430, 480, 520, 521, 600]) await check(width, "conversation");
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: "Expand message editor" }).click();
   await page.waitForFunction(() => document.querySelector(".composer[data-expanded=true] textarea") === document.activeElement);
@@ -57,5 +69,22 @@ try {
   await page.getByRole("dialog", { name: "Expanded message editor" }).getByLabel("Reasoning effort").focus();
   assert.equal(await page.getByRole("dialog", { name: "Expanded message editor" }).getByLabel("Reasoning effort").evaluate(el => document.activeElement === el), true);
   await page.keyboard.press("Escape");
+  for (const language of ["zh-CN", "ms"]) {
+    await page.evaluate(language => new Promise((resolve, reject) => {
+      const open = indexedDB.open("luma-chat");
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction("settings", "readwrite");
+        const store = tx.objectStore("settings");
+        const read = store.get("settings");
+        read.onsuccess = () => { const settings = read.result; settings.language = language; store.put(settings, "settings"); };
+        tx.oncomplete = () => { open.result.close(); resolve(); };
+        tx.onabort = () => reject(tx.error);
+      };
+    }), language);
+    await page.reload();
+    await page.locator(".composer-effort").waitFor();
+    for (const width of [320, 430, 521]) await check(width, language);
+  }
   console.log("PASS: centered mobile composer, readable controls, privacy alignment and expanded editor");
 } finally { await browser.close(); }
