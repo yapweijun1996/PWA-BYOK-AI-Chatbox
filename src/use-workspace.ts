@@ -938,6 +938,7 @@ export function useWorkspace({
     let failureReason: string | undefined;
     let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
     let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
+    const responsesReplay: import("./openai-responses").ResponsesReplay = { exchanges: [], final: [] };
     let executions: ToolExecution[] = [];
     let lastCheckpoint = performance.now();
     const publish = (
@@ -954,6 +955,7 @@ export function useWorkspace({
         ...(status === "error" && failureReason ? { error: failureReason } : {}),
         telemetry: roundTelemetry ?? tracker.snapshot(),
         ...(executions.length ? { toolExecutions: executions } : {}),
+        ...(prepared.target.id === "openai" && prepared.target.openaiApi === "responses" && status === "complete" ? { responsesReplay } : {}),
       };
       if (status !== "streaming")
         session.setReplySave(chatId, { message, status: "pending" });
@@ -1023,6 +1025,7 @@ export function useWorkspace({
                   publishStream();
               },
               tool,
+              (items) => { responsesReplay.final = items; },
             );
             if (
               !abort.signal.aborted &&
@@ -1052,6 +1055,9 @@ export function useWorkspace({
           publish("streaming", true);
         },
         history.flatMap((message) => message.role === "user" ? message.attachments ?? [] : []),
+        ({ round, results }) => {
+          if (round.responsesItems) { responsesReplay.exchanges.push({ items: round.responsesItems, results }); responsesReplay.final = []; }
+        },
       );
       terminal = abort.signal.aborted ? "interrupted" : "complete";
     } catch (e) {

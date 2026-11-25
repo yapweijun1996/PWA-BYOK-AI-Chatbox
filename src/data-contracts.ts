@@ -16,6 +16,7 @@ import {
 import { validResponseTelemetry } from "./response-telemetry";
 import { validOverrides, validRequestSnapshot } from "./request-config";
 import { restoreToolExecutions, validToolExecutions } from "./javascript-tool";
+import { validResponsesReplay } from "./openai-responses";
 import { validBranchConversation } from "./branches";
 
 export function recoverMessage(message: Message): Message {
@@ -63,6 +64,7 @@ export function mergeSettings(
       vision: saved?.vision === true,
       reasoningSupported: saved?.reasoningSupported === true,
       requestThoughts: saved?.requestThoughts === true,
+      ...(providerId === "openai" && saved?.openaiApi === "responses" ? { openaiApi: "responses" as const } : {}),
       endpoint:
         providerId === "lmstudio"
           ? lmStudioEndpoint
@@ -95,7 +97,7 @@ export function backupPreferences(settings: Settings) {
   );
   const providers = Object.fromEntries(
     providerIds.map((id) => {
-      const { model, vision, reasoningSupported, requestThoughts } =
+      const { model, vision, reasoningSupported, requestThoughts, openaiApi } =
         settings.providers[id];
       const endpoint =
         id === "lmstudio"
@@ -109,6 +111,7 @@ export function backupPreferences(settings: Settings) {
           vision,
           reasoningSupported,
           requestThoughts,
+          ...(id === "openai" && openaiApi === "responses" ? { openaiApi } : {}),
           ...(endpoint !== undefined ? { endpoint } : {}),
         },
       ] as const;
@@ -243,6 +246,7 @@ export function validBackup(value: unknown): value is Backup {
           (m.reasoning !== undefined && typeof m.reasoning !== "string") ||
           (m.error !== undefined && typeof m.error !== "string") ||
           (m.telemetry !== undefined && !validResponseTelemetry(m.telemetry)) ||
+          (m.responsesReplay !== undefined && (m.role !== "assistant" || !validResponsesReplay(m.responsesReplay))) ||
           (m.toolExecutions !== undefined &&
             (m.role !== "assistant" ||
               !validToolExecutions(m.toolExecutions))) ||

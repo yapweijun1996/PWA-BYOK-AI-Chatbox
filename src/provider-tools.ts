@@ -28,6 +28,7 @@ export type ToolRound = Readonly<{
   text: string;
   geminiParts: readonly GeminiPart[];
   reasoningDetails: readonly unknown[];
+  responsesItems?: readonly import("./openai-responses").OutputItem[];
 }>;
 export type ToolExchange = Readonly<{
   round: ToolRound;

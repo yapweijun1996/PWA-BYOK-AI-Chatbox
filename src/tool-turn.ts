@@ -12,6 +12,7 @@ export async function runToolTurn(
   signal: AbortSignal,
   onProgress: ToolProgress,
   attachments: readonly Attachment[] = [],
+  onExchange?: (exchange: ToolExchange) => void,
 ) {
   if (!enabled) {
     await stream();
@@ -39,6 +40,8 @@ export async function runToolTurn(
       );
     }
     signal.throwIfAborted();
-    exchanges.push({ round, results });
+    const exchange = { round, results };
+    exchanges.push(exchange);
+    onExchange?.(exchange);
   }
 }

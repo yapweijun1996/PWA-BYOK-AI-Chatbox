@@ -12,6 +12,8 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "OpenAI API mode": "OpenAI API 模式",
+  "Responses API is experimental and has been tested with a mock interface. Tool history is stored on this device and sent with the active branch.": "Responses API 为实验功能，已使用模拟接口测试。工具历史保存在本设备，并随当前分支发送。",
   "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning.": "GPT-6 Luna 启用本地工具时会将推理强度设为 none（无）。关闭工具可使用模型默认推理设置。",
   "Future": "未来",
   "Saving changes…": "正在保存更改…",

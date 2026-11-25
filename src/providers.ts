@@ -1,4 +1,6 @@
-﻿import type { Attachment, Message, ProviderConfig } from "./types";
+import { buildResponsesRequest, replay, streamResponsesPrototype } from "./openai-responses";
+import type { OutputItem } from "./openai-responses";
+import type { Attachment, Message, ProviderConfig } from "./types";
 import { defaultSettings } from "./types";
 import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
@@ -144,9 +146,9 @@ export const requestsStreamUsage = (id: ProviderConfig["id"]) =>
 
 // Chat Completions rejects function tools with the model's default reasoning effort.
 export const requiresLunaToolCompatibility = (
-  config: Pick<ProviderConfig, "id" | "model">,
+  config: Pick<ProviderConfig, "id" | "model" | "openaiApi">,
 ) =>
-  config.id === "openai" && /^gpt-6-luna(?:-|$)/i.test(config.model.trim());
+  config.id === "openai" && config.openaiApi !== "responses" && /^gpt-6-luna(?:-|$)/i.test(config.model.trim());
 
 export function requestHistory(messages: readonly Message[]) {
   const history: Message[] = [];
@@ -377,6 +379,7 @@ export async function streamChat(
   onReasoning: (text: string) => void = () => {},
   onSample?: (sample: ResponseSample, receivedAt: number) => void,
   tool?: ToolRequest,
+  onResponsesOutput?: (items: OutputItem[]) => void,
 ): Promise<ToolRound | undefined> {
   if (!config.model.trim())
     throw new Error("Choose or enter a model in Providers.");
@@ -391,6 +394,28 @@ export async function streamChat(
     throw new Error(
       "Enable image support for this model in Providers before sending images.",
     );
+  if (config.id === "openai" && config.openaiApi === "responses") {
+    const body = buildResponsesRequest(config.model, messages, tool ? {
+      allowCalls: tool.allowCalls,
+      exchanges: tool.exchanges.map(({ round, results }) => {
+        if (!round.responsesItems) throw new Error("Missing Responses tool transcript.");
+        return { items: round.responsesItems, results };
+      }),
+      requestSummary: config.requestThoughts,
+    } : undefined, config.requestThoughts);
+    const result = await streamResponsesPrototype(
+      (payload, requestSignal) => request(config, "/responses", secret, { method: "POST", body: JSON.stringify(payload), signal: requestSignal }),
+      body, signal, onText, onReasoning,
+    );
+    // Reject malformed replay items before allowing any requested local tool to run.
+    replay(result.output, result.calls.map(() => ({} as import("./js-tool-runtime").ExecutionResult)));
+    const usage = result.usage as { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens_details?: { reasoning_tokens?: number } } | undefined;
+    if (usage) onSample?.({ usage: { input: usage.input_tokens, output: usage.output_tokens, total: usage.total_tokens, cached: usage.input_tokens_details?.cached_tokens, reasoning: usage.output_tokens_details?.reasoning_tokens } }, performance.now());
+    onResponsesOutput?.(result.output);
+    if (!result.calls.length) return undefined;
+    if (!tool || !tool.allowCalls) throw new Error("The model requested tools when tools were disabled.");
+    return { calls: result.calls, text: "", geminiParts: [], reasoningDetails: [], responsesItems: result.output };
+  }
   const { path, body } = buildRequest(config, messages, tool);
   const response = await request(config, path, secret, {
     method: "POST",

@@ -9,7 +9,7 @@ export type RequestOverrides = Readonly<
       ProviderConfig,
       "model" | "vision" | "reasoningSupported" | "requestThoughts"
     >
-  > & { provider?: ProviderId }
+  > & { provider?: ProviderId; openaiApi?: "chat_completions" | "responses" }
 >;
 const layers = ["request", "conversation", "global", "default"] as const;
 export type ConfigSource = (typeof layers)[number];
@@ -75,6 +75,7 @@ export function resolveConfig(
       vision: vision === true,
       reasoningSupported: support === true,
       requestThoughts: thoughts === true,
+      ...(provider === "openai" ? { openaiApi: requested?.openaiApi ?? scoped?.openaiApi ?? global?.openaiApi ?? "chat_completions" } : {}),
     },
     sources: {
       provider:
@@ -124,6 +125,7 @@ export type RequestSnapshot = Readonly<{
   target: (typeof targets)[number];
   usageMode: (typeof usageModes)[number];
   javascript?: boolean;
+  openaiApi?: "chat_completions" | "responses";
   sources: ResolvedConfig["sources"];
 }>;
 
@@ -151,7 +153,10 @@ export function requestFacts({
     reasoningSupported: config.reasoningSupported === true,
     requestThoughts: config.requestThoughts === true,
     target,
-    usageMode: requestsStreamUsage(config.id)
+    ...(config.id === "openai" ? { openaiApi: config.openaiApi ?? "chat_completions" } : {}),
+    usageMode: config.id === "openai" && config.openaiApi === "responses"
+      ? "provider implicit"
+      : requestsStreamUsage(config.id)
       ? "stream_options.include_usage"
       : config.id === "openrouter"
         ? "usage.include"
@@ -177,7 +182,7 @@ export function captureRequest(
 export function profileOverride(
   config: Pick<
     ProviderConfig,
-    "id" | "model" | "vision" | "reasoningSupported" | "requestThoughts"
+    "id" | "model" | "vision" | "reasoningSupported" | "requestThoughts" | "openaiApi"
   >,
 ): RequestOverrides {
   return {
@@ -186,6 +191,7 @@ export function profileOverride(
     vision: config.vision,
     reasoningSupported: config.reasoningSupported === true,
     requestThoughts: config.requestThoughts === true,
+    ...(config.id === "openai" ? { openaiApi: config.openaiApi ?? "chat_completions" } : {}),
   };
 }
 
@@ -195,10 +201,11 @@ export function validOverrides(value: unknown): value is RequestOverrides {
     !!data &&
     Object.keys(data).every(
       (key) =>
-        key === "provider" || (fields as readonly string[]).includes(key),
+        key === "provider" || key === "openaiApi" || (fields as readonly string[]).includes(key),
     ) &&
     (data.provider === undefined ||
       providerIds.includes(data.provider as ProviderId)) &&
+    (data.openaiApi === undefined || data.openaiApi === "chat_completions" || data.openaiApi === "responses") &&
     (data.model === undefined || typeof data.model === "string") &&
     fields
       .slice(1)
@@ -219,6 +226,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     "target",
     "usageMode",
     "javascript",
+    "openaiApi",
     "sources",
   ];
   return (
@@ -232,6 +240,7 @@ export function validRequestSnapshot(value: unknown): value is RequestSnapshot {
     targets.includes(data.target as RequestSnapshot["target"]) &&
     usageModes.includes(data.usageMode as RequestSnapshot["usageMode"]) &&
     (data.javascript === undefined || typeof data.javascript === "boolean") &&
+    (data.openaiApi === undefined || data.openaiApi === "chat_completions" || data.openaiApi === "responses") &&
     !!sources &&
     Object.keys(sources).length === sourceFields.length &&
     sourceFields.every((key) => layers.includes(sources[key] as ConfigSource))

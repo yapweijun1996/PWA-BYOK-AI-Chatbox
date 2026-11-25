@@ -31,6 +31,7 @@ export type Message = {
   telemetry?: ResponseTelemetry;
   request?: RequestSnapshot;
   toolExecutions?: ToolExecution[];
+  responsesReplay?: import("./openai-responses").ResponsesReplay;
 };
 export type Conversation = {
   id: string;
@@ -59,6 +60,7 @@ export type ProviderConfig = {
   vision: boolean;
   reasoningSupported?: boolean;
   requestThoughts?: boolean;
+  openaiApi?: "chat_completions" | "responses";
 };
 export type Cipher = {
   destination?: string; // LM Studio only; older vaults require explicit binding on unlock.

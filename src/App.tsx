@@ -730,6 +730,16 @@ function App({
                       </p>
                     </>
                   )}
+                  {config.id === "openai" && <>
+                    <label className="field">
+                      {t("OpenAI API mode")}
+                      <select value={config.openaiApi ?? "chat_completions"} onChange={(e) => void updateConfig({ openaiApi: e.target.value === "responses" ? "responses" : "chat_completions" })}>
+                        <option value="chat_completions">Chat Completions</option>
+                        <option value="responses">Responses API</option>
+                      </select>
+                    </label>
+                    <p className="hint">{t("Responses API is experimental and has been tested with a mock interface. Tool history is stored on this device and sent with the active branch.")}</p>
+                  </>}
                   <label className="field">
                     {t("Model ID")}
                     <input
