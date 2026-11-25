@@ -76,8 +76,17 @@ try {
   );
   assert.equal(requests[0].body.messages[0].content[0].text, "Hello Claude");
   await page.getByText("Saved locally", { exact: true }).last().waitFor();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
+  const retryDialog = page.getByRole("dialog", { name: "Retry reply?" });
+  await retryDialog.getByText("Anthropic · claude-test").first().waitFor();
+  await retryDialog
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  assert.equal(requests.length, 1);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await retryDialog
+    .getByRole("button", { name: "Retry reply", exact: true })
+    .click();
   await page.getByText("Claude reply 2", { exact: true }).waitFor();
   assert.equal(requests[1].body.messages.length, 1);
   assert.equal(
@@ -85,12 +94,36 @@ try {
     1,
   );
   await page.getByText("Saved locally", { exact: true }).last().waitFor();
-  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Anthropic", exact: true }).click();
+  await page.getByLabel("Model ID").fill("claude-new");
+  await page.getByRole("button", { name: "Back to chat" }).click();
   await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await retryDialog
+    .getByText("Anthropic · claude-new", { exact: true })
+    .waitFor();
+  await retryDialog.getByText("Original model", { exact: true }).click();
+  await retryDialog
+    .getByRole("button", { name: "Retry reply", exact: true })
+    .click();
   await page.getByText("Claude reply 3", { exact: true }).waitFor();
   assert.equal(requests[2].body.messages.length, 1);
+  assert.equal(requests[2].body.model, "claude-test");
   await page.getByText("Saved locally", { exact: true }).last().waitFor();
+  await input.fill("Previous draft");
+  await page
+    .locator('.composer input[type="file"]')
+    .setInputFiles({
+      name: "keep.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("saved file"),
+    });
+  await page.getByRole("button", { name: "Remove keep.txt" }).waitFor();
   await user.getByRole("button", { name: "Edit as new message" }).click();
+  await page
+    .getByRole("dialog", { name: "Replace current draft?" })
+    .getByRole("button", { name: "Edit message", exact: true })
+    .click();
   await input.waitFor();
   await page.waitForFunction(
     () =>
@@ -100,10 +133,28 @@ try {
     await user.getByText("Hello Claude", { exact: true }).count(),
     1,
   );
-  await input.fill("Changed draft");
-  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.reload();
+  await page
+    .getByText("Editing a previous message. The original stays in the chat.")
+    .waitFor();
+  assert.equal(await input.inputValue(), "Hello Claude");
+  await page.getByRole("button", { name: "Cancel edit" }).click();
+  assert.equal(await input.inputValue(), "Previous draft");
+  await page.getByRole("button", { name: "Remove keep.txt" }).waitFor();
   await user.getByRole("button", { name: "Edit as new message" }).click();
+  await page
+    .getByRole("dialog", { name: "Replace current draft?" })
+    .getByRole("button", { name: "Edit message", exact: true })
+    .click();
+  await input.fill("Changed draft");
+  await user.getByRole("button", { name: "Edit as new message" }).click();
+  await page
+    .getByRole("dialog", { name: "Replace current draft?" })
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
   assert.equal(await input.inputValue(), "Changed draft");
+  await page.getByRole("button", { name: "Cancel edit" }).click();
+  assert.equal(await input.inputValue(), "Previous draft");
   console.log(
     "PASS: Anthropic direct streaming, reply retry, message timestamps and non-destructive editing",
   );

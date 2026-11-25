@@ -152,6 +152,18 @@ try {
         .getByRole("button", { name: "Retry", exact: true })
         .isVisible(),
     );
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    if (mobile) assert.ok((await retry.boundingBox()).height >= 44);
+    await retry.click();
+    const retryDialog = page.getByRole("dialog", { name: "Retry reply?" });
+    const bounds = await retryDialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+    await page.keyboard.press("Escape");
+    await retryDialog.waitFor({ state: "hidden" });
+    assert.equal(
+      await retry.evaluate((element) => document.activeElement === element),
+      true,
+    );
     await context.close();
   }
   console.log(

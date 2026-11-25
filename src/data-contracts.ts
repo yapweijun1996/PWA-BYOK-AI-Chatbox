@@ -219,6 +219,11 @@ export function validBackup(value: unknown): value is BackupV1 {
           c.projectId.length <= 160)) &&
       (c.draftAttachments === undefined ||
         validAttachments(c.draftAttachments)) &&
+      (c.editState === undefined || (
+        typeof c.editState === "object" && c.editState !== null &&
+        typeof c.editState.sourceId === "string" && c.editState.sourceId.length > 0 && c.editState.sourceId.length <= 160 &&
+        typeof c.editState.originalDraft === "string" && validAttachments(c.editState.originalAttachments)
+      )) &&
       Number.isFinite(c.updatedAt) &&
       Array.isArray(c.messages) &&
       uniqueIds(c.messages) &&

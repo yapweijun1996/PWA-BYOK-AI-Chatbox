@@ -10,7 +10,7 @@ The composer grows with the draft and can be expanded for longer prompts. The ex
 
 Draft attachments show their count, file names, type and size, with image thumbnails where available. The attachment list scrolls when needed; keyboard focus moves to the next attachment or the message field after removal. Image and plain text files are limited to 5 MB each.
 
-Message bubbles display their local time, with a full date and time on hover. The latest assistant reply can be retried with confirmation; previous answers remain visible and later requests use the latest answer. **Edit as new message** copies a user message and its attachments to the composer without altering history or sending automatically. Replacing an existing draft requires confirmation.
+Message bubbles display their local time, with a full date and time on hover. The latest assistant reply can be retried after selecting the current or original model and confirming the request; previous answers remain visible and later requests use the latest answer. **Edit as new message** copies a user message and its attachments to the composer without altering history or sending automatically. Replacing an existing draft requires confirmation; cancelling the edit restores the prior draft and attachments, even after a reload. The edited draft replaces that saved prior draft once sent.
 
 Use the [feature map](FEATURE-MAP.md) to find a capability, its implementation, and its limits. For the source review, prioritized bugs, implementation tasks, and release criteria, see the [engineering roadmap](ROADMAP.md). It distinguishes committed functionality from work in progress; it is not a release announcement.
 

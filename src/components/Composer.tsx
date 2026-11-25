@@ -30,6 +30,9 @@ type Props = {
   processingFiles: boolean;
   phase: ReplyPhase;
   blockedReason?: string;
+  editing: boolean;
+  editingCanCancel: boolean;
+  onCancelEdit: () => void;
   notice: string;
   onDismissNotice: () => void;
   modelControl: ReactNode;
@@ -51,6 +54,9 @@ export function Composer({
   processingFiles,
   phase,
   blockedReason,
+  editing,
+  editingCanCancel,
+  onCancelEdit,
   notice,
   onDismissNotice,
   modelControl,
@@ -244,6 +250,21 @@ export function Composer({
           if (canAttach) onFiles(Array.from(event.dataTransfer.files));
         }}
       >
+        {editing && (
+          <div className="editing-banner">
+            <span>
+              {t("Editing a previous message. The original stays in the chat.")}
+            </span>
+            <button
+              type="button"
+              className="message-action"
+              disabled={!enabled || !editingCanCancel}
+              onClick={onCancelEdit}
+            >
+              {t("Cancel edit")}
+            </button>
+          </div>
+        )}
         {enterSends && (
           <span id={hintId} className="visually-hidden">
             {t("Enter to send · Shift+Enter for a new line")}

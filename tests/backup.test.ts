@@ -31,6 +31,33 @@ const plan = (chats: Conversation[], limit?: number) =>
   planBackupExport(chats, settings, limit, "2026-01-01T00:00:00.000Z");
 
 describe("portable v1 backup files", () => {
+  it("retains the original draft and attachments while a message edit is active", async () => {
+    const editing = {
+      ...chat("edit"),
+      editState: {
+        sourceId: "m",
+        originalDraft: "prior",
+        originalAttachments: [file],
+      },
+    };
+    expect(
+      (await readBackupFile(plan([editing]).groups[0].blob)).conversations,
+    ).toEqual([editing]);
+    expect(
+      validBackup({
+        version: 1,
+        conversations: [
+          {
+            ...editing,
+            editState: {
+              ...editing.editState,
+              originalAttachments: [file, file],
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
   it("uses the same exact byte boundary for import and export, including escaped and multibyte content", async () => {
     const full = plan(chats).groups[0].blob;
     expect(full.size).toBeGreaterThan((await full.text()).length);

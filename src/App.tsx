@@ -11,6 +11,7 @@ import {
   Code2,
   UserRound,
   SquarePen,
+  RefreshCw,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
@@ -19,6 +20,7 @@ import { Composer } from "./components/Composer";
 import { ModelSelector } from "./components/ModelSelector";
 import { LmStudioAddressEditor } from "./components/LmStudioAddressEditor";
 import { HistorySharingDialog } from "./components/HistorySharingDialog";
+import { MessageActionDialog } from "./components/MessageActionDialog";
 import { canRequestReasoning } from "./model-options";
 import { formatSize } from "./format-size";
 import { downloadBackup } from "./backup";
@@ -33,6 +35,7 @@ import { interpolate, translate, translateNotice } from "./i18n";
 import type { Locale } from "./i18n";
 import type { InitialAppState } from "./startup";
 import { labels, providerIds as providers } from "./types";
+import type { Message } from "./types";
 import { useWorkspace, settingsSections } from "./use-workspace";
 import type { SlashCommand } from "./slash-commands";
 import "./generated/tokens-light.css";
@@ -78,6 +81,7 @@ function App({
 }) {
   const workspace = useWorkspace({ initial, onInitialCommit });
   const toolsHelpId = useId();
+  const [messageAction, setMessageAction] = useState<{ kind: "retry" | "edit"; message: Message; chatId: string; anchor: HTMLElement }>();
   const {
     locale,
     t,
@@ -119,6 +123,7 @@ function App({
     onMessageScroll,
     retry,
     editMessage,
+    cancelEdit,
     desktopInput,
     displayedDraft,
     phase,
@@ -192,6 +197,11 @@ function App({
     return () => document.removeEventListener("keydown", blockInput, true);
   }, [pwa.applying]);
   const modelTrigger = useRef<HTMLButtonElement>(null);
+  const closeMessageAction = (restoreFocus: boolean) => {
+    const anchor = messageAction?.anchor;
+    setMessageAction(undefined);
+    if (restoreFocus) requestAnimationFrame(() => anchor?.isConnected && anchor.focus());
+  };
   const runCommand = (command: SlashCommand) => {
     switch (command) {
       case "new":
@@ -422,46 +432,41 @@ function App({
                               )}
                             </div>
                           )}
+                        <div className="message-actions">
                         {m.role === "assistant" && m.status !== "streaming" &&
                           replySave?.message !== m &&
                           m.id ===
                             chat.messages[chat.messages.length - 1]?.id && (
-                            <div className="button-row">
                               <button
-                                className="secondary retry"
-                                disabled={working || conflicts.has(chat.id)}
-                                onClick={() => void retry()}
+                                className="message-action"
+                                type="button"
+                                title={t("Retry")}
+                                disabled={working || navigating || processingFiles || Boolean(replySave) || conflicts.has(chat.id)}
+                                onClick={(event) => setMessageAction({ kind: "retry", message: m, chatId: chat.id, anchor: event.currentTarget })}
                               >
+                                <RefreshCw size={16} aria-hidden="true" />
                                 {t("Retry")}
                               </button>
-                              {m.request && (
-                                <details className="retry-options">
-                                  <summary>{t("More options")}</summary>
-                                  <button
-                                    className="secondary retry"
-                                    disabled={working || conflicts.has(chat.id)}
-                                    onClick={() => void retry(m.request)}
-                                  >
-                                    {t("Retry with original model")}
-                                  </button>
-                                </details>
-                              )}
-                            </div>
                           )}
                         {m.role === "user" && (
-                          <button type="button" className="copy" disabled={working || navigating || processingFiles || conflicts.has(chat.id)} onClick={() => void editMessage(m)}>
+                          <button type="button" className="message-action" title={t("Edit as new message")} disabled={working || navigating || processingFiles || Boolean(replySave) || conflicts.has(chat.id)} onClick={(event) => {
+                            if (chat.draft.length || chat.draftAttachments?.length) setMessageAction({ kind: "edit", message: m, chatId: chat.id, anchor: event.currentTarget });
+                            else void editMessage(m);
+                          }}>
                             <SquarePen size={14} aria-hidden="true" /> {t("Edit as new message")}
                           </button>
                         )}
                         {m.content && (
                           <button
-                            className="copy"
+                            className="message-action"
+                            title={t("Copy")}
                             onClick={() => void copyMessage(m, setNotice)}
                           >
                             <Copy size={14} />
                             {t(" Copy")}
                           </button>
                         )}
+                        </div>
                         {m.role === "assistant" && (
                           <ResponseInspector message={m} locale={locale} />
                         )}
@@ -480,6 +485,9 @@ function App({
               processingFiles={processingFiles}
               phase={phase}
               blockedReason={chat ? composerBlocked : undefined}
+              editing={Boolean(chat?.editState)}
+              editingCanCancel={!working && !navigating && !processingFiles && !replySave && !conflicts.has(active)}
+              onCancelEdit={() => void cancelEdit()}
               notice={workspace.notice}
               onDismissNotice={() => setNotice("")}
               commandsEnabled={Boolean(chat) && !working && !navigating && !processingFiles && !conflicts.has(active) && !replySave}
@@ -1069,6 +1077,14 @@ function App({
           </section>
         )}
       </main>
+      {messageAction && messageAction.chatId === chat?.id && (
+        <MessageActionDialog locale={locale} kind={messageAction.kind} current={effective.config} original={messageAction.message.request} onClose={() => closeMessageAction(true)} onConfirm={(original) => {
+          const action = messageAction;
+          closeMessageAction(false);
+          if (action.kind === "retry") void retry(original);
+          else void editMessage(action.message);
+        }} />
+      )}
       {historyTarget && (
         <HistorySharingDialog
           locale={locale}

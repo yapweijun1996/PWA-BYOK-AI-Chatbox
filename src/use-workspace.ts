@@ -1110,6 +1110,7 @@ export function useWorkspace({
       cloudHistoryRecipient: cloudRecipient(prepared.target.id),
       draft: "",
       draftAttachments: [],
+      editState: undefined,
       updatedAt: Date.now(),
       messages: [...c.messages, user, reply],
     }));
@@ -1123,6 +1124,7 @@ export function useWorkspace({
           ...(user.attachments || []),
           ...(c.draftAttachments || []),
         ],
+        editState: chat.editState,
         messages: c.messages.filter(
           (m) => m.id !== user.id && m.id !== reply.id,
         ),
@@ -1157,14 +1159,6 @@ export function useWorkspace({
     }
     if (needsHistoryChoice(chat, resolved.config.id) &&
       !(await askToShareHistory(chat, resolved.config))) return;
-    if (
-      !confirm(
-        t(
-          "Retry sends a new request to the selected provider and may incur charges. Continue?",
-        ),
-      )
-    )
-      return;
     const userIndex = chat.messages.map((message) => message.role).lastIndexOf("user");
     const history = userIndex >= 0 ? chat.messages.slice(0, userIndex + 1) : chat.messages;
     const prepared = prepareReply(resolved, history);
@@ -1193,12 +1187,18 @@ export function useWorkspace({
   };
   const editMessage = async (message: Message) => {
     if (!chat || message.role !== "user" || !canStartReply(chat)) return;
-    if ((chat.draft.length || chat.draftAttachments?.length) && !confirm(t("Replace the current draft and attachments with this message?"))) return;
     const saved = await updateChat(chat.id, (current) => ({
       ...current,
       draft: message.content,
       draftAttachments: [...(message.attachments || [])],
+      editState: { sourceId: message.id, originalDraft: current.editState?.originalDraft ?? current.draft, originalAttachments: current.editState?.originalAttachments ?? [...(current.draftAttachments || [])] },
     }));
+    if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+  };
+  const cancelEdit = async () => {
+    if (!chat?.editState || !canStartReply(chat)) return;
+    const snapshot = chat.editState;
+    const saved = await updateChat(chat.id, (current) => ({ ...current, draft: snapshot.originalDraft, draftAttachments: snapshot.originalAttachments, editState: undefined }));
     if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   };
   const testConnection = async () => {
@@ -1718,6 +1718,7 @@ export function useWorkspace({
     onMessageScroll,
     retry,
     editMessage,
+    cancelEdit,
     desktopInput,
     displayedDraft,
     phase,

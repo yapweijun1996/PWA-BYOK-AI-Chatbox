@@ -239,11 +239,9 @@ try {
   await page.getByText("Saved locally").last().waitFor();
   await page.reload();
   await page.locator(".response-error").getByText("Provider returned HTTP 503.").waitFor();
-  await page.locator(".retry-options summary").click();
-  assert.equal(await page.getByRole("button", { name: "Retry with original model" }).isVisible(), true);
-  await page.locator(".retry-options summary").click();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("dialog", { name: "Retry reply?" }).getByText("Original model", { exact: true }).waitFor();
+  await page.getByRole("dialog", { name: "Retry reply?" }).getByRole("button", { name: "Retry reply", exact: true }).click();
   await page.getByText("Hello from local model").nth(1).waitFor();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "OpenRouter", exact: true }).click();
@@ -300,8 +298,8 @@ try {
     .waitFor();
   assert.equal(routerBodies.length, 2);
   assert.ok(routerBodies[1].messages.some(({ content }) => content.includes("attachment contents")));
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("dialog", { name: "Retry reply?" }).getByRole("button", { name: "Retry reply", exact: true }).click();
   await page.getByText("OpenRouter answer").waitFor();
   const response = page.locator(".message.assistant").filter({ hasText: "OpenRouter answer" });
   await response.locator(".response-inspector > summary").click();

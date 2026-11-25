@@ -11,6 +11,17 @@ export function resolveLanguage(
     : preference;
 }
 const zh: Record<string, string> = {
+  "Retry reply?": "重新生成回复？",
+  "Replace current draft?": "替换当前草稿？",
+  "A new request may incur charges. Earlier replies stay in this chat.": "新请求可能产生费用，之前的回复会保留在对话中。",
+  "Current model": "当前模型",
+  "Original model": "原模型",
+  "The original model uses its current provider connection and key.": "原模型将使用其服务商当前的连接和密钥。",
+  "Your current draft and attachments will be kept so you can restore them by cancelling the edit. The original message remains unchanged.": "当前草稿和附件会保留，取消编辑时可恢复；原消息不会更改。",
+  "Retry reply": "重新生成回复",
+  "Edit message": "编辑消息",
+  "Editing a previous message. The original stays in the chat.": "正在编辑之前的消息，原消息会保留在对话中。",
+  "Cancel edit": "取消编辑",
   "Anthropic requests use your API key directly in this browser. Use only on a trusted device and network. Your API usage may incur charges.": "Anthropic 请求会在浏览器中直接使用你的 API 密钥。请仅在受信任的设备和网络上使用；API 调用可能产生费用。",
   "Edit as new message": "编辑并作为新消息发送",
   "Replace the current draft and attachments with this message?": "用这条消息替换当前草稿和附件吗？",

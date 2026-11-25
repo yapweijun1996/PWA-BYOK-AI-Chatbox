@@ -38,6 +38,7 @@ export type Conversation = {
   messages: Message[];
   draft: string;
   draftAttachments?: Attachment[];
+  editState?: { sourceId: string; originalDraft: string; originalAttachments: Attachment[] };
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
