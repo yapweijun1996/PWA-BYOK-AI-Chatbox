@@ -72,6 +72,7 @@ try {
     "tests/search-branches-smoke.mjs",
     "tests/reasoning-smoke.mjs",
     "tests/tool-execution-smoke.mjs",
+    "tests/openai-luna-smoke.mjs",
     "tests/local-tools-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/composer-smoke.mjs",

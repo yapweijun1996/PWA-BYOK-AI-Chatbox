@@ -29,6 +29,24 @@ const history: Message[] = [
 ];
 
 describe("provider-independent JavaScript tool calling", () => {
+  it("uses non-reasoning Chat Completions for OpenAI GPT-6 Luna only when tool definitions are present", () => {
+    const config = { ...defaultSettings.providers.openai, model: "gpt-6-luna" };
+    expect(buildRequest(config, history).body).not.toHaveProperty("reasoning_effort");
+    for (const allowCalls of [true, false]) {
+      expect(buildRequest(config, history, { allowCalls, exchanges: [] }).body).toMatchObject({
+        reasoning_effort: "none",
+        tool_choice: allowCalls ? "auto" : "none",
+        tools: expect.any(Array),
+      });
+    }
+    expect(buildRequest({ ...config, model: "gpt-6-luna-2026-01-01" }, history, { allowCalls: true, exchanges: [] }).body).toHaveProperty("reasoning_effort", "none");
+    for (const other of [
+      { ...config, model: "gpt-6-sol" },
+      { ...config, model: "gpt-6-lunatic" },
+      { ...defaultSettings.providers.openrouter, model: "gpt-6-luna" },
+      { ...defaultSettings.providers.lmstudio, model: "gpt-6-luna" },
+    ]) expect(buildRequest(other, history, { allowCalls: true, exchanges: [] }).body).not.toHaveProperty("reasoning_effort");
+  });
   it("assembles fragmented OpenAI-compatible calls and returns matched tool messages", () => {
     const collector = collectToolRound();
     collector.openAI([

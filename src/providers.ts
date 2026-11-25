@@ -142,6 +142,12 @@ function openaiContent(m: Message): string | object[] {
 export const requestsStreamUsage = (id: ProviderConfig["id"]) =>
   id === "openai" || id === "lmstudio";
 
+// Chat Completions rejects function tools with the model's default reasoning effort.
+export const requiresLunaToolCompatibility = (
+  config: Pick<ProviderConfig, "id" | "model">,
+) =>
+  config.id === "openai" && /^gpt-6-luna(?:-|$)/i.test(config.model.trim());
+
 export function requestHistory(messages: readonly Message[]) {
   const history: Message[] = [];
   for (const message of messages) {
@@ -246,6 +252,9 @@ export function buildRequest(
       ...(config.id === "openrouter" ? { usage: { include: true } } : {}),
       ...(config.id === "openrouter" && config.requestThoughts
         ? { reasoning: { enabled: true } }
+        : {}),
+      ...(tool && requiresLunaToolCompatibility(config)
+        ? { reasoning_effort: "none" }
         : {}),
       ...options,
       messages: [

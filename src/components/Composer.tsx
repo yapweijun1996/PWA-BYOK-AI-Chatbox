@@ -30,6 +30,7 @@ type Props = {
   processingFiles: boolean;
   phase: ReplyPhase;
   blockedReason?: string;
+  compatibilityHint?: string;
   editing: boolean;
   editingCanCancel: boolean;
   onCancelEdit: () => void;
@@ -54,6 +55,7 @@ export function Composer({
   processingFiles,
   phase,
   blockedReason,
+  compatibilityHint,
   editing,
   editingCanCancel,
   onCancelEdit,
@@ -80,6 +82,7 @@ export function Composer({
   const hintId = useId();
   const statusId = useId();
   const attachmentHelpId = useId();
+  const compatibilityHintId = useId();
   const [dismissedDraft, setDismissedDraft] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState(0);
   const commandQuery = /^\/([a-z]*)$/i.exec(draft);
@@ -380,6 +383,11 @@ export function Composer({
                 : t(blockedReason || "")}
           </p>
         )}
+        {compatibilityHint && (
+          <p id={compatibilityHintId} className="composer-status" role="status">
+            {t(compatibilityHint)}
+          </p>
+        )}
         {expanded && notice && (
           <div className="composer-notice">
             <span role="status">{translateNotice(locale, notice)}</span>
@@ -418,6 +426,7 @@ export function Composer({
           aria-describedby={
             [
               enterSends ? hintId : undefined,
+              compatibilityHint ? compatibilityHintId : undefined,
               processingFiles || blockedReason || saving || stopping
                 ? statusId
                 : undefined,

@@ -1,6 +1,7 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning.": "GPT-6 Luna menggunakan tahap penaakulan none apabila alat setempat diaktifkan. Matikan alat untuk menggunakan tetapan penaakulan lalai model.",
   "Future": "Akan datang",
   "Saving changes…": "Menyimpan perubahan…",
   "Opening conversation…": "Membuka perbualan…",

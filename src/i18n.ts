@@ -12,6 +12,7 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning.": "GPT-6 Luna 启用本地工具时会将推理强度设为 none（无）。关闭工具可使用模型默认推理设置。",
   "Future": "未来",
   "Saving changes…": "正在保存更改…",
   "Opening conversation…": "正在打开对话…",

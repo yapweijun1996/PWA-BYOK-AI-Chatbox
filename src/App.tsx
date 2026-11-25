@@ -24,6 +24,7 @@ import { LmStudioAddressEditor } from "./components/LmStudioAddressEditor";
 import { HistorySharingDialog } from "./components/HistorySharingDialog";
 import { MessageActionDialog } from "./components/MessageActionDialog";
 import { canRequestReasoning } from "./model-options";
+import { requiresLunaToolCompatibility } from "./providers";
 import { formatSize } from "./format-size";
 import { downloadBackup } from "./backup";
 import { PreferenceFields } from "./components/Preferences";
@@ -548,6 +549,11 @@ function App({
               processingFiles={processingFiles}
               phase={phase}
               blockedReason={chat ? composerBlocked : undefined}
+              compatibilityHint={
+                chat && javascriptEnabled && requiresLunaToolCompatibility(config)
+                  ? "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off to use the model's default reasoning."
+                  : undefined
+              }
               editing={Boolean(chat?.editState)}
               editingCanCancel={!working && !navigating && !processingFiles && !replySave && !conflicts.has(active)}
               onCancelEdit={() => void cancelEdit()}
