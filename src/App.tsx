@@ -278,9 +278,12 @@ function App({
     <div className="app">
       {(pwa.applying || (pwa.checking && !working && !processingFiles && !navigating)) && (
         <div className="update-overlay" role="status" aria-live="polite">
-          <span className="update-overlay-spinner" aria-hidden="true" />
+          <div className="update-overlay-visual" aria-hidden="true">
+            <span className="update-overlay-spinner" />
+            <span className="update-overlay-mark"><Sparkles size={26} strokeWidth={1.8} /></span>
+          </div>
           <strong>{t(pwa.applying ? "Installing update…" : "Checking for updates…")}</strong>
-          {pwa.applying && <span>{t("Saving your work and restarting Luma Chat…")}</span>}
+          {pwa.applying && <span className="update-overlay-detail">{t("Saving your work and restarting Luma Chat…")}</span>}
         </div>
       )}
       <Sidebar

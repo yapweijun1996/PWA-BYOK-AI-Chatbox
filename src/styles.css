@@ -1408,6 +1408,10 @@ select:focus-visible {
     transition: none !important;
   }
 }
-.update-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: var(--color-surface); color: var(--color-text); text-align: center; font-size: 9pt; }
-.update-overlay-spinner { width: 28px; height: 28px; border: 3px solid var(--color-border); border-top-color: var(--color-text); border-radius: 50%; animation: update-spin 1s linear infinite; }
+.update-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); background: var(--color-surface); color: var(--color-text); text-align: center; }
+.update-overlay-visual { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: 6px; }
+.update-overlay-mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; color: var(--color-accent); background: var(--color-soft); }
+.update-overlay-spinner { position: absolute; inset: 0; border: 3px solid var(--color-soft); border-top-color: var(--color-accent); border-radius: 50%; animation: update-spin 1.2s linear infinite; }
+.update-overlay strong { font-size: 1rem; line-height: 1.4; }
+.update-overlay-detail { max-width: 32rem; color: var(--color-muted); font-size: var(--font-label); line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .update-overlay-spinner { animation: none; } }

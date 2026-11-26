@@ -160,6 +160,14 @@ try {
   updateGate = Promise.withResolvers();
   await check.locator(".update-version").click();
   await toast.getByText("Checking for updates…").waitFor();
+  const overlay = page.locator(".update-overlay");
+  await overlay.getByText("Checking for updates…").waitFor();
+  assert.equal(await overlay.getAttribute("role"), "status");
+  assert.equal(await overlay.locator(".update-overlay-visual").getAttribute("aria-hidden"), "true");
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 320, height: 568 });
+  assert.equal(await overlay.evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+  await page.setViewportSize(viewport);
   assert.equal(await check.getAttribute("data-update-state"), "checking");
   assert.equal(
     await page.locator(".update-state-label").innerText(),
@@ -169,6 +177,7 @@ try {
   assert.equal(await animation(), "update-spin");
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(await animation(), "none");
+  assert.equal(await overlay.locator(".update-overlay-spinner").evaluate((element) => getComputedStyle(element).animationName), "none");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   updateGate.resolve();
   updateGate = undefined;
