@@ -1,9 +1,7 @@
-import { effortFor } from "./reasoning-effort";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -11,8 +9,9 @@ import {
 import { version } from "../package.json";
 import type { SearchMode } from "./components/WorkspaceSearch";
 import { createClearDataAction } from "./workspace-clear";
-import { canRequestReasoning, configureModel } from "./model-options";
-import type { ModelOption } from "./model-options";
+import { useSettingsPersistence } from "./use-settings-persistence";
+import { useModelCatalog } from "./use-model-catalog";
+import { createModelActions } from "./workspace-model-actions";
 import { formatSize } from "./format-size";
 import { readAttachment } from "./attachments";
 import { activePath, asBranchConversation, pathTo } from "./branches";
@@ -29,7 +28,6 @@ import {
   resolveConfig,
 } from "./request-config";
 import type {
-  RequestOverrides,
   ResolvedConfig,
   RequestSnapshot,
 } from "./request-config";
@@ -47,7 +45,6 @@ import type { InitialAppState } from "./startup";
 import {
   applyTheme,
   readSystemDark,
-  rememberTheme,
   resolveTheme,
   subscribeSystemDark,
 } from "./theme";
@@ -56,18 +53,16 @@ import {
 } from "./history-sharing";
 import { createCredentialActions } from "./credential-manager";
 import { useCredentialState } from "./use-credential-state";
-import { listModelOptions } from "./providers";
 import {
   credentialDestination,
   credentialFor,
 } from "./credential-destination";
-import { defaultSettings, id, providerIds as providers } from "./types";
+import { defaultSettings, id } from "./types";
 import type {
   Attachment,
   Conversation,
   Message,
   ProviderId,
-  Settings as AppSettings,
 } from "./types";
 
 import type { WorkspaceView as View } from "./settings-sections";
@@ -154,9 +149,6 @@ export function useWorkspace({
   const [online, setOnline] = useState(() => navigator.onLine);
   const [providerObservation, setProviderObservation] = useState<ProviderObservation>();
   const providerObservationSequence = useRef(0);
-  const [catalogs, setCatalogs] = useState<
-    Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
-  >({});
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
     view === "data" || inspecting,
   );
@@ -226,8 +218,10 @@ export function useWorkspace({
   const systemDark = useSyncExternalStore(subscribeSystemDark, readSystemDark);
   const effectiveTheme = resolveTheme(settings.theme, systemDark);
   useLayoutEffect(() => applyTheme(effectiveTheme), [effectiveTheme]);
-  const settingsWrite = useRef<Promise<void>>(Promise.resolve());
-  const committedSettings = useRef(initial.settings);
+  const { settingsWrite, committedSettings, queuePreferenceWrite, saveSettings } = useSettingsPersistence({
+    initial: initial.settings, session, importing, signal: workspaceSignal, report,
+    forgetLmStudio: () => { remember("lmstudio"); resetProviderForm(); },
+  });
   useEffect(() => {
     const update = () => setSystemLanguage(navigator.language);
     window.addEventListener("languagechange", update);
@@ -275,58 +269,6 @@ export function useWorkspace({
       drawerToggle.current?.focus({ preventScroll: true }),
     );
   };
-  const queuePreferenceWrite = (save: () => Promise<void>) => {
-    const write = settingsWrite.current.then(save);
-    settingsWrite.current = write.catch(report);
-    return write.then(
-      () => true,
-      () => false,
-    );
-  };
-  const saveSettings = async (
-    change:
-      Partial<AppSettings> | ((current: AppSettings) => Partial<AppSettings>),
-  ) => {
-    if (importing.current || workspaceSignal.aborted) return false;
-    const previous = session.get().settings;
-    const next = {
-      ...previous,
-      ...(typeof change === "function" ? change(previous) : change),
-    };
-    if (
-      credentialDestination(previous.providers.lmstudio) !==
-      credentialDestination(next.providers.lmstudio)
-    ) {
-      remember("lmstudio");
-      resetProviderForm();
-    }
-    session.update({ settings: next });
-    const saved = await queuePreferenceWrite(async () => {
-      try {
-        committedSettings.current = await storage.saveSettings(previous, next);
-        rememberTheme(committedSettings.current.theme);
-      } catch (error) {
-        if (error instanceof SettingsConflictError)
-          committedSettings.current = error.current;
-        throw error;
-      }
-    });
-    // A newer optimistic edit may already be queued. Its commit will reconcile
-    // the projection, including unrelated fields learned from the other tab.
-    if (session.get().settings === next) {
-      const committed = committedSettings.current;
-      if (
-        credentialDestination(next.providers.lmstudio) !==
-        credentialDestination(committed.providers.lmstudio)
-      ) {
-        remember("lmstudio");
-        resetProviderForm();
-      }
-      if (JSON.stringify(committed) !== JSON.stringify(next))
-        session.update({ settings: committed });
-    }
-    return saved && !workspaceSignal.aborted;
-  };
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -344,36 +286,7 @@ export function useWorkspace({
       : effective.config;
   const keyInput = inputFor(config);
   const setKeyInput = (value: string) => setInputFor(config, value);
-  const modelGroups = useMemo(
-    () =>
-      providers.map((provider) => {
-        const { model, endpoint } = settings.providers[provider];
-        const catalog = catalogs[provider];
-        const options = catalog?.endpoint === endpoint ? catalog.options : [];
-        return {
-          provider,
-          options:
-            model && !options.some(({ id }) => id === model)
-              ? [{ id: model }, ...options]
-              : options,
-        };
-      }),
-    [catalogs, settings.providers],
-  );
-  const models =
-    modelGroups.find(({ provider }) => provider === config.id)?.options || [];
-  const selectedModel =
-    models.find(({ id }) => id === config.model) ??
-    (config.model ? { id: config.model } : undefined);
-  const reasoningAvailable =
-    Boolean(selectedModel) &&
-    canRequestReasoning(config.id) &&
-    (selectedModel?.reasoning === true ||
-      config.reasoningSupported === true ||
-      config.requestThoughts === true);
-  const reasoningLabel = t(
-    config.id === "gemini" ? "Request thought summaries" : "Request reasoning",
-  );
+  const { catalogs, setCatalogs, modelGroups, models, selectedModel, reasoningAvailable, reasoningLabel } = useModelCatalog(settings, config, t);
   const displayedDraft =
     activeReply?.phase === "saving" && activeReply.draft?.id === active
       ? activeReply.draft
@@ -462,95 +375,11 @@ export function useWorkspace({
       projects: current.projects.filter((project) => project.id !== projectId),
     }));
   };
-  const browseProvider = (provider: ProviderId) => {
-    if (editingProvider !== provider) resetProviderForm();
-    setEditingProvider(provider);
-  };
-  const openProvider = (provider: ProviderId) => {
-    if (workspaceSignal.aborted) return;
-    browseProvider(provider);
-    setDrawer(false);
-    setView("providers");
-  };
-  const openSettings = () => openProvider(effective.config.id);
-  const updateConfig = (patch: Partial<typeof config>) =>
-    saveSettings((current) => ({
-      providers: {
-        ...current.providers,
-        [config.id]: { ...current.providers[config.id], ...patch },
-      },
-    }));
-  const setConversationConfig = (override?: RequestOverrides) => {
-    if (chat && !session.get().navigating)
-      void updateChat(chat.id, (current) => ({
-        ...current,
-        configOverride: override,
-      }));
-  };
-  const toggleConversationConfig = () =>
-    setConversationConfig(
-      chat?.configOverride ? undefined : profileOverride(config),
-    );
-  const selectModel = (provider: ProviderId, option: ModelOption) => {
-    if (view === "chat" && chat?.configOverride) {
-      setConversationConfig(
-        profileOverride(
-          configureModel(
-            provider === config.id ? config : settings.providers[provider],
-            option,
-          ),
-        ),
-      );
-      return;
-    }
-    if (view === "chat" && provider !== settings.provider) resetProviderForm();
-    void saveSettings((current) => ({
-      ...(view === "chat" ? { provider } : {}),
-      providers: {
-        ...current.providers,
-        [provider]: configureModel(current.providers[provider], option),
-      },
-    }));
-  };
-  const loadCatalog = async (provider: ProviderId, keyOverride?: string) => {
-    const target = settings.providers[provider];
-    workspaceSignal.throwIfAborted();
-    const options = await listModelOptions(
-      target,
-      keyOverride || credentialFor(target, secrets[provider]),
-      workspaceSignal,
-    );
-    workspaceSignal.throwIfAborted();
-    setCatalogs((current) => ({
-      ...current,
-      [provider]: { endpoint: target.endpoint, options },
-    }));
-    return options;
-  };
-  const setModelEffort = (value: string) => {
-    const selected = effortFor(config.id, value);
-    const provider = config.id;
-    const model = config.model;
-    if (!model || session.get().reply || session.get().navigating) return;
-    if (chat?.configOverride)
-      setConversationConfig(profileOverride({ ...config, reasoningEffort: selected }));
-    void saveSettings((current) => ({
-      providers: {
-        ...current.providers,
-        [provider]: {
-          ...current.providers[provider],
-          reasoningEfforts: { ...current.providers[provider].reasoningEfforts, [model]: selected },
-          ...(current.providers[provider].model === model ? { reasoningEffort: selected } : {}),
-        },
-      },
-    }));
-  };
-  const setReasoning = (enabled: boolean) => {
-    const patch = { reasoningSupported: true, requestThoughts: enabled };
-    if (view === "chat" && chat?.configOverride)
-      setConversationConfig(profileOverride({ ...config, ...patch }));
-    else void updateConfig(patch);
-  };
+  const { browseProvider, openProvider, openSettings, updateConfig, toggleConversationConfig, selectModel, loadCatalog, setModelEffort, setReasoning, testConnection } = createModelActions({
+    settings, config, effective, view, chat, editingProvider, setEditingProvider, setDrawer, setView,
+    session, signal: workspaceSignal, resetProviderForm, saveSettings, updateChat, secrets, setCatalogs,
+    credentialRevision, providerObservationSequence, setProviderObservation, keyInput, notify: setNotice,
+  });
   const processFiles = async (selected: File[]) => {
     if (
       !selected.length ||
@@ -664,47 +493,6 @@ export function useWorkspace({
     blockedFor, configured, canStartReply, askToShareHistory, followReply, prepareReply,
     beginReply, updateChat, queueSave, finishReply, runReply, setNotice, openProvider,
   });
-  const testConnection = async () => {
-    if (workspaceSignal.aborted) return;
-    const target = settings.providers[config.id];
-    const observation = {
-      id: target.id,
-      endpoint: target.endpoint,
-      model: target.model,
-      credentialRevision: credentialRevision.current,
-    };
-    const usesCurrentCredential =
-      !keyInput || keyInput === credentialFor(target, secrets[target.id]);
-    const observationSequence = usesCurrentCredential
-      ? ++providerObservationSequence.current
-      : undefined;
-    try {
-      setNotice("Connecting…");
-      if (usesCurrentCredential)
-        setProviderObservation({ ...observation, state: "connecting" });
-      const result = await loadCatalog(config.id, keyInput);
-      if (workspaceSignal.aborted) return;
-      if (
-        usesCurrentCredential &&
-        observationSequence === providerObservationSequence.current
-      )
-        setProviderObservation({ ...observation, state: "catalog" });
-      setNotice(
-        result.length
-          ? `Model list loaded (${result.length}). This does not verify your key or chat access. Select one or enter its ID.`
-          : "Model list loaded but no models were listed. This does not verify your key or chat access; enter a model ID manually.",
-      );
-    } catch (e) {
-      if (!workspaceSignal.aborted) {
-        if (
-          usesCurrentCredential &&
-          observationSequence === providerObservationSequence.current
-        )
-          setProviderObservation({ ...observation, state: "failed" });
-        setNotice(errorText(e));
-      }
-    }
-  };
   const { storeKey, deleteKey } = createCredentialActions({
     config, input: keyInput, saveOnDevice: saveKey, signal: workspaceSignal, saveSettings,
     remember, clearInput: () => setKeyInput(""), notify: setNotice,
