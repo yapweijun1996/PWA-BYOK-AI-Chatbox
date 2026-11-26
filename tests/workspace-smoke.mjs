@@ -56,6 +56,16 @@ try {
     document.addEventListener("close", holdClose, true);
   });
   await rename.getByRole("button", { name: "Save changes" }).click();
+  // The renamed row can render before its IndexedDB write settles. Wait for
+  // the sidebar action lock to release, then verify that reopening does not
+  // depend on the queued native dialog close event.
+  await actions("Release notes").waitFor();
+  await page.waitForFunction(() => {
+    const button = Array.from(
+      document.querySelectorAll("#chat-sidebar [data-workspace-anchor]"),
+    ).find((item) => item.getAttribute("aria-label") === "Actions for Release notes");
+    return button && button.getAttribute("aria-disabled") !== "true";
+  });
   await actions("Release notes").press("Enter");
   await menu.waitFor({ timeout: 3000 });
   await page.keyboard.press("Escape");
