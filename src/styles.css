@@ -640,6 +640,12 @@ select:focus-visible {
     calc(var(--chat-inset-start) + var(--message-avatar-size) + var(--message-gap));
 }
 .conversation-empty + .composer-wrap { width: min(800px, 100%); padding-inline: var(--chat-inset-start) var(--chat-inset-end); }
+@media (min-width: 768px) {
+  .conversation:not(.conversation-empty) + .composer-wrap {
+    width: min(var(--chat-layout-width), calc(100% - var(--conversation-gutter, 0px)));
+    transform: translateX(var(--conversation-gutter-shift, 0px));
+  }
+}
 .composer {
   position: relative;
   container-type: inline-size;

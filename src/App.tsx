@@ -217,6 +217,24 @@ function App({
   } = workspace;
   const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat]);
   const focusedSearchSequence = useRef(0);
+  useLayoutEffect(() => {
+    const pane = conversation.current;
+    const main = pane?.parentElement;
+    if (view !== "chat" || !pane || !main) return;
+    const alignComposer = () => {
+      const gutter = pane.offsetWidth - pane.clientWidth;
+      main.style.setProperty("--conversation-gutter", `${gutter}px`);
+      main.style.setProperty("--conversation-gutter-shift", `${pane.clientLeft - gutter / 2}px`);
+    };
+    alignComposer();
+    const observer = new ResizeObserver(alignComposer);
+    observer.observe(pane);
+    return () => {
+      observer.disconnect();
+      main.style.removeProperty("--conversation-gutter");
+      main.style.removeProperty("--conversation-gutter-shift");
+    };
+  }, [view, conversation]);
   useEffect(() => {
     if (!searchMatch) return;
     const timer = window.setTimeout(() => clearSearchMatch(searchMatch.sequence), 5000);

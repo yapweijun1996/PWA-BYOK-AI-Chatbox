@@ -153,6 +153,22 @@ try {
       assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
     }
     assert.ok(Math.abs(composerBounds.x + composerBounds.width - bubbleBounds.x - bubbleBounds.width) <= 1, `${width}: composer and bubble right edges`);
+    const avatarBounds = await page.locator(".message.assistant .avatar").first().boundingBox();
+    assert.ok(Math.abs(avatarBounds.y - bubbleBounds.y) <= 1, `${width}: avatar and assistant bubble top edges`);
+    assert.ok(avatarBounds.x + avatarBounds.width <= bubbleBounds.x, `${width}: avatar must stay outside bubble`);
+    if (!mobile) {
+      // A classic scrollbar or a reserved gutter narrows the scrollport, even
+      // on machines where the default scrollbar floats over the content.
+      for (const gutter of ["stable", "stable both-edges"]) {
+        await page.locator(".conversation").evaluate((element, value) => { element.style.scrollbarGutter = value; }, gutter);
+        await page.waitForFunction(() => {
+          const bubble = document.querySelector(".message.assistant .bubble").getBoundingClientRect();
+          const composer = document.querySelector(".composer").getBoundingClientRect();
+          return Math.abs(composer.left - bubble.left) <= 1 && Math.abs(composer.right - bubble.right) <= 1;
+        }, null, { timeout: 5000 });
+      }
+      await page.locator(".conversation").evaluate((element) => { element.style.scrollbarGutter = ""; });
+    }
     const conversation = page.locator(".conversation");
     assert.ok(
       await conversation.evaluate((el) => el.scrollHeight > el.clientHeight),
