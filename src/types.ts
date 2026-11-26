@@ -31,7 +31,7 @@ export type Message = {
   telemetry?: ResponseTelemetry;
   request?: RequestSnapshot;
   toolExecutions?: ToolExecution[];
-  responsesReplay?: import("./openai-responses").ResponsesReplay;
+  responsesReplay?: import("./responses-types").ResponsesReplay;
 };
 export type Conversation = {
   id: string;

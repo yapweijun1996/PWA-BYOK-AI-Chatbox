@@ -41,7 +41,7 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
     let failureReason: string | undefined;
     let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
     let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
-    const responsesReplay: import("./openai-responses").ResponsesReplay = { exchanges: [], final: [] };
+    const responsesReplay: import("./responses-types").ResponsesReplay = { exchanges: [], final: [] };
     let executions: ToolExecution[] = [];
     let lastCheckpoint = performance.now();
     const publish = (

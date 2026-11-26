@@ -1,7 +1,9 @@
 import { effortFor } from "./reasoning-effort";
 import { responsesHttpHint } from "./responses-errors";
-import { buildResponsesRequest, replay, streamResponsesPrototype } from "./openai-responses";
-import type { OutputItem } from "./openai-responses";
+import { buildResponsesRequest } from "./responses-request";
+import { replay } from "./responses-replay";
+import { streamResponsesPrototype } from "./responses-stream";
+import type { OutputItem } from "./responses-types";
 import type { Message, ProviderConfig } from "./types";
 import { providerBaseUrl } from "./provider-config";
 import { buildRequest } from "./provider-request";

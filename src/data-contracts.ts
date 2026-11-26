@@ -17,7 +17,7 @@ import {
 import { validResponseTelemetry } from "./response-telemetry";
 import { validOverrides, validRequestSnapshot } from "./request-config";
 import { restoreToolExecutions, validToolExecutions } from "./javascript-tool";
-import { validResponsesReplay } from "./openai-responses";
+import { validResponsesReplay } from "./responses-replay";
 import { validBranchConversation } from "./branches";
 
 export function recoverMessage(message: Message): Message {
