@@ -252,7 +252,7 @@ export function WorkspaceSearch({
                         {project && (
                           <small>{highlighted(project.name, query)}</small>
                         )}
-                        <small>{t("Conversation match")}</small>
+                        {query.trim() && <small>{t("Conversation match")}</small>}
                       </span>
                     </button>
                   ) : (
