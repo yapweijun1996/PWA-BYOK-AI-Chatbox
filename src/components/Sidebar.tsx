@@ -256,6 +256,7 @@ export function Sidebar({
           className="icon workspace-more"
           data-workspace-anchor={`chat:${chat.id}`}
           aria-label={interpolate(t("Actions for {name}"), title)}
+          title={interpolate(t("Actions for {name}"), title)}
           aria-haspopup="dialog"
           aria-disabled={Boolean(actionBusy) || undefined}
           aria-expanded={request?.kind === "chat" && request.id === chat.id}
@@ -385,6 +386,7 @@ export function Sidebar({
             <button
               className="icon workspace-more"
               aria-label={t("New project")}
+              title={t("New project")}
               aria-busy={actionBusy === "projects" || undefined}
               aria-disabled={Boolean(actionBusy) || undefined}
               aria-haspopup="dialog"
@@ -435,6 +437,7 @@ export function Sidebar({
                     t("Project actions for {name}"),
                     project.name,
                   )}
+                  title={interpolate(t("Project actions for {name}"), project.name)}
                   aria-haspopup="dialog"
                   data-workspace-anchor={`project:${project.id}`}
                   aria-expanded={
