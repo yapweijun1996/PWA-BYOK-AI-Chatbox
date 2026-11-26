@@ -147,3 +147,7 @@ Set `LMS_LIVE_MODEL` to choose a model; supply `LMS_LIVE_TOKEN` only if the serv
 ## GitHub Pages deployment
 
 GitHub Pages is deployed by `.github/workflows/deploy.yml` on pushes to `main` or manual workflow dispatch. The workflow runs `npm ci`, unit tests, the production build, and browser regression tests before publishing `dist` to the `github-pages` environment. In repository Settings → Pages, set the source to GitHub Actions. The application uses relative asset paths so it works under the repository's Pages subpath. Deployment requires no API keys or repository secrets; users configure their own credentials in the app. Complete the separately required real-service and device checks before pushing a release.
+
+### Release version
+
+Before every push to `main`, increment the semantic version in `package.json` and synchronize the root and package versions in `package-lock.json` (for example with `npm version patch --no-git-tag-version`). The package version is the single source for the top bar, workspace inspector, and service worker update metadata. Commit these files with the change and confirm the GitHub Pages workflow succeeds after the push.

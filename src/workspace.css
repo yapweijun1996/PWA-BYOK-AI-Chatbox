@@ -8,7 +8,7 @@
   padding: max(16px, env(safe-area-inset-top)) 12px
     max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   border-inline-end: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: var(--color-sidebar);
 }
 .sidebar .brand {
   display: flex;
@@ -145,7 +145,7 @@
   margin: 2px 8px 4px;
   font-size: var(--font-caption);
 }
-.recent-group-label { position: sticky; top: 0; z-index: 1; margin: 0; padding: 4px 8px; background: var(--color-bg); color: var(--color-muted); font-size: var(--font-caption); font-weight: 500; }
+.recent-group-label { position: sticky; top: 0; z-index: 1; margin: 0; padding: 4px 8px; background: var(--color-sidebar); color: var(--color-muted); font-size: var(--font-caption); font-weight: 500; }
 .recent-group + .recent-group { margin-top: 4px; }
 .history-name {
   flex: 1;

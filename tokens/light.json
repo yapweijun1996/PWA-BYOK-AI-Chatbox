@@ -1,11 +1,20 @@
 {
   "color": {
-    "scrollbar-thumb": { "$type": "color", "$value": "#777d88" },
-    "scrollbar-thumb-hover": { "$type": "color", "$value": "#555b66" },
-    "scrollbar-track": { "$type": "color", "$value": "#00000000" },
+    "scrollbar-thumb": {
+      "$type": "color",
+      "$value": "#777d88"
+    },
+    "scrollbar-thumb-hover": {
+      "$type": "color",
+      "$value": "#555b66"
+    },
+    "scrollbar-track": {
+      "$type": "color",
+      "$value": "#00000000"
+    },
     "bg": {
       "$type": "color",
-      "$value": "#f7f7f5"
+      "$value": "#ffffff"
     },
     "surface": {
       "$type": "color",
@@ -74,6 +83,14 @@
     "shadow": {
       "$type": "color",
       "$value": "#0000000b"
+    },
+    "sidebar": {
+      "$type": "color",
+      "$value": "#f8f9fb"
+    },
+    "surface-subtle": {
+      "$type": "color",
+      "$value": "#f5f6f8"
     }
   },
   "space": {

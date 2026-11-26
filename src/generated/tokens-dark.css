@@ -20,4 +20,6 @@
   --color-user-text: #e3dfff;
   --color-scrim: rgba(0, 0, 0, 0.6666666666666666);
   --color-shadow: rgba(0, 0, 0, 0.2);
+  --color-sidebar: #17181b;
+  --color-surface-subtle: #17181b;
 }
