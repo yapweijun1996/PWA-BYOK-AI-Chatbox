@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Code2, Copy } from "lucide-react";
+import { CheckCircle2, ChevronDown, Code2, Copy } from "lucide-react";
 import { translate, translateNotice } from "../i18n";
 import type { Locale } from "../i18n";
 import type { ToolExecution } from "../javascript-tool";
@@ -54,6 +54,7 @@ export function ToolExecutionCard({
         <Code2 size={16} aria-hidden="true" />
         <strong>{t(toolLabels[execution.name] ?? execution.name)}</strong>
         <span className="tool-status" role="status" aria-live="polite">
+          {result?.status === "success" && <CheckCircle2 size={13} aria-hidden="true" />}
           {status}
         </span>
         {result && (

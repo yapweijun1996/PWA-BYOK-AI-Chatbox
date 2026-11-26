@@ -157,7 +157,14 @@ try {
   );
   await page.getByText("The local result was 42.", { exact: true }).waitFor();
   assert.equal(await tool.getAttribute("data-status"), "success");
-  await tool.locator("summary").click();
+  assert.equal(await tool.locator(".tool-status").innerText(), "Completed");
+  assert.equal(await tool.locator('.tool-status svg[aria-hidden="true"]').count(), 1);
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 320, height: 700 });
+  assert.equal(await tool.evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+  await tool.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await page.setViewportSize(viewport);
   assert.equal(await tool.getByLabel("JavaScript source").innerText(), source);
   await tool.getByLabel("Console output").waitFor();
   await tool.getByText(/Startup:.*Execution:.*Total:/).waitFor();
