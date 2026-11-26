@@ -33,6 +33,7 @@ jobs:
         run: |
           npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/light.config.json
           npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/dark.config.json
+          npm run colors
           git diff --exit-code -- src/generated
       - name: Build app
         run: npm run build

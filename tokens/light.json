@@ -62,11 +62,11 @@
     },
     "focus": {
       "$type": "color",
-      "$value": "#8b86ff"
+      "$value": "#665ed9"
     },
     "status": {
       "$type": "color",
-      "$value": "#19a35b"
+      "$value": "#08783c"
     },
     "user-bg": {
       "$type": "color",

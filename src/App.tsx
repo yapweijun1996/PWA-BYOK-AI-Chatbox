@@ -46,6 +46,8 @@ import { useWorkspace, settingsSections } from "./use-workspace";
 import type { SlashCommand } from "./slash-commands";
 import "./generated/tokens-light.css";
 import "./generated/tokens-dark.css";
+import "./generated/oklch-light.css";
+import "./generated/oklch-dark.css";
 import "./styles.css";
 import "./workspace.css";
 

@@ -151,3 +151,5 @@ GitHub Pages is deployed by `.github/workflows/deploy.yml` on pushes to `main` o
 ### Release version
 
 Before every push to `main`, increment the semantic version in `package.json` and synchronize the root and package versions in `package-lock.json` (for example with `npm version patch --no-git-tag-version`). The package version is the single source for the top bar, workspace inspector, and service worker update metadata. Commit these files with the change and confirm the GitHub Pages workflow succeeds after the push.
+
+Color tokens are maintained as sRGB values in `tokens/light.json` and `tokens/dark.json`. After changing them, run the Style Dictionary builds followed by `npm run colors`; the latter checks selected WCAG contrast pairs and generates progressive OKLCH overrides with sRGB fallback. The check covers listed token pairs and does not replace component-level accessibility review.

@@ -1,0 +1,18 @@
+/* Generated from tokens/dark.json; sRGB fallbacks are in tokens-dark.css. */
+@supports (color: oklch(50% 0 0)) {
+  :root[data-theme="dark"] {
+    --color-surface: oklch(26.092282% 0.0075863 274.66096);
+    --color-text: oklch(96.743434% 0.00132589 286.3748);
+    --color-muted: oklch(78.361173% 0.00850086 278.59938);
+    --color-border: oklch(35.404099% 0.01213376 279.29151);
+    --color-accent: oklch(76.131067% 0.12765747 285.47837);
+    --color-soft: oklch(32.599909% 0.05087538 287.97003);
+    --color-danger: oklch(82.64304% 0.09670388 26.361063);
+    --color-focus: oklch(76.131067% 0.12765747 285.47837);
+    --color-status: oklch(73.315047% 0.15100448 155.22626);
+    --color-user-bg: oklch(40.000637% 0.06824584 289.65509);
+    --color-user-text: oklch(91.661979% 0.04345989 291.25356);
+    --color-sidebar: oklch(20.92383% 0.0061077 271.11593);
+    --color-surface-subtle: oklch(20.92383% 0.0061077 271.11593);
+  }
+}

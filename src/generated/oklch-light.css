@@ -1,0 +1,22 @@
+/* Generated from tokens/light.json; sRGB fallbacks are in tokens-light.css. */
+@supports (color: oklch(50% 0 0)) {
+  :root {
+    --color-surface: oklch(100% 0 none);
+    --color-text: oklch(24.793626% 0.00584601 271.17642);
+    --color-muted: oklch(50.359706% 0.01812497 269.79029);
+    --color-border: oklch(92.199415% 0.00418711 271.36688);
+    --color-accent: oklch(50.567241% 0.21173617 278.12101);
+    --color-soft: oklch(95.21698% 0.02409068 288.48774);
+    --color-danger: oklch(50.033598% 0.18205118 29.512714);
+    --color-primary: oklch(53.191134% 0.23672676 277.35628);
+    --color-primary-hover: oklch(47.749725% 0.22327788 276.38781);
+    --color-on-primary: oklch(100% 0 none);
+    --color-icon-bg: oklch(54.559242% 0.22673747 278.31482);
+    --color-focus: oklch(55.590761% 0.18225345 281.61143);
+    --color-status: oklch(50.254238% 0.12987282 151.87652);
+    --color-user-bg: oklch(93.941844% 0.03094613 289.7853);
+    --color-user-text: oklch(50.011507% 0.21170685 278.26323);
+    --color-sidebar: oklch(98.192065% 0.00286298 264.54218);
+    --color-surface-subtle: oklch(97.294854% 0.00286959 264.54207);
+  }
+}
