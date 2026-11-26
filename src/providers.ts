@@ -6,17 +6,12 @@ import type { Message, ProviderConfig } from "./types";
 import { providerBaseUrl } from "./provider-config";
 import { buildRequest } from "./provider-request";
 export { buildRequest, requestHistory, requiresLunaToolCompatibility } from "./provider-request";
-import { parseEventStream } from "./event-stream";
+import { consumeProviderStream } from "./provider-stream";
 export { providerBaseUrl, requestsStreamUsage } from "./provider-config";
 export { parseEventStream } from "./event-stream";
 import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
-import { normalizeResponseSample } from "./provider-telemetry";
 import type { ResponseSample } from "./response-telemetry";
-import {
-  collectToolRound,
-  maxToolReplayChars,
-} from "./provider-tools";
 import type { ToolRequest, ToolRound } from "./provider-tools";
 function headers(
   config: ProviderConfig,
@@ -111,65 +106,6 @@ export async function listModels(
 ): Promise<string[]> {
   return (await listModelOptions(config, secret)).map(({ id }) => id);
 }
-// Some local models include their reasoning in leading <think> tags rather than
-// using the structured reasoning field. Tags can be split across SSE chunks.
-function localThinkRouter(
-  onText: (text: string) => void,
-  onReasoning: (text: string) => void,
-) {
-  let mode: "start" | "thinking" | "answer" = "start";
-  let pending = "";
-  const open = "<think>";
-  const close = "</think>";
-  const push = (text: string) => {
-    if (mode === "answer") {
-      onText(text);
-      return;
-    }
-    pending += text;
-    if (mode === "start") {
-      const leading = pending.trimStart();
-      if (
-        leading.length < open.length &&
-        open.startsWith(leading) &&
-        pending.length <= 128
-      )
-        return;
-      if (!leading.startsWith(open)) {
-        mode = "answer";
-        onText(pending);
-        pending = "";
-        return;
-      }
-      pending = leading.slice(open.length);
-      mode = "thinking";
-    }
-    const end = pending.indexOf(close);
-    if (end !== -1) {
-      if (end) onReasoning(pending.slice(0, end));
-      const answer = pending.slice(end + close.length);
-      pending = "";
-      mode = "answer";
-      if (answer) onText(answer);
-      return;
-    }
-    let keep = Math.min(pending.length, close.length - 1);
-    while (keep > 0 && !close.startsWith(pending.slice(-keep))) keep--;
-    const ready = pending.slice(0, pending.length - keep);
-    pending = pending.slice(pending.length - keep);
-    if (ready) onReasoning(ready);
-  };
-  return {
-    push,
-    flush: () => {
-      if (pending) {
-        if (mode === "thinking") onReasoning(pending);
-        else onText(pending);
-        pending = "";
-      }
-    },
-  };
-}
 export async function streamChat(
   config: ProviderConfig,
   secret: string,
@@ -224,158 +160,7 @@ export async function streamChat(
   });
   if (!response.body)
     throw new Error("The provider returned an empty response.");
-  let received = false;
-  let finished = false;
-  let finishError: string | undefined;
-  const collector = tool && collectToolRound();
-  let roundText = "";
-  const anthropicBlocks = new Map<number, number>();
-  const emitText = (text: string) => {
-    if (text) {
-      received = true;
-      if (collector && roundText.length <= maxToolReplayChars)
-        roundText += text.slice(0, maxToolReplayChars + 1 - roundText.length);
-      onText(text);
-    }
-  };
-  const localTags =
-    config.id === "lmstudio"
-      ? localThinkRouter(emitText, onReasoning)
-      : undefined;
-  try {
-    await parseEventStream(
-      response.body,
-      (data, receivedAt) => {
-        let chunk;
-        try {
-          chunk = JSON.parse(data);
-          if (!chunk || typeof chunk !== "object" || Array.isArray(chunk))
-            throw new Error("Invalid stream payload");
-        } catch {
-          throw new Error(
-            "The provider returned invalid streaming data. Partial output was retained.",
-          );
-        }
-        const sample = normalizeResponseSample(config.id, chunk);
-        onSample?.(sample, receivedAt);
-        if (chunk.error)
-          throw new Error("The provider reported an error while generating.");
-        const finishReason = sample.finishReason;
-        if (config.id === "anthropic") {
-          if (
-            chunk.type === "content_block_start" &&
-            chunk.content_block?.type === "text" &&
-            typeof chunk.content_block.text === "string"
-          )
-            emitText(chunk.content_block.text);
-          if (
-            chunk.type === "content_block_start" &&
-            chunk.content_block?.type === "tool_use"
-          ) {
-            const index = anthropicBlocks.size;
-            anthropicBlocks.set(chunk.index, index);
-            collector?.openAI([
-              {
-                index,
-                id: chunk.content_block.id,
-                type: "function",
-                function: { name: chunk.content_block.name },
-              },
-            ]);
-          } else if (chunk.type === "content_block_delta") {
-            if (
-              chunk.delta?.type === "text_delta" &&
-              typeof chunk.delta.text === "string"
-            )
-              emitText(chunk.delta.text);
-            if (
-              chunk.delta?.type === "input_json_delta" &&
-              anthropicBlocks.has(chunk.index)
-            )
-              collector?.openAI([
-                {
-                  index: anthropicBlocks.get(chunk.index),
-                  function: { arguments: chunk.delta.partial_json },
-                },
-              ]);
-            if (
-              chunk.delta?.type === "thinking_delta" &&
-              typeof chunk.delta.thinking === "string"
-            )
-              onReasoning(chunk.delta.thinking);
-          }
-          if (chunk.type === "message_stop") finished = true;
-        } else if (config.id === "gemini") {
-          const parts = chunk.candidates?.[0]?.content?.parts;
-          if (Array.isArray(parts)) {
-            collector?.gemini(parts);
-            for (const part of parts) {
-              if (typeof part?.text !== "string" || !part.text) continue;
-              if (part.thought === true) onReasoning(part.text);
-              else emitText(part.text);
-            }
-          }
-        } else {
-          const delta = chunk.choices?.[0]?.delta;
-          collector?.openAI(
-            delta?.tool_calls,
-            config.id === "openrouter" ? delta?.reasoning_details : undefined,
-          );
-          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
-          if (typeof reasoning === "string" && reasoning) {
-            onReasoning(reasoning);
-          } else if (
-            config.id === "openrouter" &&
-            Array.isArray(delta?.reasoning_details)
-          ) {
-            for (const detail of delta.reasoning_details) {
-              const text =
-                detail?.type === "reasoning.text"
-                  ? detail.text
-                  : detail?.type === "reasoning.summary"
-                    ? detail.summary
-                    : undefined;
-              if (typeof text === "string" && text) onReasoning(text);
-            }
-          }
-          if (typeof delta?.content === "string" && delta.content) {
-            if (localTags) localTags.push(delta.content);
-            else emitText(delta.content);
-          }
-        }
-        // A usage-only event can follow the terminating choice, including on truncation.
-        if (finishReason === "error")
-          finishError =
-            "The provider reported an error while generating. Partial output was retained.";
-        if (
-          finishReason === "length" ||
-          finishReason === "MAX_TOKENS" ||
-          finishReason === "max_tokens"
-        )
-          finishError =
-            "The model reached its output limit. Partial output was retained.";
-        if (finishReason === "content_filter" || finishReason === "SAFETY")
-          finishError =
-            "The provider stopped the response due to its content policy. Partial output was retained.";
-        if (finishReason) finished = true;
-      },
-      () => {
-        finished = true;
-      },
-    );
-  } finally {
-    localTags?.flush();
-  }
-  signal.throwIfAborted();
-  if (finishError) throw new Error(finishError);
-  if (!finished)
-    throw new Error(
-      "The response was interrupted before completion. Partial output was retained.",
-    );
-  const round = collector?.finish(roundText);
-  if (!received && !round)
-    throw new Error(
-      "The provider returned no text. Check model compatibility or safety filters.",
-    );
-  return round;
+  return consumeProviderStream({
+    provider: config.id, stream: response.body, signal, onText, onReasoning, onSample, tool,
+  });
 }
