@@ -1,3 +1,5 @@
+import { parseCsv } from "./csv-parser";
+
 type FileTask = {
   name: string;
   text: string;
@@ -37,40 +39,10 @@ self.onmessage = ({ data }: MessageEvent<FileTask>) => {
         result.keys = Object.keys(value).slice(0, 30);
       }
     } else if (/\.csv$/i.test(name)) {
-      const rows: string[][] = [];
-      let row: string[] = [];
-      let cell = "";
-      let quoted = false;
-      let rowCount = 0;
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        if (quoted) {
-          if (ch === '"' && text[i + 1] === '"') {
-            cell += '"';
-            i++;
-          } else if (ch === '"') quoted = false;
-          else if (cell.length < 500) cell += ch;
-        } else if (ch === '"' && !cell) quoted = true;
-        else if (ch === ",") {
-          if (row.length < 30) row.push(cell);
-          cell = "";
-        } else if (ch === "\n" || ch === "\r") {
-          if (ch === "\r" && text[i + 1] === "\n") i++;
-          if (row.length < 30) row.push(cell);
-          if (rows.length < 4) rows.push(row.slice(0, 30));
-          rowCount++;
-          row = [];
-          cell = "";
-        } else if (cell.length < 500) cell += ch;
-      }
-      if (quoted) throw new Error("CSV has an unclosed quoted field.");
-      if (row.length || cell) {
-        if (row.length < 30) row.push(cell);
-        if (rows.length < 4) rows.push(row);
-        rowCount++;
-      }
-      result.rows = rowCount;
-      result.preview = rows;
+      const rows = parseCsv(text);
+      result.rows = rows.length;
+      result.preview = rows.slice(0, 4).map((row) => row.slice(0, 30).map((cell) => cell.slice(0, 500)));
+      result.previewTruncated = rows.length > 4 || rows.some((row) => row.length > 30 || row.some((cell) => cell.length > 500));
     }
     self.postMessage(result);
   } catch (error) {

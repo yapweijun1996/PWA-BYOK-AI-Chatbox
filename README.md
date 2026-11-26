@@ -97,6 +97,10 @@ Expand `javascript.execute` in a chat bubble to see the code, console, result, a
 
 WASM and its Worker assets are bundled locally and precached when the PWA installs. The runtime works offline after caching; cloud model requests still need connectivity, and LM Studio still requires a reachable local server. `src/js-tool-runtime/` exposes `executeJavaScript({ code }, signal)` without any dependency on chat UI, providers, or IndexedDB.
 
+## Browser-first Agent roadmap
+
+Luma currently supports bounded tool-assisted replies. The planned first release makes CSV analysis available by default when local tools are enabled and an analysis file is selected. The model may call the tool automatically; the first valid call starts a task with run budgets, recoverable progress, and a local result for preview and download. Users can turn tools off in the Composer. See the [Composer and CSV specification](docs/COMPOSER-CSV.md), [architecture](docs/BROWSER-FIRST-AGENT.md), and [implementation checklist](task.md#browser-first-agent-tasks).
+
 ## Data and offline behavior
 
 Conversations, drafts, draft attachments, settings, and any encrypted saved keys are stored in IndexedDB on the current browser/device. Data is not automatically synchronized. Browser storage may be cleared or evicted; export backups regularly. Backups include conversations, attachments, and provider settings but never keys. Import and export use the same 100 MiB limit for the actual UTF-8 JSON file. If the workspace does not fit, download each offered group and import the files one at a time. Each file has complete conversations, attachments, project definitions and portable preferences. If a conversation cannot fit even alone, it is named and excluded, not truncated or deleted.

@@ -1,5 +1,19 @@
 # Luma Chat: engineering review and delivery plan
 
+## Browser-first Agent roadmap
+
+The Agent track builds on the current chat, tool, and IndexedDB behavior. This roadmap describes planned work. The reliability review below records an earlier baseline. See the [product goal](goal.md), [architecture](docs/BROWSER-FIRST-AGENT.md), and [delivery checklist](task.md#browser-first-agent-tasks).
+
+| Phase | Scope | Exit criteria |
+| --- | --- | --- |
+| P0 · Composer tools and runtime | Offer compatible local tools by default. Users can control availability from **+ → Tools**. Create a task on the first valid CSV tool call and reuse the provider adapters, cancellation and chat UI. | Verify saved off preferences survive upgrade, tools are omitted when off, plain replies stay in chat, and a CSV run shows progress and stop reason. [Interaction specification](docs/COMPOSER-CSV.md#composer-交互) |
+| P0 · File scope and recovery | Support selected files and user-authorized directories. Apply the selected permission level to directory operations and add branch-bound checkpoints. CSV analysis keeps its source read-only. | Refresh offers a deliberate resume. Unauthorized files stay out of tools and provider requests. An uncertain external write is never replayed automatically. [File access design](docs/BROWSER-FILE-ACCESS.md) |
+| P0 · CSV input and output | Parse the selected CSV in a Worker, validate columns and records, and render preview and export from a shared monthly summary. | Verify precise totals, explicit row errors, and matching preview and download on desktop and mobile. Release after all P0 slices pass. [CSV specification](docs/COMPOSER-CSV.md#csv-输入) |
+| P1 · Context | Add branch-scoped context summaries and richer usage reporting. Evaluate approval for memory operations separately. | Trace summaries to their source branch and distinguish reported, estimated, and unknown usage. |
+| P2 · Extensions | Evaluate restricted tool extensions and multi-agent runs against concrete user workflows. | Adoption depends on capability scoping, controllable cost, and demonstrable value in the browser. |
+
+## Historical reliability review
+
 **Release recommendation:** ship recovery and credential-safety fixes before expanding model capabilities. Keep ordinary chat independently releasable from the experimental JavaScript tool. This is an engineering backlog, not a list of promised features or dates.
 
 ## Review baseline

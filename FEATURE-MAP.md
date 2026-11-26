@@ -12,7 +12,7 @@ flowchart LR
     P -->|Stream answer, reasoning and usage| W
     W -->|Render| B[Message bubble]
     W -->|Checkpoint and final save| DB
-    W -.->|JS enabled and model requests a tool| Q[Local QuickJS worker]
+    W -.->|Tools enabled and model requests a tool| Q[Local tool dispatcher]
     Q -.->|Bounded result| W
     W -.->|Tool result in a follow-up request| P
 ```
@@ -32,7 +32,7 @@ The browser contacts the provider directly; there is no application server. On t
 | Find a message in a branch | Search returns individual message matches, including hidden branches. Opening a result saves the selected path and focuses the matching message; shared ancestors keep the current path. | [Workspace search](src/components/WorkspaceSearch.tsx) · [Search matching](src/workspace.ts) |
 | Read or copy a reply | Answers and available reasoning are displayed separately. Markdown, tables, math and highlighted code render locally. Copy a whole answer as raw Markdown or copy one code block. External images load only on request. | [Rich messages](src/components/RichMessage.tsx) · [Streaming Markdown and URL rules](src/rich-markdown.ts) · [Copy behavior](src/message-copy.ts) |
 | Understand response speed or cost | Expand a reply footer for the requested/served model, arrival timings, throughput, tokens, cost and finish reason where available. Missing values show `N/A`; estimates are distinguished from provider reports. | [Response inspector](src/components/ResponseInspector.tsx) · [Provider normalization](src/provider-telemetry.ts) · [Metric calculations](src/response-telemetry.ts) |
-| Let a model run a calculation | **JS** opts the next reply into `javascript.execute`. A tool-capable model can request synchronous code in a fresh QuickJS/WASM worker. The card shows code, console output, result and status. Stop cancels execution. | [Tool rounds](src/tool-turn.ts) · [Isolated runtime](src/js-tool-runtime/index.ts) · [Execution card](src/components/ToolExecutionCard.tsx) |
+| Let a model use local tools | **Tools** controls the persisted tool setting, which is enabled by default. Tool-capable models can use time, calculation, attachment analysis, text processing, local memory, and the QuickJS sandbox. Each reply allows up to two tool rounds and four executions. The card shows inputs, results, status, and timings. **Stop generating** cancels the active reply and supported tool execution. | [Tool rounds](src/tool-turn.ts) · [Local tools](src/local-tools.ts) · [Isolated runtime](src/js-tool-runtime/index.ts) · [Execution card](src/components/ToolExecutionCard.tsx) |
 | Inspect what the app is using | The top-bar **Workspace Inspector** has six read-only tabs: Runtime, Context, Configuration, Telemetry, Storage and PWA. Export a sanitized diagnostic summary, not a chat backup. | [Inspector UI](src/components/WorkspaceInspector.tsx) · [Diagnostic export](src/workspace-inspection.ts) · [Session state](src/workspace-state.ts) |
 | Back up or restore conversations | **Settings → Local data** exports JSON with conversations, branches, attachments, projects and preferences, excluding the key vault. Branch backups use version 2; version 1 remains importable. Oversized workspaces offer downloadable groups and name conversations that cannot fit. Import previews conflicts, offers skip or replace, and applies optional preferences in the same transaction as the selected records. This screen also requests persistent storage. Confirming **Clear all local data** invalidates outstanding unlocks and backup reads in this tab; a committed clear resets the key form, session keys and import preview. | [Byte-limited export groups](src/backup.ts) · [Import actions](src/use-workspace.ts) · [IndexedDB commit](src/storage.ts) · [Data contracts](src/data-contracts.ts) |
 | Reopen offline or update | After production assets are cached, saved chats, drafting, math rendering and the local JS runtime work offline. The installed worker serves one build’s HTML and integrity-pinned assets; a failed install leaves that build in place. Cleanup only removes obsolete builds of the same registration. The version button checks for updates without reloading an active reply. | [Service worker](public/sw.js) · [Precache generation](vite.config.ts) · [Update control](src/pwa-update.ts) |
@@ -46,3 +46,17 @@ The browser contacts the provider directly; there is no application server. On t
 - **Offline execution is not an offline model.** Cloud inference still needs connectivity; LM Studio needs a reachable server. Tool results go back to the selected model and can trigger another billable request. A tool-assisted reply's footer describes the latest model request, not the cost of the entire turn.
 
 For the rationale behind proposed storage, backup and offline-update changes, see the [engineering roadmap](ROADMAP.md). They are not listed above as implemented features.
+
+## Planned Agent capabilities
+
+| Capability | Planned change | Status |
+| --- | --- | --- |
+| Multi-step task | With tools enabled, the model may automatically use CSV analysis on a selected, authorized file. A valid tool call starts a task with budgets, stop reasons, and a visible timeline. | P0 plan |
+| Tool permissions | Restrict access to selected files or a user-authorized directory. Directory reads and changes follow the chosen permission level. CSV analysis keeps its input read-only. | P0 plan |
+| File workspace | Select individual files or authorize a directory for reading, creation, modification and deletion where supported. Mobile fallback uses file selection and download. | Proposal |
+| Resume on this device | Store checkpoints by conversation branch, resume by user action, and reuse committed results. | P0 plan |
+| Task output | Preview the generated table and download a new CSV. | P0 plan |
+| Browser network tools | Make direct page retrieval available by default, and offer search when a compatible API is configured. Apply the selected permission mode. | Proposal |
+| Context and usage | Summarize branch context and expand per-round usage reporting. | P1 plan |
+
+See the [Browser-first Agent architecture](docs/BROWSER-FIRST-AGENT.md), [Composer and CSV specification](docs/COMPOSER-CSV.md), and [Agent tasks](task.md#browser-first-agent-tasks).
