@@ -148,7 +148,16 @@ try {
     [4, 9],
   );
   await input.fill("");
-  assert.equal((await input.boundingBox()).height, defaultHeight);
+  await input.evaluate((element, height) => new Promise((resolve, reject) => {
+    const deadline = performance.now() + 5000;
+    const check = () => {
+      if (Math.abs(element.getBoundingClientRect().height - height) < 1) return resolve();
+      if (performance.now() >= deadline) return reject(new Error("Composer did not return to its default height"));
+      requestAnimationFrame(check);
+    };
+    check();
+  }), defaultHeight);
+  assert.ok(Math.abs((await input.boundingBox()).height - defaultHeight) < 1);
   const attach = form.getByRole("button", { name: "Attach image or text" });
   await attach.focus();
   await page.keyboard.press("Tab");
