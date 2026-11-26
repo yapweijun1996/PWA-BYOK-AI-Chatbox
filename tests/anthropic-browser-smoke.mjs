@@ -79,6 +79,12 @@ try {
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   const retryDialog = page.getByRole("dialog", { name: "Retry reply?" });
   await retryDialog.getByText("Anthropic · claude-test").first().waitFor();
+  const currentRadio = retryDialog.getByRole("radio", { name: /Current model/ });
+  const originalRadio = retryDialog.getByRole("radio", { name: /Original model/ });
+  await currentRadio.focus();
+  await page.keyboard.press("ArrowDown");
+  assert.equal(await originalRadio.isChecked(), true);
+  assert.equal(await originalRadio.locator("..").getAttribute("data-selected"), "true");
   await retryDialog
     .getByRole("button", { name: "Cancel", exact: true })
     .click();

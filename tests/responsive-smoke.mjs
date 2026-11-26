@@ -212,6 +212,12 @@ try {
     const retryDialog = page.getByRole("dialog", { name: "Retry reply?" });
     const bounds = await retryDialog.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+    assert.equal(await retryDialog.evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+    assert.equal(await retryDialog.getByRole("radio", { name: /Current model/ }).isChecked(), true);
+    assert.ok(await retryDialog.getByRole("button", { name: "Close", exact: true }).isVisible());
+    if (mobile) for (const action of await retryDialog.locator(".button-row button").all()) {
+      assert.ok((await action.boundingBox()).height >= 44);
+    }
     await page.keyboard.press("Escape");
     await retryDialog.waitFor({ state: "hidden" });
     assert.equal(

@@ -306,6 +306,27 @@
   margin: 0;
   font-size: var(--font-body);
 }
+.retry-dialog { width: 480px; }
+.retry-dialog .workspace-panel { padding: 22px; }
+.retry-dialog .workspace-dialog-heading { justify-content: flex-start; gap: 12px; }
+.retry-dialog .workspace-dialog-heading h2 { flex: 1; min-width: 0; font-size: var(--font-lead); line-height: 1.3; }
+.retry-heading-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: var(--radius-medium); color: var(--color-accent); background: var(--color-soft); }
+.retry-close { flex: none; color: var(--color-muted); }
+.retry-dialog .workspace-panel > p:not(.retry-note) { margin: 12px 0 0; color: var(--color-muted); line-height: 1.5; }
+.retry-dialog .retry-choices { gap: 8px; margin: 20px 0 14px; }
+.retry-dialog .retry-choices legend { margin-bottom: 8px; color: var(--color-text); }
+.retry-dialog .retry-choices label { gap: 12px; min-height: 62px; padding: 11px 12px; border-radius: var(--radius-medium); }
+.retry-dialog .retry-choices label[data-selected="true"] { border-color: var(--color-accent); background: var(--color-soft); }
+.retry-dialog .retry-choices input { flex: none; accent-color: var(--color-accent); }
+.retry-model-icon { flex: none; color: var(--color-muted); }
+.retry-dialog .retry-choices small { line-height: 1.4; }
+.retry-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
+.retry-note svg { flex: none; color: var(--color-accent); margin-top: 1px; }
+.retry-dialog .button-row { justify-content: flex-end; margin: 20px 0 0; }
+@media (max-width: 480px) {
+  .retry-dialog .workspace-panel { padding: 16px; }
+  .retry-dialog .button-row > button { flex: 1 1 0; min-width: 0; min-height: 44px; }
+}
 .workspace-options {
   display: grid;
   gap: 2px;
