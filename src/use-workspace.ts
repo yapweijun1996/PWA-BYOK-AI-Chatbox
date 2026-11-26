@@ -175,7 +175,14 @@ export function useWorkspace({
   };
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
-  const [notice, setNotice] = useState("");
+  const [noticeState, setNoticeState] = useState({ text: "", revision: 0 });
+  const notice = noticeState.text;
+  const setNotice = useCallback((value: React.SetStateAction<string>) => {
+    setNoticeState((previous) => ({
+      text: typeof value === "function" ? value(previous.text) : value,
+      revision: previous.revision + 1,
+    }));
+  }, []);
   const prepareUpdate = useRef<() => Promise<boolean>>(async () => false);
   const pwa = useAppUpdate(setNotice, () => prepareUpdate.current());
   const { checking, check } = pwa;
@@ -1779,6 +1786,7 @@ export function useWorkspace({
     inspecting,
     setInspecting,
     notice,
+    noticeRevision: noticeState.revision,
     setNotice,
     onMessageScroll,
     retry,

@@ -337,8 +337,9 @@ select:focus-visible {
   justify-content: space-between;
   align-items: center;
   gap: var(--space-small);
-  width: min(420px, calc(100% - 2 * var(--space-base)));
-  padding: var(--space-small) var(--space-base);
+  width: max-content;
+  max-width: min(420px, calc(100% - 2 * var(--space-base)));
+  padding: var(--space-small) var(--space-small) var(--space-small) var(--space-base);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
   background: var(--color-surface);
@@ -347,7 +348,12 @@ select:focus-visible {
   overflow-wrap: anywhere;
   pointer-events: none;
 }
+.toast > [role="status"] { display: flex; align-items: flex-start; gap: var(--space-small); min-width: 0; line-height: 1.5; }
+.toast-status-icon { flex: none; color: var(--color-accent); margin-top: 1px; }
+.toast[data-kind="success"] .toast-status-icon { color: var(--color-status); }
 .toast > button {
+  flex: none;
+  color: var(--color-muted);
   pointer-events: auto;
 }
 .toast[data-visible="false"] {
@@ -357,6 +363,7 @@ select:focus-visible {
   border: 0;
   clip-path: inset(50%);
   overflow: hidden;
+  pointer-events: none;
 }
 .conversation {
   overflow-y: auto;

@@ -179,6 +179,14 @@ try {
     "Up to date",
   );
   assert.equal(await check.getAttribute("aria-busy"), "false");
+  const toastBox = await page.locator(".toast").boundingBox();
+  await page.mouse.move(toastBox.x + 10, toastBox.y + 10);
+  await page.waitForTimeout(6500);
+  assert.equal(await toast.textContent(), "Luma Chat is up to date.", "hover keeps confirmation visible");
+  await page.mouse.move(0, 0);
+  await toast.getByText("Luma Chat is up to date.").waitFor({ state: "hidden", timeout: 10000 });
+  await check.click();
+  await toast.getByText("Luma Chat is up to date.").waitFor();
   await button(page, "Dismiss message").click();
   assert.equal(await toast.textContent(), "");
   await context.setOffline(true);

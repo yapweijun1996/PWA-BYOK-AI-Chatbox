@@ -509,6 +509,7 @@ export function Topbar({ workspace }: { workspace: Workspace }) {
       <Toast
         locale={locale}
         message={workspace.notice}
+        revision={workspace.noticeRevision}
         onDismiss={() => workspace.setNotice("")}
       />
       {actions && chat && (
