@@ -409,11 +409,10 @@ function App({
                       data-search-match={searchMatch?.chatId === chat.id && searchMatch.messageId === m.id || undefined}
                       tabIndex={-1}
                     >
-                      <div className="avatar">
-                        {m.role === "user" ? <UserRound size={19} aria-hidden="true" /> : <Sparkles size={19} aria-hidden="true" />}
-                      </div>
+                      {m.role === "user" && <div className="avatar"><UserRound size={19} aria-hidden="true" /></div>}
                       <div className="bubble">
                         <div className="message-meta">
+                          {m.role === "assistant" && <span className="avatar assistant-avatar" aria-hidden="true"><Sparkles size={17} /></span>}
                           <strong>
                             {m.role === "assistant" ? t("Luma Chat") : t("You")}
                           </strong>

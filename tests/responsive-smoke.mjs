@@ -149,13 +149,12 @@ try {
     const bubbleBounds = await page.locator(".message.assistant .bubble").first().boundingBox();
     if (width < 768) {
       assert.ok(Math.abs(composerBounds.x - (width - composerBounds.x - composerBounds.width)) <= 1, `${width}: mobile composer must be centered`);
-    } else {
-      assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
     }
+    assert.ok(Math.abs(composerBounds.x - bubbleBounds.x) <= 1, `${width}: composer and bubble left edges`);
     assert.ok(Math.abs(composerBounds.x + composerBounds.width - bubbleBounds.x - bubbleBounds.width) <= 1, `${width}: composer and bubble right edges`);
     const avatarBounds = await page.locator(".message.assistant .avatar").first().boundingBox();
-    assert.ok(Math.abs(avatarBounds.y - bubbleBounds.y) <= 1, `${width}: avatar and assistant bubble top edges`);
-    assert.ok(avatarBounds.x + avatarBounds.width <= bubbleBounds.x, `${width}: avatar must stay outside bubble`);
+    assert.ok(avatarBounds.x >= bubbleBounds.x && avatarBounds.x + avatarBounds.width <= bubbleBounds.x + bubbleBounds.width, `${width}: assistant avatar must stay inside bubble`);
+    assert.ok(avatarBounds.y >= bubbleBounds.y && avatarBounds.y + avatarBounds.height <= bubbleBounds.y + bubbleBounds.height, `${width}: assistant avatar must stay inside bubble vertically`);
     if (!mobile) {
       // A classic scrollbar or a reserved gutter narrows the scrollport, even
       // on machines where the default scrollbar floats over the content.
@@ -246,6 +245,16 @@ try {
       await retry.evaluate((element) => document.activeElement === element),
       true,
     );
+    await page.getByRole("button", { name: "Expand message editor", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Expanded message editor" });
+    await editor.waitFor();
+    const editorBounds = await editor.boundingBox();
+    const backdropBounds = await page.locator(".composer-backdrop").boundingBox();
+    assert.ok(editorBounds.y >= 0 && editorBounds.y + editorBounds.height <= 801, `${width}: expanded editor must fit vertically`);
+    assert.ok(editorBounds.height >= 750, `${width}: expanded editor must use the viewport`);
+    assert.ok(Math.abs(backdropBounds.x) <= 1 && Math.abs(backdropBounds.y) <= 1 && Math.abs(backdropBounds.width - width) <= 1 && Math.abs(backdropBounds.height - 800) <= 1, `${width}: backdrop must cover viewport`);
+    await page.keyboard.press("Escape");
+    await editor.waitFor({ state: "hidden" });
     await context.close();
   }
   console.log(
