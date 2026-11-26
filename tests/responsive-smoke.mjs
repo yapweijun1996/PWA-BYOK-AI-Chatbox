@@ -195,8 +195,14 @@ try {
         assert.ok(bounds.width >= 44 && bounds.height >= 44, `${width}: ${JSON.stringify(bounds)}`);
       }
     }
-    assert.equal(await page.locator(".message.assistant .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
-    assert.notEqual(await page.locator(".message.user .message-actions").first().evaluate((element) => getComputedStyle(element).justifyContent), "flex-end");
+    assert.ok(await page.locator(".message.assistant .message-actions").first().evaluate((element) => {
+      const last = element.lastElementChild?.getBoundingClientRect();
+      return last && Math.abs(element.getBoundingClientRect().right - last.right) < 2;
+    }), "assistant actions should align to the right");
+    assert.ok(await page.locator(".message.user .message-actions").first().evaluate((element) => {
+      const first = element.firstElementChild?.getBoundingClientRect();
+      return first && Math.abs(element.getBoundingClientRect().left - first.left) < 2;
+    }), "user actions should align to the left");
 
     assert.ok(
       await page
