@@ -186,7 +186,7 @@ try {
     draft: "Unsaved source draft",
   });
   await page.reload();
-  await page.getByText("Hidden needle", { exact: true }).waitFor();
+  await page.getByRole("region", { name: "Conversation" }).getByText("Hidden needle", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Next version" }).click();
   await page.getByText("Follow up", { exact: true }).waitFor();
   await openSearch("shared topic");
@@ -305,7 +305,7 @@ try {
     .getByRole("button", { name: /Target chat.*Hidden needle/ })
     .click();
   await dialog.waitFor({ state: "hidden" });
-  await page.getByText("Hidden needle", { exact: true }).waitFor();
+  await page.getByRole("region", { name: "Conversation" }).getByText("Hidden needle", { exact: true }).waitFor();
 
   await openSearch("archived secret");
   await dialog.getByRole("button", { name: "Archived", exact: true }).click();
@@ -385,7 +385,7 @@ try {
     .locator(".sidebar")
     .getByRole("button", { name: "Target chat", exact: true })
     .click();
-  await page.getByText("Hidden needle", { exact: true }).waitFor();
+  await page.getByRole("region", { name: "Conversation" }).getByText("Hidden needle", { exact: true }).waitFor();
 
   const other = await context.newPage();
   await other.goto(base);
