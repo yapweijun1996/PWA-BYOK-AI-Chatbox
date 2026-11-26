@@ -27,15 +27,15 @@ export function ToolExecutionCard({
   execution: ToolExecution;
   locale: Locale;
 }) {
-  const [copyNotice, setCopyNotice] = useState("");
+  const [copyNotice, setCopyNotice] = useState<{ kind: "code" | "result"; message: string } | null>(null);
   const t = (text: string) => translate(locale, text);
   const result = execution.result;
   const status = result
     ? t(statusLabels[result.status])
     : t(execution.name === "javascript.execute" ? (execution.stage === "starting" ? "Starting JavaScript" : "Running JavaScript") : "Running tool");
-  const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); setCopyNotice(t("Copied.")); }
-    catch { setCopyNotice(t("Copy unavailable.")); }
+  const copy = async (kind: "code" | "result", text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopyNotice({ kind, message: t("Copied.") }); }
+    catch { setCopyNotice({ kind, message: t("Copy unavailable.") }); }
   };
   const advice = result?.error && ({
     timeout: "Reduce the calculation size and try again.",
@@ -53,12 +53,12 @@ export function ToolExecutionCard({
       <summary>
         <Code2 size={16} aria-hidden="true" />
         <strong>{t(toolLabels[execution.name] ?? execution.name)}</strong>
-        <span role="status" aria-live="polite">
+        <span className="tool-status" role="status" aria-live="polite">
           {status}
         </span>
         {result && (
           <span className="tool-time">
-            {new Intl.NumberFormat(locale).format(result.durationMs)} ms
+            {new Intl.NumberFormat(locale).format(result.totalMs ?? result.durationMs)} ms
           </span>
         )}
         <ChevronDown size={15} aria-hidden="true" />
@@ -66,7 +66,7 @@ export function ToolExecutionCard({
       <div className="tool-execution-body">
         {execution.code && (
           <>
-            <div className="tool-heading"><h4>{t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}</h4><button type="button" onClick={() => void copy(execution.code)} aria-label={t("Copy code")} title={t("Copy code")}><Copy size={14} aria-hidden="true" /></button></div>
+            <div className="tool-heading"><h4>{t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}</h4><span className="tool-copy"><span role="status" aria-live="polite">{copyNotice?.kind === "code" ? copyNotice.message : ""}</span><button type="button" onClick={() => void copy("code", execution.code)} aria-label={t("Copy code")} title={t("Copy code")}><Copy size={14} aria-hidden="true" /></button></span></div>
             <pre tabIndex={0} aria-label={t(execution.name === "javascript.execute" ? "JavaScript source" : "Tool input")}>
               <code>{execution.code}</code>
             </pre>
@@ -91,7 +91,7 @@ export function ToolExecutionCard({
         )}
         {result?.status === "success" && (
           <>
-            <div className="tool-heading"><h4>{t("Execution result")}</h4>{result.value && <button type="button" onClick={() => void copy(result.value!.text)} aria-label={t("Copy result")} title={t("Copy result")}><Copy size={14} aria-hidden="true" /></button>}</div>
+            <div className="tool-heading"><h4>{t("Execution result")}</h4>{result.value && <span className="tool-copy"><span role="status" aria-live="polite">{copyNotice?.kind === "result" ? copyNotice.message : ""}</span><button type="button" onClick={() => void copy("result", result.value!.text)} aria-label={t("Copy result")} title={t("Copy result")}><Copy size={14} aria-hidden="true" /></button></span>}</div>
             {result.value ? (
               <pre tabIndex={0} aria-label={t("Execution result")}>
                 <code>{result.value.text}</code>
@@ -104,7 +104,6 @@ export function ToolExecutionCard({
         {result?.truncated && (
           <p className="muted">{t("Execution output was truncated.")}</p>
         )}
-        <span className="tool-copy-status" role="status" aria-live="polite">{copyNotice}</span>
       </div>
     </details>
   );
