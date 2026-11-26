@@ -28,6 +28,7 @@ const final = [
   "![Example chart](https://images.example.invalid/chart.png)",
 ].join("\n");
 const source = first + next + final;
+const userText = "First line\nSecond **bold** line\nThird line\n\nLast paragraph";
 const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -100,8 +101,12 @@ try {
   await page.getByRole("button", { name: "Back to chat" }).click();
   await page
     .getByRole("textbox", { name: "Message", exact: true })
-    .fill("Render a **rich** reply");
+    .fill(userText);
   await page.getByRole("button", { name: "Send message" }).click();
+  const userMessage = page.locator(".message.user").last();
+  await userMessage.locator(".rich-message p br").first().waitFor({ state: "attached" });
+  assert.equal(await userMessage.locator(".rich-message p br").count(), 2);
+  assert.equal(await userMessage.locator(".rich-message strong").innerText(), "bold");
   const reply = page.locator(".message.assistant");
   const pane = page.locator(".conversation");
   const tail = reply.locator(".rich-stream-tail");
@@ -233,9 +238,15 @@ try {
     });
   });
   assert.equal(saved, source);
+  await userMessage.getByRole("button", { name: "Copy", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.testClipboard), userText);
+  await userMessage.getByRole("button", { name: "Edit as new message" }).click();
+  assert.equal(await page.getByRole("textbox", { name: "Message", exact: true }).inputValue(), userText);
+  await page.getByRole("button", { name: "Cancel edit" }).click();
   await page.context().setOffline(true);
   await page.reload();
   await page.locator('html[data-startup="ready"]').waitFor();
+  assert.equal(await userMessage.locator(".rich-message p br").count(), 2);
   await reply.locator(".katex-display").first().waitFor();
   assert.ok(
     await page.evaluate(

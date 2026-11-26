@@ -14,6 +14,7 @@ import { Copy, Image as ImageIcon, WrapText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { createLowlight } from "lowlight";
@@ -84,6 +85,7 @@ const languageNames = new Map(
 );
 const markdownPlugins = [remarkGfm, remarkMath];
 const streamingPlugins = [...markdownPlugins, remarkStreamingTail];
+const userMessagePlugins = [...markdownPlugins, remarkBreaks];
 const htmlPlugins: NonNullable<
   Parameters<typeof ReactMarkdown>[0]["rehypePlugins"]
 > = [
@@ -370,17 +372,19 @@ export const RichMessage = memo(function RichMessage({
   text,
   locale,
   streaming = false,
+  preserveLineBreaks = false,
   onNotice,
 }: {
   text: string;
   locale: Locale;
   streaming?: boolean;
+  preserveLineBreaks?: boolean;
   onNotice?: (text: string) => void;
 }) {
   const deferred = useDeferredValue(text);
   const context = useMemo(() => ({ locale, onNotice }), [locale, onNotice]);
   const shown = streaming ? deferred : text;
-  const plugins = streaming ? streamingPlugins : markdownPlugins;
+  const plugins = streaming ? streamingPlugins : preserveLineBreaks ? userMessagePlugins : markdownPlugins;
   const renderedText = useMemo(() => streaming ? shown : normalizeLatexDelimiters(shown), [shown, streaming]);
   const markdown = useMemo(
     () => (

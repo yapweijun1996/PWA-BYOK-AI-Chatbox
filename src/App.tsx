@@ -428,6 +428,7 @@ function App({
                             <RichMessage
                               text={m.content}
                               locale={locale}
+                              preserveLineBreaks={m.role === "user"}
                               streaming={m.status === "streaming"}
                               onNotice={setNotice}
                             />
