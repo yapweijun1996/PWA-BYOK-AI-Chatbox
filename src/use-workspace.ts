@@ -57,14 +57,14 @@ import {
   portableConversation,
   type HistoryChoice,
 } from "./history-sharing";
-import { decryptDeviceSecret, encryptDeviceSecret } from "./crypto";
+import { createCredentialActions } from "./credential-manager";
+import { useCredentialState } from "./use-credential-state";
 import { listModelOptions } from "./providers";
 import { requestHistory } from "./provider-request";
 import {
   checkedLmStudioAddress,
   credentialDestination,
   credentialFor,
-  type SessionCredential,
 } from "./credential-destination";
 import { defaultSettings, id, providerIds as providers } from "./types";
 import type {
@@ -76,7 +76,6 @@ import type {
 } from "./types";
 
 import type { WorkspaceView as View } from "./settings-sections";
-type Secrets = Partial<Record<ProviderId, SessionCredential>>;
 const imageSupportNotice =
   "This model does not support images in the draft or conversation. Choose an image-capable model or remove draft images.";
 const offlineNotice =
@@ -110,29 +109,16 @@ export function useWorkspace({
   );
   const locale = resolveLanguage(settings.language, systemLanguage);
   const t = (text: string) => translate(locale, text);
-  const [secrets, setSecrets] = useState<Secrets>({});
-  // Device keys can be restored without a password; legacy password vaults remain untouched.
-  useEffect(() => {
-    let cancelled = false;
-    for (const [provider, vault] of Object.entries(settings.vaults)) {
-      if (!vault || vault.version !== 2) continue;
-      const target = settings.providers[provider as ProviderId];
-      const destination = credentialDestination(target);
-      if (!destination || (target.id === "lmstudio" && vault.destination !== destination)) continue;
-      void decryptDeviceSecret(vault).then((value) => {
-        const current = session.get().settings;
-        if (cancelled || workspaceSignal.aborted || current.vaults[target.id]?.data !== vault.data || credentialDestination(current.providers[target.id]) !== destination) return;
-        setSecrets((previous) => previous[target.id] ? previous : { ...previous, [target.id]: { destination, value } });
-      }).catch(() => { if (!cancelled) setNotice("Could not restore the saved key. Enter it again in Providers."); });
-    }
-    return () => { cancelled = true; };
-  }, [settings.vaults, settings.providers, session, workspaceSignal]);
-  const credentialRevision = useRef(0);
-  const previousSecrets = useRef(secrets);
-  if (previousSecrets.current !== secrets) {
-    previousSecrets.current = secrets;
-    credentialRevision.current++;
-  }
+  const [noticeState, setNoticeState] = useState({ text: "", revision: 0 });
+  const notice = noticeState.text;
+  const setNotice = useCallback((value: React.SetStateAction<string>) => {
+    setNoticeState((previous) => ({
+      text: typeof value === "function" ? value(previous.text) : value,
+      revision: previous.revision + 1,
+    }));
+  }, []);
+  const credentials = useCredentialState(settings, session, workspaceSignal, setNotice);
+  const { secrets, credentialInput, credentialRevision, saveKey, setSaveKey, showKey, setShowKey, remember, clearCredentials, resetProviderForm, inputFor, setInputFor } = credentials;
   const [view, setView] = useState<View>("chat");
   const [editingProvider, setEditingProvider] = useState(settings.provider);
   const [historyTarget, setHistoryTarget] = useState<ProviderId>();
@@ -165,14 +151,6 @@ export function useWorkspace({
   };
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
-  const [noticeState, setNoticeState] = useState({ text: "", revision: 0 });
-  const notice = noticeState.text;
-  const setNotice = useCallback((value: React.SetStateAction<string>) => {
-    setNoticeState((previous) => ({
-      text: typeof value === "function" ? value(previous.text) : value,
-      revision: previous.revision + 1,
-    }));
-  }, []);
   const prepareUpdate = useRef<() => Promise<boolean>>(async () => false);
   const pwa = useAppUpdate(setNotice, () => prepareUpdate.current());
   const { checking, check } = pwa;
@@ -184,9 +162,6 @@ export function useWorkspace({
   const [catalogs, setCatalogs] = useState<
     Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
   >({});
-  const [credentialInput, setCredentialInput] = useState<SessionCredential & { provider: ProviderId }>();
-  const [saveKey, setSaveKey] = useState(true);
-  const [showKey, setShowKey] = useState(false);
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
     view === "data" || inspecting,
   );
@@ -335,7 +310,7 @@ export function useWorkspace({
       credentialDestination(previous.providers.lmstudio) !==
       credentialDestination(next.providers.lmstudio)
     ) {
-      setSecrets((current) => ({ ...current, lmstudio: undefined }));
+      remember("lmstudio");
       resetProviderForm();
     }
     session.update({ settings: next });
@@ -357,7 +332,7 @@ export function useWorkspace({
         credentialDestination(next.providers.lmstudio) !==
         credentialDestination(committed.providers.lmstudio)
       ) {
-        setSecrets((current) => ({ ...current, lmstudio: undefined }));
+        remember("lmstudio");
         resetProviderForm();
       }
       if (JSON.stringify(committed) !== JSON.stringify(next))
@@ -380,11 +355,8 @@ export function useWorkspace({
     view === "providers"
       ? settings.providers[editingProvider]
       : effective.config;
-  const keyInput = credentialInput?.provider === config.id ? credentialFor(config, credentialInput) : "";
-  const setKeyInput = (value: string) => {
-    const destination = credentialDestination(config);
-    setCredentialInput(value && destination ? { destination, value, provider: config.id } : undefined);
-  };
+  const keyInput = inputFor(config);
+  const setKeyInput = (value: string) => setInputFor(config, value);
   const modelGroups = useMemo(
     () =>
       providers.map((provider) => {
@@ -502,11 +474,6 @@ export function useWorkspace({
     return saveSettings((current) => ({
       projects: current.projects.filter((project) => project.id !== projectId),
     }));
-  };
-  const resetProviderForm = () => {
-    setCredentialInput(undefined);
-    setSaveKey(true);
-    setShowKey(false);
   };
   const browseProvider = (provider: ProviderId) => {
     if (editingProvider !== provider) resetProviderForm();
@@ -919,52 +886,10 @@ export function useWorkspace({
       }
     }
   };
-  const storeKey = async () => {
-    if (workspaceSignal.aborted) return;
-    if (!keyInput) {
-      setNotice("Enter a key or token first.");
-      return;
-    }
-    try {
-      const destination = credentialDestination(config);
-      if (!destination)
-        throw new Error(
-          "Enter a valid server address before using a credential.",
-        );
-      if (saveKey) {
-        const cipher = await encryptDeviceSecret(keyInput);
-        if (workspaceSignal.aborted) return;
-        if (config.id === "lmstudio") cipher.destination = destination;
-        const saved = await saveSettings((current) => ({
-          vaults: { ...current.vaults, [config.id]: cipher },
-        }));
-        if (!saved || workspaceSignal.aborted) return;
-      }
-      setSecrets((previous) => ({
-        ...previous,
-        [config.id]: { destination, value: keyInput },
-      }));
-      setKeyInput("");
-      setNotice(
-        saveKey
-          ? "Key saved on this device."
-          : "Key available for this session only.",
-      );
-    } catch (e) {
-      if (!workspaceSignal.aborted) setNotice(errorText(e));
-    }
-  };
-  const deleteKey = async () => {
-    const saved = await saveSettings((current) => {
-      const vaults = { ...current.vaults };
-      delete vaults[config.id];
-      return { vaults };
-    });
-    if (!saved || workspaceSignal.aborted) return;
-    setSecrets((previous) => ({ ...previous, [config.id]: undefined }));
-    setKeyInput("");
-    setNotice("Saved key removed and session locked.");
-  };
+  const { storeKey, deleteKey } = createCredentialActions({
+    config, input: keyInput, saveOnDevice: saveKey, signal: workspaceSignal, saveSettings,
+    remember, clearInput: () => setKeyInput(""), notify: setNotice,
+  });
   const usage =
     originStorage.usage !== undefined
       ? `${formatSize(originStorage.usage)} used${originStorage.quota === undefined ? "" : ` of approximately ${formatSize(originStorage.quota)}`}`
@@ -1127,7 +1052,7 @@ export function useWorkspace({
         credentialDestination(previous.providers.lmstudio) !==
         credentialDestination(nextSettings.providers.lmstudio)
       ) {
-        setSecrets((current) => ({ ...current, lmstudio: undefined }));
+        remember("lmstudio");
         resetProviderForm();
       }
       session.update({
@@ -1200,7 +1125,7 @@ export function useWorkspace({
         conflicts: new Set(),
       });
       resetProviderForm();
-      setSecrets({});
+      clearCredentials();
       setProviderObservation(undefined);
       setEditingProvider(defaultSettings.provider);
       setCatalogs({});
