@@ -10,7 +10,6 @@ import {
 } from "react";
 import { version } from "../package.json";
 import type { SearchMode } from "./components/WorkspaceSearch";
-import { mergeProjects, mostRecentVisible } from "./workspace";
 import { clearSidebarPreferences } from "./sidebar-preferences";
 import { canRequestReasoning, configureModel } from "./model-options";
 import type { ModelOption } from "./model-options";
@@ -38,8 +37,10 @@ import { useWorkspaceSession, selectActiveChat } from "./workspace-state";
 import { useConversationPersistence } from "./use-conversation-persistence";
 import { createConversationActions } from "./workspace-conversations";
 import { useConversationScroll } from "./use-conversation-scroll";
+import { useBackupState } from "./use-backup-state";
+import { createBackupActions, backupImportDestination } from "./backup-actions";
 import { resolveLanguage, translate } from "./i18n";
-import { ConversationConflictError, ImportConflictError, storage } from "./storage";
+import { ConversationConflictError, storage } from "./storage";
 import { SettingsConflictError } from "./settings-edit";
 import type { InitialAppState } from "./startup";
 import {
@@ -49,12 +50,9 @@ import {
   resolveTheme,
   subscribeSystemDark,
 } from "./theme";
-import { mergeSettings, recoverMessage, type Backup } from "./data-contracts";
-import { downloadBackup, planBackupExport, readBackupFile, type ExportPlan } from "./backup";
 import {
   cloudRecipient,
   needsHistoryChoice,
-  portableConversation,
   type HistoryChoice,
 } from "./history-sharing";
 import { createCredentialActions } from "./credential-manager";
@@ -62,7 +60,6 @@ import { useCredentialState } from "./use-credential-state";
 import { listModelOptions } from "./providers";
 import { requestHistory } from "./provider-request";
 import {
-  checkedLmStudioAddress,
   credentialDestination,
   credentialFor,
 } from "./credential-destination";
@@ -165,16 +162,8 @@ export function useWorkspace({
   const { info: originStorage, refresh: refreshStorage } = useOriginStorage(
     view === "data" || inspecting,
   );
-  const [exportPlan, setExportPlan] = useState<ExportPlan | null>(null);
-  // Keep the chosen snapshot downloadable even if a reply is still streaming.
-  useEffect(() => setExportPlan(null), [view]);
-  const [importPreview, setImportPreview] = useState<(Backup & {
-    existing: Map<string, Conversation>; previousSettings: AppSettings;
-  }) | null>(null);
-  const [importPreferences, setImportPreferences] = useState(false);
-  const importing = useRef(false);
-  const fileSelection = useRef(0);
-  const importInput = useRef<HTMLInputElement>(null);
+  const backup = useBackupState(view);
+  const { exportPlan, importPreview, importPreferences, setImportPreferences, importing, importInput, resetBackup } = backup;
   const report = useCallback(
     (error: unknown) => {
       if (error instanceof ConversationConflictError) {
@@ -913,169 +902,10 @@ export function useWorkspace({
       ...Object.values(secrets).map((credential) => credential?.value ?? ""),
       credentialInput?.value ?? "",
     ]);
-  const exportData = () => {
-    setExportPlan(null);
-    try {
-      const current = session.get();
-      const plan = planBackupExport(current.threads, current.settings);
-      if (plan.groups.length === 1 && !plan.tooLarge.length)
-        downloadBackup(plan.groups[0].blob, "luma-chat-backup.json");
-      else setExportPlan(plan);
-      if (plan.omittedServerAddress)
-        setNotice(
-          "Backup excludes an invalid LM Studio server address. Set a valid address in AI providers.",
-        );
-    } catch (error) {
-      setNotice(errorText(error));
-    }
-  };
-  const importFile = async (file?: File) => {
-    if (!file || importing.current || workspaceSignal.aborted) return;
-    const selection = ++fileSelection.current;
-    setImportPreview(null);
-    setImportPreferences(false);
-    if (importInput.current) importInput.current.value = "";
-    try {
-      const value = await readBackupFile(file, undefined, workspaceSignal);
-      if (workspaceSignal.aborted || selection !== fileSelection.current)
-        return;
-      const address = value.settings?.providers?.lmstudio?.endpoint;
-      if (address !== undefined && !checkedLmStudioAddress(address))
-        setNotice(
-          "Invalid LM Studio address in backup. Import will keep the current server address.",
-        );
-      const ids = new Set(value.conversations.map(({ id }) => id));
-      const current = session.get();
-      const existing = new Map(
-        current.threads.filter((c) => ids.has(c.id)).map((c) => [c.id, c]),
-      );
-      setImportPreview({
-        ...value,
-        existing,
-        previousSettings: current.settings,
-      });
-    } catch (e) {
-      if (!workspaceSignal.aborted && selection === fileSelection.current)
-        setNotice(errorText(e));
-    }
-  };
-  const finishImport = async (overwrite: boolean) => {
-    const current = session.get();
-    if (
-      !importPreview ||
-      workspaceSignal.aborted ||
-      current.reply ||
-      current.processingFiles ||
-      current.navigating
-    )
-      return;
-    const preview = importPreview;
-    setNotice("Importing backup…");
-    importing.current = true;
-    session.update({ navigating: true });
-    try {
-      const selected = preview.conversations.filter(
-        (chat) => overwrite || !preview.existing.has(chat.id),
-      );
-      // Do not manufacture writes to flush an import. A buffered/failed draft
-      // is still the user's work, not a durable record we can safely replace.
-      if (selected.some(({ id }) => draftTimers.current.has(id))) {
-        setNotice(
-          "A local edit is still saving. Try the import again after it is saved.",
-        );
-        return;
-      }
-      await Promise.all([
-        settingsWrite.current,
-        ...selected.map(({ id }) => writes.current[id]),
-      ]);
-      const latest = session.get();
-      if (selected.some(({ id }) => latest.replySaves.has(id))) {
-        setNotice(
-          "Save the local reply before replacing its conversation, or skip conflicts.",
-        );
-        return;
-      }
-      const byId = new Map(latest.threads.map((c) => [c.id, c]));
-      const records = selected.map((chat) => {
-        const previous = preview.existing.get(chat.id);
-        if (byId.get(chat.id) !== previous || latest.conflicts.has(chat.id))
-          throw new ImportConflictError();
-        return {
-          previous,
-          next: {
-            ...portableConversation(chat),
-            messages: chat.messages.map(recoverMessage),
-          },
-        };
-      });
-      const previous = latest.settings;
-      const projects = mergeProjects(previous.projects, preview.projects ?? []);
-      const applyPreferences =
-        importPreferences && preview.settings !== undefined;
-      const changeSettings =
-        applyPreferences || projects.length !== previous.projects.length;
-      if (changeSettings && preview.previousSettings !== previous)
-        throw new ImportConflictError();
-      const nextSettings = applyPreferences
-        ? mergeSettings(
-            {
-              ...previous,
-              ...preview.settings,
-              projects,
-              vaults: previous.vaults,
-            },
-            previous.providers.lmstudio.endpoint,
-          )
-        : changeSettings
-          ? { ...previous, projects }
-          : previous;
-      const ids = new Set(records.map(({ next }) => next.id));
-      const nextThreads = [
-        ...records.map(({ next }) => next),
-        ...latest.threads.filter((c) => !ids.has(c.id)),
-      ];
-      const nextActive =
-        !latest.active ||
-        records.some(({ next }) => next.id === latest.active && next.archived)
-          ? mostRecentVisible(nextThreads)
-          : latest.active;
-      await storage.importBackup({
-        records,
-        settings: changeSettings ? { previous, next: nextSettings } : undefined,
-        active:
-          nextActive !== latest.active
-            ? { previous: latest.active, next: nextActive }
-            : undefined,
-      });
-      if (
-        credentialDestination(previous.providers.lmstudio) !==
-        credentialDestination(nextSettings.providers.lmstudio)
-      ) {
-        remember("lmstudio");
-        resetProviderForm();
-      }
-      session.update({
-        threads: nextThreads,
-        active: nextActive,
-        settings: nextSettings,
-      });
-      committedSettings.current = nextSettings;
-      if (changeSettings) rememberTheme(nextSettings.theme);
-      setImportPreview(null);
-      setExportPlan(null);
-      setNotice(`Imported ${records.length} conversations.`);
-    } catch (error) {
-      setNotice(
-        error instanceof ImportConflictError
-          ? "Local data changed since preview. Nothing was imported. Save your work, reload and preview again."
-          : "Import failed. Nothing was imported; your existing data and saved keys are unchanged.",
-      );
-    } finally {
-      importing.current = false;
-      session.update({ navigating: false });
-    }
-  };
+  const { exportData, importFile, finishImport } = createBackupActions({
+    session, backup, persistence, signal: workspaceSignal, settingsWrite, committedSettings,
+    remember, resetProviderForm, notify: setNotice,
+  });
   const clearData = async () => {
     const current = session.get();
     if (
@@ -1129,10 +959,7 @@ export function useWorkspace({
       setProviderObservation(undefined);
       setEditingProvider(defaultSettings.provider);
       setCatalogs({});
-      setImportPreview(null);
-      setImportPreferences(false);
-      if (importInput.current) importInput.current.value = "";
-      setExportPlan(null);
+      resetBackup();
       finishHistoryChoice("cancel");
       setSearchMode(null);
       setInspecting(false);
@@ -1313,20 +1140,8 @@ export function useWorkspace({
     setImportPreferences,
     importPreview,
     finishImport,
-    importDestination:
-      importPreview?.settings &&
-      (() => {
-        const next = mergeSettings(
-          { ...settings, ...importPreview.settings },
-          settings.providers.lmstudio.endpoint,
-        ).providers.lmstudio;
-        const destination = credentialDestination(next);
-        return destination !==
-          credentialDestination(settings.providers.lmstudio)
-          ? (destination ?? t("Invalid server address"))
-          : undefined;
-      })(),
-    discardImport: () => setImportPreview(null),
+    importDestination: backupImportDestination(settings, importPreview, t),
+    discardImport: () => backup.setImportPreview(null),
     clearData,
     preferences,
     effective,
