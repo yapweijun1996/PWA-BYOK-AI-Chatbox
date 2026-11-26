@@ -18,9 +18,8 @@ import { chatTitleLimit, projectNameLimit } from "../workspace";
 export type WorkspaceRequest =
   | { kind: "chat" | "project"; id: string; anchor: HTMLButtonElement }
   | { kind: "create"; anchor: HTMLButtonElement };
-export type ChatOrganization = Partial<
-  Pick<Conversation, "title" | "projectId" | "archived" | "pinned">
->;
+export type { ChatOrganization } from "../workspace";
+import type { ChatOrganization } from "../workspace";
 
 type Props = {
   request: WorkspaceRequest;

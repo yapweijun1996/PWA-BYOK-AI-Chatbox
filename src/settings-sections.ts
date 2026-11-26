@@ -3,3 +3,5 @@ export const settingsSections = [
   ["appearance", "Appearance"],
   ["data", "Local data"],
 ] as const;
+
+export type WorkspaceView = "chat" | (typeof settingsSections)[number][0];

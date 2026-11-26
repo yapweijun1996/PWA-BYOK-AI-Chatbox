@@ -176,3 +176,5 @@ export function mostRecentVisible(
   }
   return latest?.id ?? "";
 }
+
+export type ChatOrganization = Partial<Pick<Conversation, "title" | "projectId" | "archived" | "pinned">>;
