@@ -10,12 +10,12 @@ import {
 } from "react";
 import { version } from "../package.json";
 import type { SearchMode } from "./components/WorkspaceSearch";
-import { clearSidebarPreferences } from "./sidebar-preferences";
+import { createClearDataAction } from "./workspace-clear";
 import { canRequestReasoning, configureModel } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { formatSize } from "./format-size";
 import { readAttachment } from "./attachments";
-import { activePath, activateBranch, asBranchConversation, pathTo, removeBranch, selectBranch } from "./branches";
+import { activePath, asBranchConversation, pathTo } from "./branches";
 import { copyConversationSelection } from "./message-copy";
 import type { PreferenceProps } from "./components/Preferences";
 import type { ReplyPhase } from "./components/Composer";
@@ -36,6 +36,7 @@ import type {
 import { useWorkspaceSession, selectActiveChat } from "./workspace-state";
 import { useConversationPersistence } from "./use-conversation-persistence";
 import { createConversationActions } from "./workspace-conversations";
+import { createMessageActions } from "./workspace-message-actions";
 import { useConversationScroll } from "./use-conversation-scroll";
 import { useBackupState } from "./use-backup-state";
 import { createBackupActions, backupImportDestination } from "./backup-actions";
@@ -51,14 +52,11 @@ import {
   subscribeSystemDark,
 } from "./theme";
 import {
-  cloudRecipient,
-  needsHistoryChoice,
   type HistoryChoice,
 } from "./history-sharing";
 import { createCredentialActions } from "./credential-manager";
 import { useCredentialState } from "./use-credential-state";
 import { listModelOptions } from "./providers";
-import { requestHistory } from "./provider-request";
 import {
   credentialDestination,
   credentialFor,
@@ -661,179 +659,11 @@ export function useWorkspace({
     }
     return true;
   };
-  const send = async () => {
-    if (!canStartReply(chat)) return;
-    if (!chat) {
-      setNotice("Start a new chat first.");
-      return;
-    }
-    if (!chat.draft.trim() && !files.length) return;
-    if (!isConfigured) {
-      setNotice(
-        "Choose a model and enter your key in Providers. LM Studio does not require a key unless authentication is enabled.",
-      );
-      openProvider(effective.config.id);
-      return;
-    }
-    if (sendBlocked) {
-      setNotice(sendBlocked);
-      return;
-    }
-    if (needsHistoryChoice(chat, effective.config.id, draftHistory) &&
-      !(await askToShareHistory(chat, effective.config))) return;
-    followReply.current = true;
-    const tree = asBranchConversation(chat);
-    const source = chat.editState && tree.messages.find((message) => message.id === chat.editState?.sourceId);
-    if (chat.editState && !source) { setNotice("The edited message is no longer available."); return; }
-    const parentId = source ? source.parentId ?? null : tree.activeMessageId;
-    const user: Message = {
-      id: id(),
-      parentId,
-      role: "user",
-      content: chat.draft,
-      attachments: files,
-      createdAt: Date.now(),
-      status: "complete",
-    };
-    const history = [...pathTo(tree, parentId), user];
-    const prepared = prepareReply(effective, history);
-    const reply = prepared.message;
-    reply.parentId = user.id;
-    const chatId = chat.id;
-    const nextTitle =
-      chat.title === "New chat"
-        ? chat.draft.trim().slice(0, 60) || files[0]?.name || "New chat"
-        : chat.title;
-    const abort = beginReply(chatId, prepared.request, chat);
-    const saved = await updateChat(chatId, (c) => activateBranch({
-      ...c,
-      branchVersion: 1,
-      preferredBranches: tree.preferredBranches,
-      activeMessageId: reply.id,
-      title: nextTitle,
-      cloudHistoryRecipient: cloudRecipient(prepared.target.id),
-      cloudHistoryKnownIds: prepared.target.id === "lmstudio" ? undefined : [...new Set([...(chat.cloudHistoryRecipient === prepared.target.id ? chat.cloudHistoryKnownIds ?? [] : []), ...requestHistory(history).map((message) => message.id), reply.id])],
-      draft: "",
-      draftAttachments: [],
-      editState: undefined,
-      updatedAt: Date.now(),
-      messages: [...tree.messages, user, reply],
-    }, reply.id));
-    if (!saved) {
-      updateChat(chatId, (c) => ({
-        ...c,
-        title: c.title === nextTitle ? chat.title : c.title,
-        cloudHistoryRecipient: chat.cloudHistoryRecipient,
-        cloudHistoryKnownIds: chat.cloudHistoryKnownIds,
-        draft: c.draft ? `${user.content}\n${c.draft}` : user.content,
-        draftAttachments: [
-          ...(user.attachments || []),
-          ...(c.draftAttachments || []),
-        ],
-        editState: chat.editState,
-        messages: chat.messages,
-        branchVersion: chat.branchVersion,
-        activeMessageId: chat.activeMessageId,
-        preferredBranches: chat.preferredBranches,
-      }));
-      finishReply(abort);
-      if (session.get().conflicts.has(chatId)) return;
-      setNotice(
-        "Message was not sent because local storage failed. Your draft and attachments are still visible.",
-      );
-      return;
-    }
-    await runReply(chatId, history, prepared, abort);
-  };
-  const retry = async (original?: RequestSnapshot, messageId?: string) => {
-    if (!chat || !canStartReply(chat)) return;
-    if (chat.editState) { setNotice("Finish or cancel editing before changing branches."); return; }
-    const tree = asBranchConversation(chat);
-    const targetMessage = tree.messages.find((message) => message.id === (messageId ?? tree.activeMessageId));
-    if (!targetMessage || targetMessage.role !== "assistant" || targetMessage.status === "streaming") return;
-    const history = pathTo(tree, targetMessage.parentId);
-    const resolved = original
-      ? resolveConfig(
-          settings,
-          chat.configOverride,
-          profileOverride({ ...original, id: original.provider }),
-        )
-      : effective;
-    const blocked = blockedFor(resolved.config, history);
-    if (blocked) {
-      setNotice(blocked);
-      return;
-    }
-    if (!configured(resolved.config)) {
-      setNotice("Set up a model and provider credentials before sending.");
-      openProvider(resolved.config.id);
-      return;
-    }
-    if (needsHistoryChoice(chat, resolved.config.id, history) &&
-      !(await askToShareHistory(chat, resolved.config))) return;
-    const prepared = prepareReply(resolved, history);
-    const reply = prepared.message;
-    reply.parentId = targetMessage.parentId ?? null;
-    const abort = beginReply(chat.id, prepared.request, null);
-    const saved = await updateChat(chat.id, (c) => activateBranch({
-      ...c,
-      branchVersion: 1,
-      preferredBranches: tree.preferredBranches,
-      activeMessageId: reply.id,
-      messages: [...tree.messages, reply],
-      cloudHistoryRecipient: cloudRecipient(prepared.target.id),
-      cloudHistoryKnownIds: prepared.target.id === "lmstudio" ? undefined : [...new Set([...(chat.cloudHistoryRecipient === prepared.target.id ? chat.cloudHistoryKnownIds ?? [] : []), ...requestHistory(history).map((message) => message.id), reply.id])],
-      updatedAt: Date.now(),
-    }, reply.id));
-    if (!saved) {
-      updateChat(chat.id, (c) => ({
-        ...c,
-        messages: chat.messages,
-        branchVersion: chat.branchVersion,
-        activeMessageId: chat.activeMessageId,
-        preferredBranches: chat.preferredBranches,
-        cloudHistoryRecipient: chat.cloudHistoryRecipient,
-        cloudHistoryKnownIds: chat.cloudHistoryKnownIds,
-      }));
-      finishReply(abort);
-      if (session.get().conflicts.has(chat.id)) return;
-      setNotice(
-        "Retry was not sent because local storage failed. The conversation remains visible.",
-      );
-      return;
-    }
-    await runReply(chat.id, history, prepared, abort);
-  };
-  const editMessage = async (message: Message) => {
-    if (!chat || message.role !== "user" || !canStartReply(chat)) return;
-    const saved = await updateChat(chat.id, (current) => ({
-      ...current,
-      draft: message.content,
-      draftAttachments: [...(message.attachments || [])],
-      editState: { sourceId: message.id, originalDraft: current.editState?.originalDraft ?? current.draft, originalAttachments: current.editState?.originalAttachments ?? [...(current.draftAttachments || [])] },
-    }));
-    if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
-  };
-  const cancelEdit = async () => {
-    if (!chat?.editState || !canStartReply(chat)) return;
-    const snapshot = chat.editState;
-    const saved = await updateChat(chat.id, (current) => ({ ...current, draft: snapshot.originalDraft, draftAttachments: snapshot.originalAttachments, editState: undefined }));
-    if (saved) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
-  };
-  const changeBranch = async (messageId: string, deleting = false) => {
-    if (!chat || !canStartReply(chat)) return;
-    if (chat.editState) { setNotice("Finish or cancel editing before changing branches."); return; }
-    if (!chat.messages.some((message) => message.id === messageId)) return;
-    session.update({ navigating: true });
-    try {
-      const selected = deleting ? removeBranch(chat, messageId) : selectBranch(chat, messageId);
-      // Keep the old branch visible until the selection/deletion is durable.
-      if (await queueSave(selected)) {
-        followReply.current = true;
-        session.update((current) => ({ threads: current.threads.map((item) => item.id === chat.id ? selected : item) }));
-      }
-    } finally { session.update({ navigating: false }); }
-  };
+  const { send, retry, editMessage, cancelEdit, changeBranch } = createMessageActions({
+    session, chat, settings, files, effective, draftHistory, isConfigured, sendBlocked,
+    blockedFor, configured, canStartReply, askToShareHistory, followReply, prepareReply,
+    beginReply, updateChat, queueSave, finishReply, runReply, setNotice, openProvider,
+  });
   const testConnection = async () => {
     if (workspaceSignal.aborted) return;
     const target = settings.providers[config.id];
@@ -906,54 +736,10 @@ export function useWorkspace({
     session, backup, persistence, signal: workspaceSignal, settingsWrite, committedSettings,
     remember, resetProviderForm, notify: setNotice,
   });
-  const clearData = async () => {
-    const current = session.get();
-    if (
-      current.reply ||
-      current.processingFiles ||
-      current.navigating ||
-      workspaceSignal.aborted ||
-      !confirm(
-        [
-          t(
-            "Permanently delete all local chats, attachments, memories, settings, and saved keys?",
-          ),
-          t(
-            "Other open tabs keep their in-memory drafts and keys. Close them to end those sessions.",
-          ),
-        ].join("\n\n"),
-      )
-    )
-      return;
-    // Stop new credential/import work before the first await, not after the
-    // delete commits. Already queued writes must settle before the final clear.
-    lifetime.abort();
-    session.update({ navigating: true });
-    setNotice("Clearing local data…");
-    try {
-      try {
-        flushDrafts();
-        await Promise.all([
-          ...Object.values(writes.current),
-          settingsWrite.current,
-        ]);
-        await storage.clear();
-      } catch {
-        setNotice(
-          "Could not clear local data. Nothing was deleted. Try again.",
-        );
-        return;
-      }
-      // Only publish the empty workspace once both stores have committed.
-      committedSettings.current = defaultSettings;
-      writes.current = Object.create(null);
-      session.update({
-        threads: [],
-        active: "",
-        settings: defaultSettings,
-        replySaves: new Map(),
-        conflicts: new Set(),
-      });
+  const clearData = createClearDataAction({
+    session, lifetime, persistence, settingsWrite, committedSettings, refreshStorage, notify: setNotice, t,
+    resetLifetime: () => setLifetime(new AbortController()),
+    resetVisibleState: () => {
       resetProviderForm();
       clearCredentials();
       setProviderObservation(undefined);
@@ -964,16 +750,8 @@ export function useWorkspace({
       setSearchMode(null);
       setInspecting(false);
       setDrawer(false);
-      rememberTheme(defaultSettings.theme);
-      clearSidebarPreferences();
-      refreshStorage();
-      setNotice("Local data cleared.");
-    } finally {
-      // New actions get a fresh lifetime even when IndexedDB aborted the clear.
-      setLifetime(new AbortController());
-      session.update({ navigating: false });
-    }
-  };
+    },
+  });
   const toggleSidebar = () =>
     void saveSettings((current) => ({
       sidebarCollapsed: !current.sidebarCollapsed,
