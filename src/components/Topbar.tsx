@@ -26,7 +26,14 @@ import type { WorkspaceRequest } from "./WorkspaceActions";
 import { storage } from "../storage";
 import type { useWorkspace } from "../use-workspace";
 
-type Workspace = ReturnType<typeof useWorkspace>;
+type Workspace = Pick<ReturnType<typeof useWorkspace>,
+  "t" | "locale" | "settings" | "chat" | "view" | "check" | "checking" |
+  "config" | "create" | "deleteProject" | "desktop" | "drawerToggle" |
+  "mobileDrawer" | "navigating" | "notice" | "noticeRevision" | "online" |
+  "openSettings" | "organizeChat" | "processingFiles" | "providerStatus" | "pwa" |
+  "remove" | "saveProject" | "saveSettings" | "setDrawer" | "setInspecting" |
+  "setNotice" | "setSearchMode" | "setView" | "toggleSidebar" | "updateLabel" | "working"
+>;
 const updateMessages = {
   idle: "Update check idle",
   checking: "Checking for updates…",

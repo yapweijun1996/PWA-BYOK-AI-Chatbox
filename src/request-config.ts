@@ -1,6 +1,6 @@
 import { effortFor, validEffort } from "./reasoning-effort";
 import type { ReasoningEffort } from "./reasoning-effort";
-import { providerBaseUrl, requestsStreamUsage } from "./providers";
+import { providerBaseUrl, requestsStreamUsage } from "./provider-config";
 import { asRecord } from "./response-telemetry";
 import { defaultSettings, providerIds } from "./types";
 import type { ProviderConfig, ProviderId, Settings } from "./types";

@@ -5,7 +5,7 @@ import {
   failure,
 } from "./js-tool-runtime/protocol";
 import type { ExecutionResult } from "./js-tool-runtime";
-import { localToolNames } from "./local-tools";
+import { localToolNames } from "./tool-definitions";
 
 export const javascriptToolName = "javascript.execute";
 // Function names on provider APIs cannot reliably contain a dot.

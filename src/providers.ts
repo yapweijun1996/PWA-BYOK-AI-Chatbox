@@ -2,39 +2,22 @@ import { effortFor } from "./reasoning-effort";
 import { responsesHttpHint } from "./responses-errors";
 import { buildResponsesRequest, replay, streamResponsesPrototype } from "./openai-responses";
 import type { OutputItem } from "./openai-responses";
-import type { Attachment, Message, ProviderConfig } from "./types";
-import { defaultSettings } from "./types";
+import type { Message, ProviderConfig } from "./types";
+import { providerBaseUrl } from "./provider-config";
+import { buildRequest } from "./provider-request";
+export { buildRequest, requestHistory, requiresLunaToolCompatibility } from "./provider-request";
+import { parseEventStream } from "./event-stream";
+export { providerBaseUrl, requestsStreamUsage } from "./provider-config";
+export { parseEventStream } from "./event-stream";
 import { parseModelOptions } from "./model-options";
 import type { ModelOption } from "./model-options";
 import { normalizeResponseSample } from "./provider-telemetry";
 import type { ResponseSample } from "./response-telemetry";
 import {
   collectToolRound,
-  anthropicToolFields,
-  geminiToolFields,
   maxToolReplayChars,
-  openAIToolFields,
 } from "./provider-tools";
 import type { ToolRequest, ToolRound } from "./provider-tools";
-export function providerBaseUrl(config: ProviderConfig): string {
-  const endpoint =
-    config.id === "lmstudio"
-      ? config.endpoint
-      : defaultSettings.providers[config.id].endpoint;
-  const url = new URL(endpoint);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    /[?#]/.test(url.href) // Also reject empty query/fragment delimiters.
-  )
-    throw new Error(
-      "Enter a valid HTTP(S) endpoint without credentials, query, or fragment.",
-    );
-  if (config.id !== "lmstudio" && url.protocol !== "https:")
-    throw new Error("Cloud providers require HTTPS.");
-  return url.toString().replace(/\/$/, "");
-}
 function headers(
   config: ProviderConfig,
   secret: string,
@@ -128,200 +111,6 @@ export async function listModels(
 ): Promise<string[]> {
   return (await listModelOptions(config, secret)).map(({ id }) => id);
 }
-function textAttachment(a: Attachment): string {
-  return `\n\nFile: ${a.name}\n${a.data}`;
-}
-function openaiContent(m: Message): string | object[] {
-  const attachments = m.attachments || [];
-  const text =
-    m.content +
-    attachments
-      .filter((a) => a.mime.startsWith("text/"))
-      .map(textAttachment)
-      .join("");
-  const images = attachments.filter((a) => a.mime.startsWith("image/"));
-  return images.length
-    ? [
-        { type: "text", text },
-        ...images.map((a) => ({
-          type: "image_url",
-          image_url: { url: a.data },
-        })),
-      ]
-    : text;
-}
-export const requestsStreamUsage = (id: ProviderConfig["id"]) =>
-  id === "openai" || id === "lmstudio";
-
-// Chat Completions rejects function tools with the model's default reasoning effort.
-export const requiresLunaToolCompatibility = (
-  config: Pick<ProviderConfig, "id" | "model" | "openaiApi">,
-) =>
-  config.id === "openai" && config.openaiApi !== "responses" && /^gpt-6-luna(?:-|$)/i.test(config.model.trim());
-
-export function requestHistory(messages: readonly Message[]) {
-  const history: Message[] = [];
-  for (const message of messages) {
-    if (message.role !== "user" && message.status !== "complete") continue;
-    if (message.role === "assistant" && history.at(-1)?.role === "assistant")
-      history[history.length - 1] = message;
-    else history.push(message);
-  }
-  return history;
-}
-
-export function buildRequest(
-  config: ProviderConfig,
-  messages: Message[],
-  tool?: ToolRequest,
-): { path: string; body: object } {
-  const completed = requestHistory(messages);
-  if (config.id === "anthropic") {
-    const { options, tail } = anthropicToolFields(tool);
-    return {
-      path: "/messages",
-      body: {
-        model: config.model,
-        max_tokens: 4096,
-        ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { output_config: { effort: effortFor(config.id, config.reasoningEffort) } } : {}),
-        stream: true,
-        ...options,
-        messages: [
-          ...completed.map((message) => ({
-            role: message.role,
-            content: [
-              {
-                type: "text",
-                text:
-                  message.content +
-                  (message.attachments || [])
-                    .filter((a) => a.mime.startsWith("text/"))
-                    .map(textAttachment)
-                    .join(""),
-              },
-              ...(message.attachments || [])
-                .filter((a) => a.mime.startsWith("image/"))
-                .map((a) => ({
-                  type: "image",
-                  source: {
-                    type: "base64",
-                    media_type: a.mime,
-                    data: a.data.split(",")[1],
-                  },
-                })),
-            ].filter((part) => !("text" in part) || part.text),
-          })),
-          ...tail,
-        ],
-      },
-    };
-  }
-  if (config.id === "gemini") {
-    const { options, tail } = geminiToolFields(tool);
-    return {
-      path: `/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`,
-      body: {
-        ...(config.requestThoughts || effortFor(config.id, config.reasoningEffort) !== "default"
-          ? { generationConfig: { thinkingConfig: { ...(config.requestThoughts ? { includeThoughts: true } : {}), ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { thinkingLevel: effortFor(config.id, config.reasoningEffort).toUpperCase() } : {}) } } }
-          : {}),
-        ...options,
-        contents: [
-          ...completed.map((m) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [
-              {
-                text:
-                  m.content +
-                  (m.attachments || [])
-                    .filter((a) => a.mime.startsWith("text/"))
-                    .map(textAttachment)
-                    .join(""),
-              },
-              ...(m.attachments || [])
-                .filter((a) => a.mime.startsWith("image/"))
-                .map((a) => ({
-                  inline_data: {
-                    mime_type: a.mime,
-                    data: a.data.split(",")[1],
-                  },
-                })),
-            ],
-          })),
-          ...tail,
-        ],
-      },
-    };
-  }
-  const { options, tail } = openAIToolFields(tool, config.id === "openrouter");
-  return {
-    path: "/chat/completions",
-    body: {
-      model: config.model,
-      stream: true,
-      ...(requestsStreamUsage(config.id)
-        ? { stream_options: { include_usage: true } }
-        : {}),
-      ...(config.id === "openrouter" ? { usage: { include: true } } : {}),
-      ...(config.id === "openrouter" && (config.requestThoughts || effortFor(config.id, config.reasoningEffort) !== "default")
-        ? { reasoning: { ...(config.requestThoughts ? { enabled: true } : {}), ...(effortFor(config.id, config.reasoningEffort) !== "default" ? { effort: effortFor(config.id, config.reasoningEffort) } : {}) } }
-        : {}),
-      ...(tool && requiresLunaToolCompatibility(config)
-        ? { reasoning_effort: "none" }
-        : config.id !== "openrouter" && effortFor(config.id, config.reasoningEffort) !== "default"
-          ? { reasoning_effort: effortFor(config.id, config.reasoningEffort) } : {}),
-      ...options,
-      messages: [
-        ...completed.map((m) => ({
-          role: m.role,
-          content: openaiContent(m),
-        })),
-        ...tail,
-      ],
-    },
-  };
-}
-export async function parseEventStream(
-  stream: ReadableStream<Uint8Array>,
-  onData: (data: string, receivedAt: number) => void,
-  onDone: () => void = () => {},
-): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let receivedAt = performance.now();
-  const consume = (block: string) => {
-    const data = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).replace(/^ /, ""))
-      .join("\n");
-    if (data === "[DONE]") onDone();
-    else if (data) onData(data, receivedAt);
-  };
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      // Events in one read have the same observable arrival time.
-      if (!done) receivedAt = performance.now();
-      buffer += decoder.decode(value, { stream: !done });
-      let match: RegExpExecArray | null;
-      while ((match = /\r?\n\r?\n/.exec(buffer))) {
-        consume(buffer.slice(0, match.index));
-        buffer = buffer.slice(match.index + match[0].length);
-      }
-      if (done) {
-        if (buffer.trim()) consume(buffer);
-        break;
-      }
-    }
-  } catch (error) {
-    void reader.cancel().catch(() => {});
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 // Some local models include their reasoning in leading <think> tags rather than
 // using the structured reasoning field. Tags can be split across SSE chunks.
 function localThinkRouter(

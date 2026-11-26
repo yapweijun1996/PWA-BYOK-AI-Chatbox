@@ -7,7 +7,7 @@ import {
 import type { ToolCall } from "./javascript-tool";
 import type { ExecutionResult } from "./js-tool-runtime";
 import { executionLimits } from "./js-tool-runtime/protocol";
-import { localToolDefinitions } from "./local-tools";
+import { localToolDefinitions } from "./tool-definitions";
 
 const maxArguments = executionLimits.sourceChars * 6 + 256;
 export const maxToolReplayChars = 96 * 1024;

@@ -29,6 +29,8 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Check module dependencies
+        run: npm run test:architecture
       - name: Verify design tokens
         run: |
           npx --yes --package style-dictionary@5.5.3 style-dictionary build --config tokens/light.config.json

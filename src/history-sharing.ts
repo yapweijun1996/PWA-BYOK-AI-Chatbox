@@ -1,4 +1,4 @@
-import { requestHistory } from "./providers";
+import { requestHistory } from "./provider-request";
 import { activePath } from "./branches";
 import type { Message } from "./types";
 import type { Conversation, ProviderId } from "./types";

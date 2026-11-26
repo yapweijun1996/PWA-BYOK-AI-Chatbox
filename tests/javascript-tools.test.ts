@@ -225,6 +225,16 @@ describe("provider-independent JavaScript tool calling", () => {
     ).rejects.toThrow(/aborted/);
   });
 
+  it("rejects unregistered tool names, including object prototype keys", async () => {
+    const collector = collectToolRound();
+    collector.openAI([{ index: 0, id: "call1", function: { name: "toString", arguments: "{}" } }]);
+    const round = collector.finish("")!;
+    let calls = 0;
+    let failure: string | undefined;
+    await runToolTurn(async () => calls++ === 0 ? round : undefined, true, new AbortController().signal, () => {}, [], (exchange) => { failure = exchange.results[0]?.error?.code; });
+    expect(failure).toBe("unsupported");
+  });
+
   it("validates persisted records, recovers interrupted runs, and excludes their code and results from later requests", () => {
     const record = {
       id: "test",

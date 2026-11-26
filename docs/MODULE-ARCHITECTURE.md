@@ -1,0 +1,14 @@
+# Module boundaries
+
+Luma Chat is a browser-first application. Keep persisted formats, provider transcripts, and active-branch isolation compatible when moving code across these boundaries.
+
+- `App.tsx` composes the workspace. `components/MessageList.tsx` and `components/SettingsView.tsx` own the corresponding views; message and reasoning styles live in `message-list.css` and `reasoning.css`.
+- `workspace-session.ts` owns the in-memory workspace snapshot. `workspace-state.ts` connects it to React. `use-conversation-persistence.ts` serializes conversation writes and tracks drafts; the workspace coordinator remains responsible for navigation, conflicts and user-facing decisions.
+- `reply-runner.ts` owns an in-flight reply's streaming, tool continuation, checkpoints and finalization. Its dependencies are explicit; the coordinator supplies the current session, persistence and provider observation functions.
+- `provider-config.ts`, `event-stream.ts` and `provider-request.ts` contain endpoint policy, SSE parsing and request adapters. `providers.ts` owns transport and response streaming; the Responses API remains a separate implementation in `openai-responses.ts`. Existing `providers.ts` re-exports are kept for compatibility.
+- `tool-definitions.ts` contains side-effect-free local tool descriptions. `tool-turn.ts` defines the executor interface and registry and keeps round and call budgets. `local-tools.ts` and `javascript-tool.ts` implement execution; the latter delegates to the isolated Worker runtime.
+- `data-contracts.ts` validates persisted and imported data, `storage.ts` owns IndexedDB transactions, and `branches.ts` owns branch operations. These boundaries must not gain runtime imports that create cycles.
+
+Run `npm run test:architecture` to reject static runtime import cycles. Type-only imports do not create runtime edges. Dynamic imports and non-module side effects still require review. CI also runs the unit, browser, design-token and build checks.
+
+The workspace coordinator, provider stream decoding, and settings view are still sizable. Continue splitting by behavior and contract, with regression tests around reply finalization, cross-tab conflicts, credentials, history consent and updates; do not create duplicate persistence queues or change user data as part of a structural move.

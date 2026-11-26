@@ -22,7 +22,8 @@ import { copyConversationSelection } from "./message-copy";
 import type { PreferenceProps } from "./components/Preferences";
 import type { ReplyPhase } from "./components/Composer";
 import { safeDiagnosticLabel, useOriginStorage } from "./workspace-inspection";
-import { createResponseTracker, responseIdentity } from "./response-telemetry";
+import { responseIdentity } from "./response-telemetry";
+import { createReplyRunner, type ProviderObservation } from "./reply-runner";
 import { useAppUpdate } from "./pwa-update";
 import {
   captureRequest,
@@ -35,6 +36,7 @@ import type {
   RequestSnapshot,
 } from "./request-config";
 import { useWorkspaceSession, selectActiveChat } from "./workspace-state";
+import { useConversationPersistence } from "./use-conversation-persistence";
 import { resolveLanguage, translate } from "./i18n";
 import { ConversationConflictError, ImportConflictError, storage } from "./storage";
 import { SettingsConflictError } from "./settings-edit";
@@ -48,16 +50,15 @@ import {
 } from "./theme";
 import { mergeSettings, recoverMessage, type Backup } from "./data-contracts";
 import { downloadBackup, planBackupExport, readBackupFile, type ExportPlan } from "./backup";
-import { runToolTurn } from "./tool-turn";
 import {
   cloudRecipient,
   needsHistoryChoice,
   portableConversation,
   type HistoryChoice,
 } from "./history-sharing";
-import type { ToolExecution } from "./javascript-tool";
 import { decryptDeviceSecret, encryptDeviceSecret } from "./crypto";
-import { listModelOptions, requestHistory, streamChat } from "./providers";
+import { listModelOptions } from "./providers";
+import { requestHistory } from "./provider-request";
 import {
   checkedLmStudioAddress,
   credentialDestination,
@@ -73,11 +74,7 @@ import type {
   Settings as AppSettings,
 } from "./types";
 
-export const settingsSections = [
-  ["providers", "AI providers"],
-  ["appearance", "Appearance"],
-  ["data", "Local data"],
-] as const;
+import { settingsSections } from "./settings-sections";
 type View = "chat" | (typeof settingsSections)[number][0];
 type Secrets = Partial<Record<ProviderId, SessionCredential>>;
 const emptyChat = (): Conversation => ({
@@ -189,13 +186,7 @@ export function useWorkspace({
   const updateLabel = `${t("Check for updates")} · v${version}`;
   const working = activeReply !== null;
   const [online, setOnline] = useState(() => navigator.onLine);
-  const [providerObservation, setProviderObservation] = useState<{
-    id: ProviderId;
-    endpoint: string;
-    model: string;
-    credentialRevision: number;
-    state: "connecting" | "succeeded" | "catalog" | "failed";
-  }>();
+  const [providerObservation, setProviderObservation] = useState<ProviderObservation>();
   const providerObservationSequence = useRef(0);
   const [catalogs, setCatalogs] = useState<
     Partial<Record<ProviderId, { endpoint: string; options: ModelOption[] }>>
@@ -215,8 +206,6 @@ export function useWorkspace({
   const [importPreferences, setImportPreferences] = useState(false);
   const importing = useRef(false);
   const fileSelection = useRef(0);
-  const draftTimers = useRef(new Map<string, number>());
-  const writes = useRef<Partial<Record<string, Promise<boolean>>>>(Object.create(null));
   const messagesContent = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
   const lastScrollTop = useRef(0);
@@ -249,54 +238,7 @@ export function useWorkspace({
     },
     [session],
   );
-  const queueSave = useCallback(
-    (chat: Conversation, nextActive?: string) => {
-      const timer = draftTimers.current.get(chat.id);
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-        draftTimers.current.delete(chat.id);
-      }
-      const tracked = session.get().replySaves.get(chat.id)?.message;
-      // An older streaming checkpoint cannot acknowledge the terminal message.
-      const final =
-        tracked && chat.messages.includes(tracked) ? tracked : undefined;
-      if (final)
-        session.setReplySave(chat.id, { message: final, status: "pending" });
-      const previous = writes.current[chat.id] || Promise.resolve();
-      const write: Promise<boolean> = previous
-        .then(() => {
-          if (session.get().conflicts.has(chat.id))
-            throw new ConversationConflictError(chat.id);
-          return storage.saveConversation(chat, nextActive);
-        })
-        .then(
-          () => {
-            if (
-              final &&
-              session.get().replySaves.get(chat.id)?.message === final
-            )
-              session.setReplySave(chat.id);
-            return true;
-          },
-          (error) => {
-            if (
-              final &&
-              writes.current[chat.id] === write &&
-              session.get().replySaves.get(chat.id)?.message === final
-            )
-              session.setReplySave(chat.id, {
-                message: final,
-                status: "failed",
-              });
-            report(error);
-            return false;
-          },
-        );
-      writes.current[chat.id] = write;
-      return write;
-    },
-    [report, session],
-  );
+  const { draftTimers, writes, queueSave, updateChat, flushDraft, flushDrafts } = useConversationPersistence(session, report);
   const retryLocalSave = async (message: Message) => {
     const current = session.get();
     const target = selectActiveChat(current);
@@ -310,33 +252,6 @@ export function useWorkspace({
         previous === notice && previous.startsWith("Storage error:") ? "" : previous,
       );
   };
-  const updateChat = useCallback(
-    (chatId: string, fn: (c: Conversation) => Conversation, persist = true) => {
-      let changed: Conversation | undefined;
-      const next = session.get().threads.map((c) => {
-        if (c.id !== chatId) return c;
-        changed = fn(c);
-        return changed;
-      });
-      if (changed) session.update({ threads: next });
-      return changed && persist ? queueSave(changed) : Promise.resolve(Boolean(changed));
-    },
-    [queueSave, session],
-  );
-  const flushDraft = useCallback(
-    (chatId: string) => {
-      const timer = draftTimers.current.get(chatId);
-      if (timer === undefined) return;
-      window.clearTimeout(timer);
-      draftTimers.current.delete(chatId);
-      const latest = session.get().threads.find((chat) => chat.id === chatId);
-      return latest && queueSave(latest);
-    },
-    [queueSave, session],
-  );
-  const flushDrafts = useCallback(() => {
-    for (const chatId of draftTimers.current.keys()) flushDraft(chatId);
-  }, [flushDraft]);
   prepareUpdate.current = async () => {
     const current = session.get();
     if (current.reply || current.processingFiles || current.navigating || current.conflicts.size || [...current.replySaves.values()].some((save) => save.status === "failed")) return false;
@@ -963,161 +878,7 @@ export function useWorkspace({
       credentialRevision: credentialRevision.current,
     };
   };
-  const runReply = async (
-    chatId: string,
-    history: Message[],
-    prepared: ReturnType<typeof prepareReply>,
-    abort: AbortController,
-  ) => {
-    const current = session.get().reply;
-    if (current?.controller !== abort) return;
-    session.update({ reply: { ...current, phase: "streaming", draft: null } });
-    setNotice("");
-    let content = "";
-    let reasoning = "";
-    let failureReason: string | undefined;
-    let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
-    let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
-    const responsesReplay: import("./openai-responses").ResponsesReplay = { exchanges: [], final: [] };
-    let executions: ToolExecution[] = [];
-    let lastCheckpoint = performance.now();
-    const publish = (
-      status: NonNullable<Message["status"]>,
-      persist: boolean,
-    ) => {
-      if (!isCurrentReply(abort)) return;
-      if (status === "streaming" && session.get().reply?.phase === "finalizing") return;
-      const message: Message = {
-        ...prepared.message,
-        content,
-        reasoning,
-        status,
-        ...(status === "error" && failureReason ? { error: failureReason } : {}),
-        telemetry: roundTelemetry ?? tracker.snapshot(),
-        ...(executions.length ? { toolExecutions: executions } : {}),
-        ...(prepared.target.id === "openai" && prepared.target.openaiApi === "responses" && status === "complete" ? { responsesReplay } : {}),
-      };
-      if (status !== "streaming")
-        session.setReplySave(chatId, { message, status: "pending" });
-      return updateChat(
-        chatId,
-        (c) => ({
-          ...c,
-          ...(status === "complete" ? { updatedAt: Date.now() } : {}),
-          messages: c.messages.map((m) => m.id === message.id ? message : m),
-        }),
-        persist,
-      );
-    };
-    const publishStream = () => {
-      const now = performance.now();
-      const checkpoint = now - lastCheckpoint >= 500;
-      if (checkpoint) lastCheckpoint = now;
-      publish("streaming", checkpoint);
-    };
-    const timer = window.setInterval(() => {
-      if (!abort.signal.aborted) publish("streaming", false);
-    }, 500);
-    let terminal: "complete" | "interrupted" | "error";
-    try {
-      await runToolTurn(
-        async (tool) => {
-          tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
-          roundTelemetry = undefined;
-          let firstText = true;
-          let firstReasoning = true;
-          const observation = {
-            id: prepared.target.id,
-            endpoint: prepared.target.endpoint,
-            model: prepared.target.model,
-            credentialRevision: prepared.credentialRevision,
-          };
-          const observationSequence = ++providerObservationSequence.current;
-          setProviderObservation({ ...observation, state: "connecting" });
-          let round: Awaited<ReturnType<typeof streamChat>>;
-          try {
-            round = await streamChat(
-              prepared.target,
-              prepared.secret,
-              history,
-              abort.signal,
-              (text) => {
-                if (!isCurrentReply(abort) || abort.signal.aborted) return;
-                tracker.visible(text);
-                if (firstText && content) content += "\n\n";
-                firstText = false;
-                content += text;
-                publishStream();
-              },
-              (text) => {
-                if (!isCurrentReply(abort) || abort.signal.aborted) return;
-                if (firstReasoning && reasoning) reasoning += "\n\n";
-                firstReasoning = false;
-                reasoning += text;
-                publishStream();
-              },
-              (sample, receivedAt) => {
-                if (
-                  isCurrentReply(abort) &&
-                  !abort.signal.aborted &&
-                  tracker.receive(sample, receivedAt)
-                )
-                  publishStream();
-              },
-              tool,
-              (items) => { responsesReplay.final = items; },
-            );
-            if (
-              !abort.signal.aborted &&
-              providerObservationSequence.current === observationSequence
-            )
-              setProviderObservation({ ...observation, state: "succeeded" });
-          } catch (error) {
-            if (providerObservationSequence.current === observationSequence) {
-              if (!abort.signal.aborted)
-                setProviderObservation({ ...observation, state: "failed" });
-              else setProviderObservation(undefined);
-            }
-            throw error;
-          }
-          roundTelemetry = tracker.snapshot();
-          return round;
-        },
-        prepared.request.javascript === true,
-        abort.signal,
-        (record) => {
-          if (!isCurrentReply(abort)) return;
-          executions = executions.some(({ id }) => id === record.id)
-            ? executions.map((prior) =>
-                prior.id === record.id ? record : prior,
-              )
-            : [...executions, record];
-          publish("streaming", true);
-        },
-        history.flatMap((message) => message.role === "user" ? message.attachments ?? [] : []),
-        ({ round, results }) => {
-          if (round.responsesItems) { responsesReplay.exchanges.push({ items: round.responsesItems, results }); responsesReplay.final = []; }
-        },
-      );
-      terminal = abort.signal.aborted ? "interrupted" : "complete";
-    } catch (e) {
-      terminal = abort.signal.aborted ? "interrupted" : "error";
-      if (isCurrentReply(abort) && terminal === "error") {
-        failureReason = errorText(e);
-      }
-    } finally {
-      // Stop the streaming heartbeat before waiting on disk, including on Stop/error.
-      window.clearInterval(timer);
-    }
-    const finishing = session.get().reply;
-    if (finishing?.controller !== abort) return;
-    session.update({ reply: { ...finishing, phase: "finalizing" } });
-    try {
-      await publish(terminal, true);
-    } finally {
-      finishReply(abort);
-    }
-  };
+  const runReply = createReplyRunner({ session, setNotice, isCurrentReply, updateChat, providerObservationSequence, setProviderObservation, finishReply });
   const canStartReply = (source: Conversation | undefined) => {
     const current = session.get();
     return !workspaceSignal.aborted && !current.reply && !current.navigating && !current.processingFiles &&

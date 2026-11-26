@@ -1,4 +1,4 @@
-import { providerBaseUrl } from "./providers";
+import { providerBaseUrl } from "./provider-config";
 import { defaultSettings, type ProviderConfig } from "./types";
 
 export type SessionCredential = { destination: string; value: string };

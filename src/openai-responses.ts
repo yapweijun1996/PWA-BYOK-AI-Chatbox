@@ -5,12 +5,12 @@ import {
   providerToolName,
   toolTurnLimits,
 } from "./javascript-tool";
-import { localToolDefinitions } from "./local-tools";
+import { localToolDefinitions } from "./tool-definitions";
 import { executionLimits } from "./js-tool-runtime/protocol";
 import { maxToolReplayChars } from "./provider-tools";
 import type { ExecutionResult } from "./js-tool-runtime/protocol";
 import type { Message } from "./types";
-import { parseEventStream } from "./providers";
+import { parseEventStream } from "./event-stream";
 
 /** Responses output is kept in order and bounded before any local tool is run. */
 export type OutputItem = Record<string, unknown> & { type: string };
