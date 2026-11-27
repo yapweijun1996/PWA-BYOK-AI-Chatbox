@@ -1,6 +1,11 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Errors": "Ralat",
+  "Warnings": "Amaran",
+  "Copy console": "Salin konsol",
+  "Clear console": "Kosongkan konsol",
+  "Some console output was omitted because the limit was reached.": "Sebahagian output konsol ditinggalkan kerana had telah dicapai.",
   "JavaScript runs offline with a time and memory limit. Browser APIs and timers are unavailable.": "JavaScript berjalan di luar talian dengan had masa dan memori. API pelayar dan pemasa tidak tersedia.",
   "Static preview disables scripts and removes external links. Browser resource policies still apply.": "Pratonton statik melumpuhkan skrip dan membuang pautan luaran. Dasar sumber pelayar masih terpakai.",
   "Interactive preview can navigate to external sites and may not stop if scripts hang. Only run trusted code.": "Pratonton interaktif boleh mengakses laman luaran dan mungkin tidak dapat dihentikan jika skrip tergantung. Jalankan kod yang dipercayai sahaja.",

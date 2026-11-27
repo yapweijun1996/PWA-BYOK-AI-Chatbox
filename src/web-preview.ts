@@ -7,7 +7,7 @@ const bridge = `<script>
   (() => {
     let count = 0;
     const format = value => { try { return typeof value === 'string' ? value : JSON.stringify(value) ?? String(value); } catch { return String(value); } };
-    const send = (level, text) => { if (count++ < 100) parent.postMessage({ __lumaPreview: 1, level, text: String(text).slice(0, 2000) }, '*'); };
+    const send = (level, text) => { const value = String(text); if (count < 100) { parent.postMessage({ __lumaPreview: 1, level, text: value.slice(0, 2000) }, '*'); if (value.length > 2000) parent.postMessage({ __lumaPreview: 1, truncated: true }, '*'); } else if (count === 100) parent.postMessage({ __lumaPreview: 1, truncated: true }, '*'); count++; };
     for (const level of ['log', 'info', 'warn', 'error']) {
       const original = console[level].bind(console);
       console[level] = (...args) => { const text = args.map(format).join(' '); send(level, text); const output = document.getElementById('output'); if (output && output.dataset.previewConsole === 'true') output.textContent += text + '\\n'; original(...args); };

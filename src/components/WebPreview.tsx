@@ -2,13 +2,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { translate, translateNotice, type Locale } from "../i18n";
 import { executeJavaScript, type ExecutionResult } from "../js-tool-runtime";
 import { previewDocument } from "../web-preview";
+import { PreviewConsole } from "./PreviewConsole";
+import type { ConsoleEntry } from "../js-tool-runtime";
 
-type Entry = { level: "log" | "info" | "warn" | "error"; text: string };
 export function WebPreview({ source, language, locale }: { source: string; language: string; locale: Locale }) {
   const [size, setSize] = useState("responsive");
   const [fullscreen, setFullscreen] = useState(false);
   const [interactive, setInteractive] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entries, setEntries] = useState<ConsoleEntry[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [result, setResult] = useState<ExecutionResult>();
   const [running, setRunning] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -19,12 +21,13 @@ export function WebPreview({ source, language, locale }: { source: string; langu
   const statusLabel = result && ({ success: "Execution succeeded", error: "Execution failed", timeout: "Execution timed out", cancelled: "Execution cancelled", limit: "Execution limit reached" } as const)[result.status];
   const documentSource = useMemo(() => javascript ? "" : previewDocument(language, source, interactive), [javascript, language, source, interactive]);
   useEffect(() => {
-    setRunning(false); setResult(undefined);
+    setRunning(false); setResult(undefined); setEntries([]); setTruncated(false);
     return () => { execution.current?.abort(); execution.current = null; };
   }, [source, language]);
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
       if (!interactive || event.source !== frame.current?.contentWindow || !event.data || event.data.__lumaPreview !== 1) return;
+      if (event.data.truncated === true) { setTruncated(true); return; }
       const { level, text } = event.data;
       if (!["log", "info", "warn", "error"].includes(level) || typeof text !== "string" || received.current >= 300) return;
       received.current++;
@@ -34,15 +37,18 @@ export function WebPreview({ source, language, locale }: { source: string; langu
     return () => window.removeEventListener("message", receive);
   }, [interactive]);
   useLayoutEffect(() => { if (fullscreen && dialog.current && !dialog.current.open) dialog.current.showModal(); }, [fullscreen]);
-  const resize = (next: boolean) => { received.current = 0; setEntries([]); setFullscreen(next); };
+  const resetConsole = () => { setEntries([]); setTruncated(false); };
+  const clearConsole = () => { setEntries([]); if (!interactive) setTruncated(false); };
+  const resize = (next: boolean) => { if (!javascript) { received.current = 0; resetConsole(); } setFullscreen(next); };
   const run = async () => {
     if (execution.current) return;
     const controller = new AbortController();
-    execution.current = controller; setResult(undefined); setRunning(true);
+    execution.current = controller; setResult(undefined); resetConsole(); setRunning(true);
     const next = await executeJavaScript({ code: source }, controller.signal);
     if (execution.current !== controller) return;
-    execution.current = null; setRunning(false); setResult(next);
+    execution.current = null; setRunning(false); setResult(next); setEntries([...next.console]); setTruncated(next.truncated);
   };
+  const advice = result?.error && ({ timeout: "Reduce the calculation size and try again.", memory: "Reduce the data size and try again.", runtime: "Reload the app and try again.", input: "Provide valid input within the tool limits.", javascript: "Check the JavaScript code and try again.", unsupported: "Check whether this operation is supported." } as Record<string, string>)[result.error.code];
   const panel = <section className="rich-code-preview" aria-label={translate(locale, "Code preview")}>
     <div className="rich-preview-toolbar">
       {!javascript && <label>{translate(locale, "Preview size")}
@@ -58,17 +64,16 @@ export function WebPreview({ source, language, locale }: { source: string; langu
     {javascript ? <>
       <p className="rich-code-preview-note">{translate(locale, "JavaScript runs offline with a time and memory limit. Browser APIs and timers are unavailable.")}</p>
       <button type="button" className="rich-code-copy" onClick={() => running ? execution.current?.abort() : void run()}>{translate(locale, running ? "Stop execution" : "Run offline")}</button>
-      {result && <div role="status" className="rich-preview-result"><strong>{translate(locale, "Execution status")}: {statusLabel && translate(locale, statusLabel)}</strong>{result.error && <p>{translateNotice(locale, result.error.message)}</p>}{result.value && <pre>{result.value.text}</pre>}{result.console.map((entry, index) => <pre key={index}>{entry.level}: {entry.text}</pre>)}</div>}
+      {running && <p role="status" className="rich-preview-running">{translate(locale, "Running JavaScript")}</p>}
+      {result && <div role="status" className="rich-preview-result" data-status={result.status}><strong>{translate(locale, "Execution status")}: {statusLabel && translate(locale, statusLabel)}</strong>{result.error && <p>{translateNotice(locale, result.error.message)}</p>}{advice && <p>{translate(locale, advice)}</p>}{result.value && <><strong>{translate(locale, "Execution result")}</strong><pre tabIndex={0}>{result.value.text}</pre></>}</div>}
+      {result && <PreviewConsole entries={entries} truncated={truncated} onClear={clearConsole} locale={locale} expandOnError={result.status === "error"} />}
     </> : <>
       <p className="rich-code-preview-note">{translate(locale, "Static preview disables scripts and removes external links. Browser resource policies still apply.")}</p>
       <p className="rich-code-preview-note">{translate(locale, "Interactive preview can navigate to external sites and may not stop if scripts hang. Only run trusted code.")}</p>
-      <button type="button" className="rich-code-copy" aria-pressed={interactive} onClick={() => { received.current = 0; setEntries([]); setInteractive((value) => !value); }}>{translate(locale, interactive ? "Stop interactive preview" : "Enable interactive preview")}</button>
+      <button type="button" className="rich-code-copy" aria-pressed={interactive} onClick={() => { received.current = 0; resetConsole(); setInteractive((value) => !value); }}>{translate(locale, interactive ? "Stop interactive preview" : "Enable interactive preview")}</button>
       {interactive && <p className="rich-code-preview-note">{translate(locale, "Full screen restarts the preview.")}</p>}
       <div className="rich-preview-viewport"><iframe ref={frame} data-size={size} title={translate(locale, "Code preview")} sandbox={interactive ? "allow-scripts" : ""} referrerPolicy="no-referrer" srcDoc={documentSource} /></div>
-      {interactive && <details className="rich-preview-console" open={entries.some((entry) => entry.level === "error")}>
-        <summary>{translate(locale, "Console")} ({entries.length})</summary>
-        {entries.length ? <ol>{entries.map((entry, index) => <li key={index} data-level={entry.level}><strong>{entry.level}</strong> {entry.text}</li>)}</ol> : <p>{translate(locale, "No console output yet.")}</p>}
-      </details>}
+      {interactive && <PreviewConsole entries={entries} truncated={truncated} onClear={clearConsole} locale={locale} />}
     </>}
   </section>;
   return fullscreen ? <dialog className="rich-preview-dialog" ref={dialog} aria-label={translate(locale, "Code preview")} onClose={() => resize(false)}>{panel}</dialog> : panel;

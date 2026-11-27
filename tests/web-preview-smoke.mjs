@@ -3,7 +3,7 @@ import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
 
 const content = [
-  '```html', '<!doctype html><html><body><h1 id="title">Hello</h1><script>document.querySelector("#title").textContent="Rendered HTML";console.log("HTML log");try{parent.document.body.dataset.compromised="yes"}catch(e){document.body.dataset.isolated="yes"}</script></body></html>', '```', '',
+  '```html', '<!doctype html><html><body><h1 id="title">Hello</h1><script>document.querySelector("#title").textContent="Rendered HTML";console.log("HTML log");console.warn("HTML warning");console.error("HTML error");try{parent.document.body.dataset.compromised="yes"}catch(e){document.body.dataset.isolated="yes"}</script></body></html>', '```', '',
   '```html', '<meta http-equiv="refresh" content="0;url=https://preview-network.invalid/refresh"><a href="https://preview-network.invalid/link">External</a><img src="https://preview-network.invalid/image"><script>location.href="https://preview-network.invalid/navigation"</script>', '```', '',
   '```svg', '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="15" fill="red"/></svg>', '```', '',
   '```css', 'h1 { color: rgb(255, 0, 0); }', '```', '',
@@ -16,6 +16,7 @@ const browser = await chromium.launch({ executablePath: chromePath(), headless: 
 try {
   const page = await browser.newPage({ locale: "en-US", viewport: { width: 390, height: 844 } });
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async text => { window.previewClipboard = text; } }, configurable: true });
     const OriginalWorker = window.Worker;
     window.previewWorkers = { started: 0, terminated: 0 };
     window.Worker = class extends OriginalWorker {
@@ -69,8 +70,21 @@ try {
   assert.equal(await html.locator("body").getAttribute("data-isolated"), "yes");
   assert.equal(await page.locator("body").getAttribute("data-compromised"), null);
   const consolePanel = blocks.nth(0).locator(".rich-preview-console");
-  await consolePanel.locator("summary").click();
   await consolePanel.getByText("HTML log", { exact: false }).waitFor();
+  await consolePanel.getByText("Errors: 1").waitFor();
+  await consolePanel.getByText("Warnings: 1").waitFor();
+  await consolePanel.locator("summary").click();
+  assert.equal(await consolePanel.evaluate(el => el.open), false);
+  await consolePanel.locator("summary").click();
+  await consolePanel.getByRole("button", { name: "Copy console" }).click();
+  assert.match(await page.evaluate(() => window.previewClipboard), /\[error\] HTML error/);
+  await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error("denied"); }; });
+  await consolePanel.getByRole("button", { name: "Copy console" }).click();
+  await consolePanel.getByText("Copy unavailable.").waitFor();
+  await consolePanel.getByRole("button", { name: "Clear console" }).click();
+  await consolePanel.getByText("No console output yet.").waitFor();
+  await html.locator("body").evaluate(() => { for (let i = 0; i < 105; i++) console.log("item", i); });
+  await consolePanel.getByText("Some console output was omitted because the limit was reached.").waitFor();
   await page.evaluate(() => window.postMessage({ __lumaPreview: 1, level: "error", text: "spoofed parent" }, "*"));
   assert.equal(await consolePanel.getByText("spoofed parent", { exact: false }).count(), 0);
   await blocks.nth(0).getByRole("button", { name: "Stop interactive preview" }).click();
@@ -85,6 +99,9 @@ try {
   await blocks.nth(4).getByRole("button", { name: "Run offline" }).click();
   await blocks.nth(4).getByText("Preview failure", { exact: false }).waitFor({ timeout: 15000 });
   await blocks.nth(4).getByText("JS works 42 undefined undefined", { exact: false }).waitFor();
+  await blocks.nth(4).getByText("Check the JavaScript code and try again.").waitFor();
+  await blocks.nth(4).getByRole("button", { name: "Clear console" }).click();
+  await blocks.nth(4).getByText("No console output yet.").waitFor();
   await blocks.nth(5).getByRole("button", { name: "Run offline" }).click();
   await blocks.nth(5).getByRole("button", { name: "Stop execution" }).click();
   await blocks.nth(5).getByText("Execution cancelled", { exact: false }).waitFor();

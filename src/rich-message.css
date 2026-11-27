@@ -285,10 +285,21 @@
 .rich-code-preview iframe[data-size="mobile"] { width: 375px; }
 .rich-code-preview iframe[data-size="tablet"] { width: 768px; }
 .rich-code-preview iframe[data-size="desktop"] { width: 1280px; }
-.rich-preview-console { margin-top: 8px; font-size: var(--font-caption); }
-.rich-preview-console summary { cursor: pointer; }
-.rich-preview-console ol { max-height: 160px; overflow: auto; padding-left: 24px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.rich-preview-console li[data-level="error"] { color: var(--color-danger, #b42318); }
+.rich-preview-console { margin-top: 12px; font-size: var(--font-caption); border: 1px solid var(--color-border); border-radius: var(--radius-small); overflow: hidden; }
+.rich-preview-console summary { cursor: pointer; padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rich-preview-console summary::before { content: "▸"; }
+.rich-preview-console[open] summary::before { content: "▾"; }
+.rich-preview-console-count, .rich-preview-console-badge { padding: 2px 7px; border-radius: 999px; background: var(--color-bg); border: 1px solid var(--color-border); }
+.rich-preview-console-badge[data-level="error"], .rich-preview-console li[data-level="error"] strong { color: var(--color-danger, #b42318); }
+.rich-preview-console-body { padding: 0 12px 12px; border-top: 1px solid var(--color-border); }
+.rich-preview-console-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; padding: 8px 0; }
+.rich-preview-console-actions [role="status"] { margin-right: auto; }
+.rich-preview-console ol { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rich-preview-console li { display: grid; grid-template-columns: 4em minmax(0, 1fr); gap: 8px; padding: 7px 0; border-top: 1px solid var(--color-border); }
+.rich-preview-console li strong { color: var(--color-muted); }
+.rich-preview-console-empty, .rich-preview-console-truncated, .rich-preview-running { color: var(--color-muted); }
+.rich-preview-result { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-small); }
+.rich-preview-result[data-status="error"] > strong:first-child, .rich-preview-result[data-status="timeout"] > strong:first-child, .rich-preview-result[data-status="limit"] > strong:first-child { color: var(--color-danger, #b42318); }
 .rich-preview-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
 .rich-preview-dialog { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100%; max-height: none; padding: 0; border: 0; color: var(--color-text); background: var(--color-bg); }
 .rich-preview-dialog::backdrop { background: rgba(0, 0, 0, .55); }

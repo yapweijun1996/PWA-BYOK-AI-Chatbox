@@ -12,6 +12,11 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Errors": "错误",
+  "Warnings": "警告",
+  "Copy console": "复制控制台",
+  "Clear console": "清空控制台",
+  "Some console output was omitted because the limit was reached.": "控制台输出已达到上限，部分内容已省略。",
   "JavaScript runs offline with a time and memory limit. Browser APIs and timers are unavailable.": "JavaScript 在有时间和内存限制的离线沙箱中运行，无法使用浏览器 API 和计时器。",
   "Static preview disables scripts and removes external links. Browser resource policies still apply.": "静态预览禁用脚本并移除外部链接；浏览器资源策略仍然适用。",
   "Interactive preview can navigate to external sites and may not stop if scripts hang. Only run trusted code.": "交互式预览可能访问外部网站；如果脚本卡住，可能无法停止。请只运行可信代码。",
