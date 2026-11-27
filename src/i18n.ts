@@ -12,6 +12,10 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Preview": "预览",
+  "Close preview": "关闭预览",
+  "Code preview": "代码预览",
+  "Preview runs in isolation. External resources may be blocked.": "预览在隔离环境中运行，外部资源可能被阻止。",
   "Starting JavaScript": "正在启动 JavaScript",
   "Execution": "执行",
   "Total": "总计",

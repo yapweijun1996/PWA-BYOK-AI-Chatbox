@@ -1,6 +1,10 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Preview": "Pratonton",
+  "Close preview": "Tutup pratonton",
+  "Code preview": "Pratonton kod",
+  "Preview runs in isolation. External resources may be blocked.": "Pratonton dijalankan secara terasing. Sumber luaran mungkin disekat.",
   "OpenAI API mode": "Mod API OpenAI",
   "Responses API is experimental and has been tested with a mock interface. Tool history is stored on this device and sent with the active branch.": "Responses API bersifat eksperimen dan telah diuji dengan antara muka simulasi. Sejarah alat disimpan pada peranti ini dan dihantar bersama cabang aktif.",
   "GPT-6 Luna uses reasoning effort none when local tools are enabled. Turn tools off or use Responses API to apply the selected effort.": "GPT-6 Luna menggunakan tahap penaakulan none apabila alat setempat diaktifkan. Matikan alat atau gunakan Responses API untuk menggunakan tahap yang dipilih.",

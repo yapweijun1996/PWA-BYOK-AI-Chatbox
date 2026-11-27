@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import type { ElementContent, RootContent } from "hast";
-import { Copy, Image as ImageIcon, WrapText } from "lucide-react";
+import { Copy, Image as ImageIcon, Play, WrapText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -34,6 +34,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import { remarkStreamingTail, safeMessageUrl } from "../rich-markdown";
+import { previewDocument, previewLanguages } from "../web-preview";
 import { normalizeLatexDelimiters } from "../latex-delimiters";
 import "katex/dist/katex.min.css";
 import "../rich-message.css";
@@ -160,6 +161,9 @@ function useHorizontalOverflow<T extends HTMLElement>(content: unknown) {
 function CodeBlock({ source, language }: { source: string; language: string }) {
   const { locale, onNotice } = useContext(localeContext);
   const [wrap, setWrap] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const canPreview = previewLanguages.has(language);
+  const previewSource = useMemo(() => canPreview ? previewDocument(language, source) : "", [canPreview, language, source]);
   const { ref, overflow } = useHorizontalOverflow<HTMLPreElement>(
     `${wrap}:${source}`,
   );
@@ -180,6 +184,12 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
       <div className="rich-code-header">
         <span title={label}>{label}</span>
         <div className="rich-code-actions">
+          {canPreview && (
+            <button type="button" className="rich-code-copy" aria-pressed={preview} onClick={() => setPreview((value) => !value)}>
+              <Play size={14} aria-hidden="true" />
+              {translate(locale, preview ? "Close preview" : "Preview")}
+            </button>
+          )}
           <button
             type="button"
             className="rich-code-copy"
@@ -209,6 +219,12 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
       >
         <code>{code}</code>
       </pre>
+      {preview && (
+        <div className="rich-code-preview">
+          <div className="rich-code-preview-note">{translate(locale, "Preview runs in isolation. External resources may be blocked.")}</div>
+          <iframe title={translate(locale, "Code preview")} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={previewSource} />
+        </div>
+      )}
       {overflow && (
         <div className="rich-scroll-hint" aria-hidden="true">
           {translate(locale, "Scroll horizontally to see more")}

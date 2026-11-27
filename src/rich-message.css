@@ -110,7 +110,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rich-code-actions { display: flex; flex: none; align-items: center; }
+.rich-code-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; min-width: 0; }
 .rich-code-copy,
 .rich-image-action {
   display: inline-flex;
@@ -274,3 +274,7 @@
     padding: 6px 8px;
   }
 }
+
+.rich-code-preview { border-top: 1px solid var(--color-border); padding: var(--space-base); }
+.rich-code-preview-note { color: var(--color-muted); font-size: var(--font-caption); margin-bottom: var(--space-small); }
+.rich-code-preview iframe { display: block; width: 100%; min-height: 240px; height: 320px; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: #fff; }
