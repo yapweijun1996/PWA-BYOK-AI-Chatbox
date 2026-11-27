@@ -147,6 +147,8 @@ try {
     return el.scrollTop;
   });
   assert.ok(readingPosition > 0);
+  const jump = page.getByRole("button", { name: "Jump to latest" });
+  await jump.waitFor();
   firstClose.resolve();
   const copy = reply.getByRole("button", { name: "Copy code" });
   await copy.waitFor();
@@ -156,13 +158,10 @@ try {
   await copy.evaluate((el) => {
     el.dataset.preserved = "yes";
   });
-  await pane.evaluate(async (el) => {
-    el.scrollTop = el.scrollHeight;
-    await new Promise((done) =>
-      requestAnimationFrame(() => requestAnimationFrame(done)),
-    );
-  });
+  await jump.click();
   await atBottom();
+  await jump.waitFor({ state: "detached" });
+  assert.equal(await pane.evaluate((el) => document.activeElement === el), true);
   finish.resolve();
   await page.getByRole("button", { name: "Send message" }).waitFor();
   await reply.locator(".katex-display").first().waitFor();
@@ -217,6 +216,19 @@ try {
 
   await page.setViewportSize({ width: 320, height: 675 });
   await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".sidebar")).visibility === "hidden");
+  await pane.evaluate((el) => { el.scrollTop = 0; });
+  await jump.waitFor();
+  const jumpBounds = await jump.boundingBox();
+  const paneBounds = await pane.boundingBox();
+  assert.ok(jumpBounds.width >= 44 && jumpBounds.height >= 44 && jumpBounds.x >= 0 && jumpBounds.x + jumpBounds.width <= 320 && jumpBounds.y >= paneBounds.y && jumpBounds.y + jumpBounds.height <= paneBounds.y + paneBounds.height);
+  await pane.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await jump.waitFor({ state: "detached" });
+  await pane.evaluate((el) => { el.scrollTop = 0; });
+  await jump.waitFor();
+  await jump.click();
+  await atBottom();
+  await jump.waitFor({ state: "detached" });
   const widths = await pane.evaluate((el) => ({
     page: document.documentElement.scrollWidth,
     pane: el.scrollWidth,

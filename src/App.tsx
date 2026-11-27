@@ -5,6 +5,7 @@ import {
   Brain,
   Code2,
   ChevronDown,
+  ArrowDown,
 } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceSearch } from "./components/WorkspaceSearch";
@@ -78,6 +79,8 @@ function App({
     setInspecting,
     setNotice,
     onMessageScroll,
+    showJumpToLatest,
+    jumpToLatest,
     retry,
     visibleMessages,
     changeBranch,
@@ -258,6 +261,7 @@ function App({
               className={`conversation${!visibleMessages.length ? " conversation-empty" : ""}`}
               data-conversation-id={active}
               aria-label={t("Conversation")}
+              tabIndex={-1}
               ref={conversation}
               onScroll={onMessageScroll}
             >
@@ -284,6 +288,7 @@ function App({
               ) : (
                 <MessageList workspace={workspace} chat={chat} versions={messageVersions} onAction={setMessageAction} onSwitchVersion={switchMessageVersion} />
               )}
+              {showJumpToLatest && visibleMessages.length > 0 && <div className="conversation-jump"><button type="button" onClick={jumpToLatest}><ArrowDown size={16} aria-hidden="true" />{t("Jump to latest")}</button></div>}
             </section>
             <Composer
               locale={locale}

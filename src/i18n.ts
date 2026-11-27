@@ -12,6 +12,7 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Jump to latest": "跳转到最新消息",
   "Resize source panel": "调整源代码面板宽度",
   "Download result": "下载运行结果",
   "Download static preview": "下载静态预览",

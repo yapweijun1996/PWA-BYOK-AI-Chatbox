@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceView } from "./settings-sections";
 
 export function useConversationScroll(active: string, view: WorkspaceView, hasMessages: boolean) {
@@ -6,13 +6,15 @@ export function useConversationScroll(active: string, view: WorkspaceView, hasMe
   const conversation = useRef<HTMLElement>(null);
   const lastScrollTop = useRef(0);
   const followReply = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   useLayoutEffect(() => {
     const pane = conversation.current;
     const content = messagesContent.current;
-    if (view !== "chat" || !hasMessages || !pane || !content) return;
+    if (view !== "chat" || !hasMessages || !pane || !content) { setShowJumpToLatest(false); return; }
     const keepBottom = () => {
       if (followReply.current) pane.scrollTop = pane.scrollHeight;
       lastScrollTop.current = pane.scrollTop;
+      setShowJumpToLatest(!followReply.current && pane.scrollHeight - pane.scrollTop - pane.clientHeight > 2);
     };
     keepBottom();
     const observer = new ResizeObserver(keepBottom);
@@ -29,7 +31,17 @@ export function useConversationScroll(active: string, view: WorkspaceView, hasMe
     // catches up. Only moving away from the tail signals an intent to stop.
     else if (el.scrollTop < lastScrollTop.current - 1)
       followReply.current = false;
-    lastScrollTop.current = el.scrollTop;
+    if (gap <= 2 || el.scrollTop >= lastScrollTop.current || lastScrollTop.current - el.scrollTop > 1) lastScrollTop.current = el.scrollTop;
+    setShowJumpToLatest(!followReply.current && gap > 2);
   };
-  return { messagesContent, conversation, followReply, onMessageScroll };
+  const jumpToLatest = () => {
+    const el = conversation.current;
+    if (!el) return;
+    followReply.current = true;
+    el.scrollTop = el.scrollHeight;
+    lastScrollTop.current = el.scrollTop;
+    setShowJumpToLatest(false);
+    el.focus({ preventScroll: true });
+  };
+  return { messagesContent, conversation, followReply, onMessageScroll, showJumpToLatest, jumpToLatest };
 }
