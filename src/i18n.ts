@@ -12,6 +12,9 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Hide code": "隐藏代码",
+  "Show code": "显示代码",
+  "Source code": "源代码",
   "Offline JavaScript": "离线 JavaScript",
   "Interactive": "交互模式",
   "Static": "静态模式",

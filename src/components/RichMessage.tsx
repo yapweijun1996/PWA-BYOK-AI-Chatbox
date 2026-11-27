@@ -219,7 +219,7 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
       >
         <code>{code}</code>
       </pre>
-      {preview && <WebPreview source={source} language={language} locale={locale} />}
+      {preview && <WebPreview source={source} language={language} locale={locale} highlightedCode={code} />}
       {overflow && (
         <div className="rich-scroll-hint" aria-hidden="true">
           {translate(locale, "Scroll horizontally to see more")}

@@ -4,9 +4,10 @@ import { executeJavaScript, type ExecutionResult } from "../js-tool-runtime";
 import { previewDocument } from "../web-preview";
 import { PreviewConsole } from "./PreviewConsole";
 import type { ConsoleEntry } from "../js-tool-runtime";
-import { Maximize2, Minimize2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { Maximize2, Minimize2, PanelLeft } from "lucide-react";
 
-export function WebPreview({ source, language, locale }: { source: string; language: string; locale: Locale }) {
+export function WebPreview({ source, language, locale, highlightedCode }: { source: string; language: string; locale: Locale; highlightedCode: ReactNode }) {
   const [size, setSize] = useState("responsive");
   const [fullscreen, setFullscreen] = useState(false);
   const [interactive, setInteractive] = useState(false);
@@ -14,6 +15,9 @@ export function WebPreview({ source, language, locale }: { source: string; langu
   const [truncated, setTruncated] = useState(false);
   const [result, setResult] = useState<ExecutionResult>();
   const [running, setRunning] = useState(false);
+  const [showCode, setShowCode] = useState(true);
+  const [wrapCode, setWrapCode] = useState(false);
+  const [copyNotice, setCopyNotice] = useState("");
   const frame = useRef<HTMLIFrameElement>(null);
   const received = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -52,6 +56,10 @@ export function WebPreview({ source, language, locale }: { source: string; langu
     if (execution.current !== controller) return;
     execution.current = null; setRunning(false); setResult(next); setEntries([...next.console]); setTruncated(next.truncated);
   };
+  const copyCode = async () => {
+    try { await navigator.clipboard.writeText(source); setCopyNotice(translate(locale, "Copied.")); }
+    catch { setCopyNotice(translate(locale, "Copy unavailable.")); }
+  };
   const advice = result?.error && ({ timeout: "Reduce the calculation size and try again.", memory: "Reduce the data size and try again.", runtime: "Reload the app and try again.", input: "Provide valid input within the tool limits.", javascript: "Check the JavaScript code and try again.", unsupported: "Check whether this operation is supported." } as Record<string, string>)[result.error.code];
   const panel = <section className="rich-code-preview" aria-label={translate(locale, "Code preview")}>
     <div className="rich-preview-toolbar">
@@ -65,9 +73,17 @@ export function WebPreview({ source, language, locale }: { source: string; langu
           <option value="desktop">{translate(locale, "Desktop (1280 px)")}</option>
         </select>
       </label>}
+      {fullscreen && <button type="button" className="rich-code-copy" aria-pressed={showCode} onClick={() => setShowCode((value) => !value)}><PanelLeft size={15} aria-hidden="true" />{translate(locale, showCode ? "Hide code" : "Show code")}</button>}
       <button ref={fullscreenButton} autoFocus={fullscreen} type="button" className="rich-code-copy" onClick={() => fullscreen ? dialog.current?.close() : resize(true)}>{fullscreen ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}{translate(locale, fullscreen ? "Exit full screen" : "Full screen")}</button>
       </div>
     </div>
+    <div className="rich-preview-workspace" data-show-code={fullscreen && showCode}>
+      {fullscreen && <section className="rich-preview-source" hidden={!showCode} aria-label={translate(locale, "Source code")}>
+        <div className="rich-preview-source-header"><strong>{translate(locale, "Source code")}</strong><div><button type="button" className="rich-code-copy" aria-pressed={wrapCode} onClick={() => setWrapCode((value) => !value)}>{translate(locale, "Wrap")}</button><button type="button" className="rich-code-copy" onClick={() => void copyCode()}>{translate(locale, "Copy code")}</button></div></div>
+        <span className="rich-preview-source-status" role="status" aria-live="polite">{copyNotice}</span>
+        <pre tabIndex={0} data-wrap={wrapCode} aria-label={translate(locale, "Source code")}><code>{highlightedCode}</code></pre>
+      </section>}
+    <div className="rich-preview-output">
     {javascript ? <>
       <div className="rich-preview-notice">
       <p className="rich-code-preview-note">{translate(locale, "JavaScript runs offline with a time and memory limit. Browser APIs and timers are unavailable.")}</p>
@@ -88,6 +104,8 @@ export function WebPreview({ source, language, locale }: { source: string; langu
       <div className="rich-preview-viewport"><iframe ref={frame} data-size={size} title={translate(locale, "Code preview")} sandbox={interactive ? "allow-scripts" : ""} referrerPolicy="no-referrer" srcDoc={documentSource} /></div>
       {interactive && <PreviewConsole entries={entries} truncated={truncated} onClear={clearConsole} locale={locale} />}
     </>}
+    </div>
+    </div>
   </section>;
   return fullscreen ? <dialog className="rich-preview-dialog" ref={dialog} aria-label={translate(locale, "Code preview")} onClose={() => resize(false)}>{panel}</dialog> : panel;
 }

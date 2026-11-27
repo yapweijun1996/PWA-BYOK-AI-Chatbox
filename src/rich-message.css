@@ -314,9 +314,23 @@
 .rich-preview-dialog { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100%; height: 100dvh; max-height: none; padding: 0; border: 0; color: var(--color-text); background: var(--color-surface); }
 .rich-preview-dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .rich-preview-dialog .rich-code-preview { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.rich-preview-workspace, .rich-preview-output { min-width: 0; }
 .rich-preview-dialog .rich-preview-toolbar, .rich-preview-dialog .rich-preview-notice, .rich-preview-dialog .rich-preview-console { flex: none; }
+.rich-preview-dialog .rich-preview-workspace { flex: 1 0 320px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
+.rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.rich-preview-output { display: flex; flex-direction: column; min-height: 0; }
+.rich-preview-source { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-bg); }
+.rich-preview-source[hidden] { display: none; }
+.rich-preview-source-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+.rich-preview-source-header > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.rich-preview-source-status { color: var(--color-muted); font-size: var(--font-caption); padding-inline: 12px; }
+.rich-preview-source pre { flex: 1 1 auto; min-height: 0; max-width: 100%; overflow: auto; white-space: pre; }
+.rich-preview-source pre[data-wrap="true"] code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .rich-preview-dialog .rich-preview-viewport { flex: 1 0 280px; }
 .rich-preview-dialog iframe { height: 100%; }
+@media (max-width: 767px) {
+  .rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: 140px minmax(320px, auto); }
+}
 @media (max-width: 600px) {
   .rich-preview-controls { flex: 1 1 100%; justify-content: space-between; }
   .rich-preview-notice button { width: 100%; }
