@@ -208,6 +208,10 @@ try {
   });
   await cached.goto(url);
   await ready(cached);
+  // Complete the initial install and claim before navigating. Reloading while
+  // activation is in progress can leave the next document uncontrolled if
+  // clients.claim() runs in the gap between the two documents.
+  await cached.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await cached.evaluate(async () => {
     const request = indexedDB.open("luma-chat");
     const db = await new Promise((resolve, reject) => {
