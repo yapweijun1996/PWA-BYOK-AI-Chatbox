@@ -123,6 +123,22 @@ try {
     0,
   );
   await atBottom();
+  // Simulate a downward scroll event arriving after content growth but before
+  // ResizeObserver has followed the new tail. This must not disable follow.
+  await pane.evaluate((el) => {
+    const content = el.querySelector(".messages");
+    const spacer = document.createElement("div");
+    spacer.dataset.testScrollSpacer = "true";
+    spacer.style.height = "300px";
+    content.append(spacer);
+    el.scrollTop += 20;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await atBottom();
+  await pane.evaluate((el) => {
+    el.querySelector("[data-test-scroll-spacer]").remove();
+  });
+  await atBottom();
   const readingPosition = await pane.evaluate(async (el) => {
     el.scrollTop = el.scrollHeight - el.clientHeight - 36;
     await new Promise((done) =>

@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { translate, translateNotice, type Locale } from "../i18n";
 import { executeJavaScript, type ExecutionResult } from "../js-tool-runtime";
 import { previewDocument } from "../web-preview";
 import { PreviewConsole } from "./PreviewConsole";
 import type { ConsoleEntry } from "../js-tool-runtime";
-import type { ReactNode } from "react";
-import { Maximize2, Minimize2, PanelLeft } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { Download, Maximize2, Minimize2, PanelLeft } from "lucide-react";
+import { downloadPreview, javascriptPreviewReport } from "../preview-export";
 
 export function WebPreview({ source, language, locale, highlightedCode }: { source: string; language: string; locale: Locale; highlightedCode: ReactNode }) {
   const [size, setSize] = useState("responsive");
@@ -18,6 +19,10 @@ export function WebPreview({ source, language, locale, highlightedCode }: { sour
   const [showCode, setShowCode] = useState(true);
   const [wrapCode, setWrapCode] = useState(false);
   const [copyNotice, setCopyNotice] = useState("");
+  const [codeWidth, setCodeWidth] = useState(50);
+  const [dragging, setDragging] = useState(false);
+  const workspace = useRef<HTMLDivElement>(null);
+  const sourceId = useId();
   const frame = useRef<HTMLIFrameElement>(null);
   const received = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -60,6 +65,15 @@ export function WebPreview({ source, language, locale, highlightedCode }: { sour
     try { await navigator.clipboard.writeText(source); setCopyNotice(translate(locale, "Copied.")); }
     catch { setCopyNotice(translate(locale, "Copy unavailable.")); }
   };
+  const adjustWidth = (value: number) => setCodeWidth(Math.max(25, Math.min(75, Math.round(value))));
+  const dragTo = (clientX: number) => {
+    const bounds = workspace.current?.getBoundingClientRect();
+    if (bounds?.width) adjustWidth((clientX - bounds.left) / bounds.width * 100);
+  };
+  const download = () => {
+    if (javascript && result) downloadPreview(javascriptPreviewReport(result, entries, truncated), "javascript-result.txt", "text/plain;charset=utf-8");
+    else if (!javascript) downloadPreview(previewDocument(language, source), "static-preview.html", "text/html;charset=utf-8");
+  };
   const advice = result?.error && ({ timeout: "Reduce the calculation size and try again.", memory: "Reduce the data size and try again.", runtime: "Reload the app and try again.", input: "Provide valid input within the tool limits.", javascript: "Check the JavaScript code and try again.", unsupported: "Check whether this operation is supported." } as Record<string, string>)[result.error.code];
   const panel = <section className="rich-code-preview" aria-label={translate(locale, "Code preview")}>
     <div className="rich-preview-toolbar">
@@ -73,16 +87,21 @@ export function WebPreview({ source, language, locale, highlightedCode }: { sour
           <option value="desktop">{translate(locale, "Desktop (1280 px)")}</option>
         </select>
       </label>}
+      <button type="button" className="rich-code-copy" disabled={javascript && !result} onClick={download}><Download size={15} aria-hidden="true" />{translate(locale, javascript ? "Download result" : "Download static preview")}</button>
       {fullscreen && <button type="button" className="rich-code-copy" aria-pressed={showCode} onClick={() => setShowCode((value) => !value)}><PanelLeft size={15} aria-hidden="true" />{translate(locale, showCode ? "Hide code" : "Show code")}</button>}
       <button ref={fullscreenButton} autoFocus={fullscreen} type="button" className="rich-code-copy" onClick={() => fullscreen ? dialog.current?.close() : resize(true)}>{fullscreen ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}{translate(locale, fullscreen ? "Exit full screen" : "Full screen")}</button>
       </div>
     </div>
-    <div className="rich-preview-workspace" data-show-code={fullscreen && showCode}>
-      {fullscreen && <section className="rich-preview-source" hidden={!showCode} aria-label={translate(locale, "Source code")}>
+    <div ref={workspace} className="rich-preview-workspace" data-show-code={fullscreen && showCode} data-resizing={dragging} style={{ "--preview-code-width": `${codeWidth}%` } as CSSProperties}>
+      {fullscreen && <section id={sourceId} className="rich-preview-source" hidden={!showCode} aria-label={translate(locale, "Source code")}>
         <div className="rich-preview-source-header"><strong>{translate(locale, "Source code")}</strong><div><button type="button" className="rich-code-copy" aria-pressed={wrapCode} onClick={() => setWrapCode((value) => !value)}>{translate(locale, "Wrap")}</button><button type="button" className="rich-code-copy" onClick={() => void copyCode()}>{translate(locale, "Copy code")}</button></div></div>
         <span className="rich-preview-source-status" role="status" aria-live="polite">{copyNotice}</span>
         <pre tabIndex={0} data-wrap={wrapCode} aria-label={translate(locale, "Source code")}><code>{highlightedCode}</code></pre>
       </section>}
+      {fullscreen && showCode && <div className="rich-preview-resize" role="separator" tabIndex={0} aria-label={translate(locale, "Resize source panel")} aria-orientation="vertical" aria-controls={sourceId} aria-valuemin={25} aria-valuemax={75} aria-valuenow={codeWidth} aria-valuetext={`${codeWidth}%`} onKeyDown={(event) => {
+        const next = event.key === "ArrowLeft" ? codeWidth - 5 : event.key === "ArrowRight" ? codeWidth + 5 : event.key === "Home" ? 25 : event.key === "End" ? 75 : undefined;
+        if (next !== undefined) { event.preventDefault(); adjustWidth(next); }
+      }} onPointerDown={(event) => { if (!event.isPrimary || event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); setDragging(true); }} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) dragTo(event.clientX); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) { dragTo(event.clientX); event.currentTarget.releasePointerCapture(event.pointerId); } setDragging(false); }} onLostPointerCapture={() => setDragging(false)} onDoubleClick={() => setCodeWidth(50)} />}
     <div className="rich-preview-output">
     {javascript ? <>
       <div className="rich-preview-notice">
@@ -97,6 +116,7 @@ export function WebPreview({ source, language, locale, highlightedCode }: { sour
       <div>
       <p className="rich-code-preview-note">{translate(locale, "Static preview disables scripts and removes external links. Browser resource policies still apply.")}</p>
       <p className="rich-code-preview-note">{translate(locale, "Interactive preview can navigate to external sites and may not stop if scripts hang. Only run trusted code.")}</p>
+      {interactive && <p className="rich-code-preview-note">{translate(locale, "The download contains the original static preview; interactive changes and scripts are not included.")}</p>}
       {interactive && <p className="rich-code-preview-note">{translate(locale, "Full screen restarts the preview.")}</p>}
       </div>
       <button type="button" className="rich-code-copy" aria-pressed={interactive} onClick={() => { received.current = 0; resetConsole(); setInteractive((value) => !value); }}>{translate(locale, interactive ? "Stop interactive preview" : "Enable interactive preview")}</button>

@@ -317,7 +317,13 @@
 .rich-preview-workspace, .rich-preview-output { min-width: 0; }
 .rich-preview-dialog .rich-preview-toolbar, .rich-preview-dialog .rich-preview-notice, .rich-preview-dialog .rich-preview-console { flex: none; }
 .rich-preview-dialog .rich-preview-workspace { flex: 1 0 320px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
-.rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, calc(var(--preview-code-width, 50%) - 6px)) 12px minmax(0, 1fr); gap: 0; }
+.rich-preview-resize { cursor: col-resize; touch-action: none; position: relative; }
+.rich-preview-resize::after { content: ""; position: absolute; inset: 0 4px; border-radius: 999px; background: var(--color-border); }
+.rich-preview-resize:hover::after, .rich-preview-resize:focus-visible::after { background: var(--color-focus); }
+.rich-preview-resize:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.rich-preview-workspace[data-resizing="true"] { user-select: none; }
+.rich-preview-workspace[data-resizing="true"] iframe { pointer-events: none; }
 .rich-preview-output { display: flex; flex-direction: column; min-height: 0; }
 .rich-preview-source { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-bg); }
 .rich-preview-source[hidden] { display: none; }
@@ -329,7 +335,8 @@
 .rich-preview-dialog .rich-preview-viewport { flex: 1 0 280px; }
 .rich-preview-dialog iframe { height: 100%; }
 @media (max-width: 767px) {
-  .rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: 140px minmax(320px, auto); }
+  .rich-preview-dialog .rich-preview-workspace[data-show-code="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: 140px minmax(320px, auto); gap: 12px; }
+  .rich-preview-resize { display: none; }
 }
 @media (max-width: 600px) {
   .rich-preview-controls { flex: 1 1 100%; justify-content: space-between; }

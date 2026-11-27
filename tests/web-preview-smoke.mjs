@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
 import { chromePath } from "./browser-launch.mjs";
 
@@ -63,6 +64,12 @@ try {
   assert.equal(await staticDanger.locator("meta[http-equiv=refresh]").count(), 0);
   assert.equal(await staticDanger.locator("script").count(), 0);
   await blocks.nth(2).frameLocator("iframe").locator("svg circle").waitFor();
+  const [staticDownload] = await Promise.all([page.waitForEvent("download"), blocks.nth(2).getByRole("button", { name: "Download static preview" }).click()]);
+  assert.equal(staticDownload.suggestedFilename(), "static-preview.html");
+  const staticExport = await readFile(await staticDownload.path(), "utf8");
+  assert.match(staticExport, /<svg/);
+  assert.match(staticExport, /script-src 'none'/);
+  assert.doesNotMatch(staticExport, /<script/i);
   assert.equal(await blocks.nth(3).frameLocator("iframe").locator("h1").evaluate(el => getComputedStyle(el).color), "rgb(255, 0, 0)");
   await blocks.nth(0).getByText("Interactive preview can navigate to external sites", { exact: false }).waitFor();
   await blocks.nth(0).getByRole("button", { name: "Enable interactive preview" }).click();
@@ -114,6 +121,21 @@ try {
     assert.equal(await sourcePanel.isVisible(), false);
     await dialog.getByRole("button", { name: "Show code" }).click();
     assert.equal(await dialog.frameLocator("iframe").locator("body").getAttribute("data-layout-marker"), "preserved", "toggling code must not reload the preview");
+    const separator = dialog.getByRole("separator", { name: "Resize source panel" });
+    if (viewport.width >= 768) {
+      await separator.focus();
+      await page.keyboard.press("Home");
+      assert.equal(await separator.getAttribute("aria-valuenow"), "25");
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await separator.getAttribute("aria-valuenow"), "30");
+      const handle = await separator.boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + 40);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2 + 160, handle.y + 40);
+      await page.mouse.up();
+      assert.ok(Number(await separator.getAttribute("aria-valuenow")) > 35);
+      assert.equal(await dialog.frameLocator("iframe").locator("body").getAttribute("data-layout-marker"), "preserved");
+    } else assert.equal(await separator.count(), 0, "stacked layout has no horizontal resize control");
     const metrics = await dialog.evaluate(el => {
       const panel = el.querySelector(".rich-code-preview");
       const canvas = el.querySelector(".rich-preview-viewport");
@@ -137,6 +159,11 @@ try {
   await blocks.nth(0).getByRole("button", { name: "Full screen" }).click();
   const interactiveDialog = page.getByRole("dialog", { name: "Code preview" });
   await interactiveDialog.getByRole("button", { name: "Enable interactive preview" }).click();
+  await interactiveDialog.getByText("The download contains the original static preview; interactive changes and scripts are not included.").waitFor();
+  const [interactiveDownload] = await Promise.all([page.waitForEvent("download"), interactiveDialog.getByRole("button", { name: "Download static preview" }).click()]);
+  const interactiveExport = await readFile(await interactiveDownload.path(), "utf8");
+  assert.match(interactiveExport, /<h1 id="title">Hello<\/h1>/);
+  assert.doesNotMatch(interactiveExport, /<script/i);
   await interactiveDialog.locator(".rich-preview-console").getByText("HTML error", { exact: true }).waitFor();
   await interactiveDialog.frameLocator("iframe").locator("body").evaluate(el => { el.dataset.layoutMarker = "interactive"; });
   await interactiveDialog.getByRole("button", { name: "Hide code" }).click();
@@ -149,6 +176,12 @@ try {
   await blocks.nth(4).getByRole("button", { name: "Run offline" }).click();
   await blocks.nth(4).locator(".rich-preview-result").getByText("Preview failure", { exact: false }).waitFor({ timeout: 15000 });
   await blocks.nth(4).getByText("JS works 42 undefined undefined", { exact: false }).waitFor();
+  const [resultDownload] = await Promise.all([page.waitForEvent("download"), blocks.nth(4).getByRole("button", { name: "Download result" }).click()]);
+  const resultExport = await readFile(await resultDownload.path(), "utf8");
+  assert.equal(resultDownload.suggestedFilename(), "javascript-result.txt");
+  assert.match(resultExport, /Status: error/);
+  assert.match(resultExport, /Preview failure/);
+  assert.match(resultExport, /JS works 42 undefined undefined/);
   await blocks.nth(4).getByText("Check the JavaScript code and try again.").waitFor();
   await blocks.nth(4).getByRole("button", { name: "Full screen" }).click();
   await page.getByRole("dialog", { name: "Code preview" }).locator(".rich-preview-result").getByText("Preview failure", { exact: false }).waitFor();

@@ -25,7 +25,9 @@ export function useConversationScroll(active: string, view: WorkspaceView, hasMe
     if (!el) return;
     const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (gap <= 2) followReply.current = true;
-    else if (el.scrollTop !== lastScrollTop.current)
+    // Layout changes can dispatch downward scroll events before ResizeObserver
+    // catches up. Only moving away from the tail signals an intent to stop.
+    else if (el.scrollTop < lastScrollTop.current - 1)
       followReply.current = false;
     lastScrollTop.current = el.scrollTop;
   };

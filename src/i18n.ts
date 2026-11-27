@@ -12,6 +12,10 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Resize source panel": "调整源代码面板宽度",
+  "Download result": "下载运行结果",
+  "Download static preview": "下载静态预览",
+  "The download contains the original static preview; interactive changes and scripts are not included.": "下载内容是原始静态预览，不包含脚本及交互产生的更改。",
   "Hide code": "隐藏代码",
   "Show code": "显示代码",
   "Source code": "源代码",

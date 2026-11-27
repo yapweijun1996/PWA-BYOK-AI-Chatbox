@@ -1,6 +1,10 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Resize source panel": "Ubah lebar panel kod sumber",
+  "Download result": "Muat turun hasil",
+  "Download static preview": "Muat turun pratonton statik",
+  "The download contains the original static preview; interactive changes and scripts are not included.": "Muat turun mengandungi pratonton statik asal; perubahan interaktif dan skrip tidak disertakan.",
   "Hide code": "Sembunyikan kod",
   "Show code": "Tunjukkan kod",
   "Source code": "Kod sumber",
