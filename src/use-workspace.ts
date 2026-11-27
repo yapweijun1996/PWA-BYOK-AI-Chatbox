@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -294,7 +295,7 @@ export function useWorkspace({
   const files = chat?.draftAttachments || [];
   const hasImage = (attachments?: Attachment[]) =>
     attachments?.some((file) => file.mime.startsWith("image/"));
-  const visibleMessages = chat ? activePath(chat) : [];
+  const visibleMessages = useMemo(() => chat ? activePath(chat) : [], [chat?.id, chat?.messages, chat?.branchVersion, chat?.activeMessageId]);
   const editSource = chat?.editState && asBranchConversation(chat).messages.find((message) => message.id === chat.editState?.sourceId);
   const draftHistory = chat && editSource ? pathTo(chat, editSource.parentId) : visibleMessages;
   const blockedFor = (target: ResolvedConfig["config"], history = draftHistory) =>

@@ -117,7 +117,7 @@ function App({
     pwa,
     redact,
   } = workspace;
-  const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat]);
+  const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat?.id, chat?.messages, chat?.branchVersion]);
   const focusedSearchSequence = useRef(0);
   useConversationAlignment(view, conversation);
   useEffect(() => {

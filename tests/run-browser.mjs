@@ -79,6 +79,7 @@ try {
     "tests/composer-mobile-alignment-smoke.mjs",
     "tests/local-tools-smoke.mjs",
     "tests/rich-message-smoke.mjs",
+    "tests/long-conversation-smoke.mjs",
     "tests/web-preview-smoke.mjs",
     "tests/composer-smoke.mjs",
     "tests/slash-commands-smoke.mjs",
