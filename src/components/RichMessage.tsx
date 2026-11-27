@@ -35,6 +35,7 @@ import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import { remarkStreamingTail, safeMessageUrl } from "../rich-markdown";
 import { previewDocument, previewLanguages } from "../web-preview";
+import { WebPreview } from "./WebPreview";
 import { normalizeLatexDelimiters } from "../latex-delimiters";
 import "katex/dist/katex.min.css";
 import "../rich-message.css";
@@ -219,12 +220,7 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
       >
         <code>{code}</code>
       </pre>
-      {preview && (
-        <div className="rich-code-preview">
-          <div className="rich-code-preview-note">{translate(locale, "Preview runs in isolation. External resources may be blocked.")}</div>
-          <iframe title={translate(locale, "Code preview")} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={previewSource} />
-        </div>
-      )}
+      {preview && <WebPreview source={previewSource} locale={locale} />}
       {overflow && (
         <div className="rich-scroll-hint" aria-hidden="true">
           {translate(locale, "Scroll horizontally to see more")}

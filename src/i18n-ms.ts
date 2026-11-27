@@ -1,6 +1,17 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Full screen restarts the preview.": "Skrin penuh memulakan semula pratonton.",
+  "Preview size": "Saiz pratonton",
+  "Responsive": "Responsif",
+  "Mobile (375 px)": "Telefon (375 px)",
+  "Tablet (768 px)": "Tablet (768 px)",
+  "Desktop (1280 px)": "Desktop (1280 px)",
+  "Full screen": "Skrin penuh",
+  "Exit full screen": "Keluar skrin penuh",
+  "Console": "Konsol",
+  "No console output yet.": "Tiada output konsol lagi.",
+
   "Preview": "Pratonton",
   "Close preview": "Tutup pratonton",
   "Code preview": "Pratonton kod",

@@ -12,6 +12,17 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Full screen restarts the preview.": "切换全屏会重新运行预览。",
+  "Preview size": "预览尺寸",
+  "Responsive": "自适应",
+  "Mobile (375 px)": "手机（375 像素）",
+  "Tablet (768 px)": "平板（768 像素）",
+  "Desktop (1280 px)": "桌面（1280 像素）",
+  "Full screen": "全屏",
+  "Exit full screen": "退出全屏",
+  "Console": "控制台",
+  "No console output yet.": "暂无控制台输出。",
+
   "Preview": "预览",
   "Close preview": "关闭预览",
   "Code preview": "代码预览",
