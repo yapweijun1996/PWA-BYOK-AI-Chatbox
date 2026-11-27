@@ -14,6 +14,10 @@ try {
     viewport: { width: 1100, height: 800 },
   });
   const page = await context.newPage();
+  if (process.env.VIRTUAL_CPU_RATE) {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.VIRTUAL_CPU_RATE) });
+  }
   await page.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:55167/");
   await page.locator('html[data-startup="ready"]').waitFor();
   await page.evaluate(
@@ -358,8 +362,12 @@ try {
   );
   assert.ok((await rows.count()) < 100, "rich content should remain virtualized");
   await page.getByText("notes.txt", { exact: false }).waitFor();
-  await list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Preview", exact: true }).click();
-  await list.locator('[data-message-id="rich-397"] iframe').waitFor();
+  const previewButton = list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Preview", exact: true });
+  await previewButton.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await previewButton.click();
+  await list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Close preview", exact: true }).waitFor({ state: "attached" });
+  await list.locator('[data-message-id="rich-397"] iframe').waitFor({ state: "attached" });
   await page.evaluate(() => { window.testPreviewFrame = document.querySelector('[data-message-id="rich-397"] iframe'); });
   await pane.evaluate((el) => { el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true })); el.scrollTop = 0; });
   await page.getByText("Virtual message 0.", { exact: false }).waitFor();
