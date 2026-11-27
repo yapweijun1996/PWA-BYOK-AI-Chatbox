@@ -9,6 +9,23 @@ export type VirtualRange = {
   after: number;
 };
 
+export type VirtualSegment = { kind: "rows"; start: number; end: number } | { kind: "gap"; start: number; end: number; height: number };
+
+/** Keep retained rows mounted without filling the gaps between them and the viewport. */
+export function virtualMessageSegments(heights: readonly number[], range: VirtualRange, retained: ReadonlySet<number>): VirtualSegment[] {
+  const segments: VirtualSegment[] = [];
+  let start = 0;
+  while (start < heights.length) {
+    const visible = (start >= range.start && start < range.end) || retained.has(start);
+    let end = start + 1;
+    while (end < heights.length && (((end >= range.start && end < range.end) || retained.has(end)) === visible)) end++;
+    if (visible) segments.push({ kind: "rows", start, end });
+    else segments.push({ kind: "gap", start, end, height: heights.slice(start, end).reduce((total, height) => total + (Number.isFinite(height) && height > 0 ? height : estimatedMessageHeight), 0) });
+    start = end;
+  }
+  return segments;
+}
+
 /** Offsets include each message's bottom margin. The range end is exclusive. */
 export function virtualMessageRange(
   heights: readonly number[],

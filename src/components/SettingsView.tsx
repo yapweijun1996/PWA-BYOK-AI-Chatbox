@@ -534,7 +534,7 @@ export function SettingsView({ workspace, virtualExperiment, onVirtualExperiment
                 <div className="card">
                   <PreferenceFields {...preferences} fieldClassName="field" />
                   <label className="check"><input type="checkbox" checked={virtualExperiment} disabled={working} onChange={(event) => onVirtualExperiment(event.target.checked)} /> {t("Experimental long conversation mode")}</label>
-                  <p className="hint">{t("For this tab only, including reloads; starts at 200 messages. Search temporarily shows all messages; selection and message interaction pause virtual mode until resumed. Replies turn it off. Use full mode for screen readers and browser Find.")}</p>
+                  <p className="hint">{t("For this tab only, including reloads; starts at 200 messages. Search uses the virtual window. Interacted messages remain mounted; selecting text pauses virtual mode until resumed. Replies turn it off. Use full mode for screen readers and browser Find.")}</p>
                 </div>
               </section>
             )}

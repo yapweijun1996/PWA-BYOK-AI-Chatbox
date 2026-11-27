@@ -20,6 +20,7 @@ import { RichMessage } from "./RichMessage";
 import { ToolExecutionCard } from "./ToolExecutionCard";
 import { ResponseInspector } from "./ResponseInspector";
 import { useVirtualMessages } from "../use-virtual-messages";
+import { virtualMessageSegments } from "../virtual-message-layout";
 import "../message-list.css";
 
 export type MessageAction = {
@@ -37,6 +38,7 @@ type MessageWorkspace = Pick<
   | "followReply"
   | "visibleMessages"
   | "searchMatch"
+  | "searchMode"
   | "activeReply"
   | "setNotice"
   | "replySave"
@@ -331,7 +333,8 @@ export function MessageList({
   onSwitchVersion,
   virtualEnabled,
   virtualRequested,
-  onFullMode,
+  retainedIds,
+  onRetain,
 }: {
   workspace: MessageWorkspace;
   chat: Conversation;
@@ -340,7 +343,8 @@ export function MessageList({
   onSwitchVersion: (id: string) => Promise<void>;
   virtualEnabled: boolean;
   virtualRequested: boolean;
-  onFullMode: () => void;
+  retainedIds: ReadonlySet<string>;
+  onRetain: (id: string) => void;
 }) {
   const {
     locale,
@@ -349,6 +353,7 @@ export function MessageList({
     followReply,
     visibleMessages,
     searchMatch,
+    searchMode,
     activeReply,
     setNotice,
     replySave,
@@ -395,12 +400,36 @@ export function MessageList({
     [],
   );
   const conflict = conflicts.has(chat.id);
-  const range = useVirtualMessages({ enabled: virtualEnabled, chatId: chat.id, messages: visibleMessages, pane: conversation, content: messagesContent, follow: followReply });
-  const renderedMessages = range ? visibleMessages.slice(range.start, range.end) : visibleMessages;
+  const searchTarget = !searchMode && searchMatch?.chatId === chat.id ? searchMatch : undefined;
+  const windowed = useVirtualMessages({ enabled: virtualEnabled, chatId: chat.id, messages: visibleMessages, pane: conversation, content: messagesContent, follow: followReply, searchTarget });
+  const focusedSearch = useRef(0);
+  useLayoutEffect(() => {
+    if (!searchTarget || focusedSearch.current === searchTarget.sequence) return;
+    const target = Array.from(messagesContent.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((element) => element.dataset.messageId === searchTarget.messageId);
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      if (!target.isConnected) return;
+      focusedSearch.current = searchTarget.sequence;
+      target.scrollIntoView({ block: "center", behavior: "auto" });
+      target.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [searchTarget, windowed?.range.start, windowed?.range.end, messagesContent]);
+  const retainedIndexes = new Set<number>();
+  visibleMessages.forEach((message, index) => { if (retainedIds.has(message.id)) retainedIndexes.add(index); });
+  const segments = windowed ? virtualMessageSegments(windowed.heights, windowed.range, retainedIndexes) : [{ kind: "rows" as const, start: 0, end: visibleMessages.length }];
+  const renderedMessages = segments.flatMap<{ message: Message } | { gap: { start: number; height: number } }>((segment) => segment.kind === "rows" ? visibleMessages.slice(segment.start, segment.end).map((message) => ({ message })) : [{ gap: segment }]);
+  const retainTarget = (target: EventTarget) => {
+    if (!virtualRequested || !(target instanceof Element)) return;
+    const row = target.closest<HTMLElement>("[data-message-id]");
+    if (row?.dataset.messageId) onRetain(row.dataset.messageId);
+  };
   return (
-    <div className="messages" ref={messagesContent} data-virtualized={Boolean(range)} data-message-count={visibleMessages.length} onFocusCapture={(event) => { const target = event.target as HTMLElement; if (virtualRequested && !target.matches("[data-message-id]") && target.closest("[data-message-id]")) onFullMode(); }} onPointerDownCapture={(event) => { if (virtualRequested && event.pointerType !== "touch" && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }} onClickCapture={(event) => { if (virtualRequested && (event.target as HTMLElement).closest("[data-message-id] button, [data-message-id] summary, [data-message-id] a, [data-message-id] input, [data-message-id] select")) onFullMode(); }}>
-      <div aria-hidden="true" className="virtual-spacer" style={{ height: range?.before ?? 0 }} />
-      {renderedMessages.map((message) => {
+    <div className="messages" ref={messagesContent} data-virtualized={Boolean(windowed)} data-message-count={visibleMessages.length} onFocusCapture={(event) => retainTarget(event.target)} onPointerDownCapture={(event) => { if ((event.target as Element).closest("button, summary, a, input, select, textarea, [role='button']")) retainTarget(event.target); }} onClickCapture={(event) => { if ((event.target as Element).closest("button, summary, a, input, select, textarea, [role='button']")) retainTarget(event.target); }}>
+      <div aria-hidden="true" className="virtual-spacer" style={{ height: 0 }} />
+      {renderedMessages.map((item) => {
+        if ("gap" in item) return <div key={`gap-${item.gap.start}`} aria-hidden="true" className="virtual-spacer" style={{ height: item.gap.height }} />;
+        const message = item.message;
         const versions = versionGroupsMap.get(message.id);
         const versionIndex =
           versions?.findIndex((version) => version.id === message.id) ?? -1;
@@ -437,7 +466,7 @@ export function MessageList({
           />
         );
       })}
-      <div aria-hidden="true" className="virtual-spacer" style={{ height: range?.after ?? 0 }} />
+      <div aria-hidden="true" className="virtual-spacer" style={{ height: 0 }} />
     </div>
   );
 }

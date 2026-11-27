@@ -12,6 +12,11 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Full conversation is shown while selecting text.": "选择文本时显示完整会话。",
+  "Full conversation is shown during editing or for short chats.": "编辑或短会话期间显示完整会话。",
+  "Resume virtual mode": "恢复虚拟模式",
+  "Release retained messages (may close previews)": "释放保留的消息（可能关闭预览）",
+  "For this tab only, including reloads; starts at 200 messages. Search uses the virtual window. Interacted messages remain mounted; selecting text pauses virtual mode until resumed. Replies turn it off. Use full mode for screen readers and browser Find.": "仅在当前标签页生效（包括刷新后），200 条消息起启用。搜索使用虚拟窗口；操作过的消息会保留，选择文本时暂停虚拟模式直至手动恢复。生成回复会关闭此模式。屏幕阅读器和浏览器查找请使用完整模式。",
   "Experimental long conversation mode": "实验性长对话模式",
   "For this tab only, including reloads; starts at 200 messages. Search, selection, message interaction and replies turn it off. Unsupported content uses full mode. Screen readers, browser Find and cross-screen selection require full mode.": "仅在当前标签页生效（包括刷新后），200 条消息起启用。搜索、选择、消息交互和生成回复会关闭此模式；不支持的内容会显示完整会话。屏幕阅读器、浏览器查找和跨屏选择需要完整模式。",
   "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection.": "实验性长对话模式已启用。屏幕阅读器、浏览器查找或跨屏选择请使用完整模式。",

@@ -28,7 +28,7 @@ try {
             id: `virtual-${i}`,
             role: i % 2 ? "assistant" : "user",
             content:
-              `Virtual message ${i}. ` + (i === 0 ? "Search target unique. " : "") + "Plain text ".repeat(1 + (i % 20)),
+              `Virtual message ${i}. ` + (i === 0 ? "Search target unique. " : i === 200 ? "Search middle unique. " : "") + "Plain text ".repeat(1 + (i % 20)),
             createdAt: 1700000000000 + i,
             status: "complete",
           }));
@@ -55,6 +55,16 @@ try {
               toolExecutions: i === 399 ? [{ id: "tool", name: "text_tool", code: "input", startedAt: 1700000000000, result: { status: "success", durationMs: 1, console: [], value: { text: "done" } } }] : undefined,
             })),
           });
+          const branchMessages = Array.from({ length: 300 }, (_, i) => ({
+            id: `branch-${i}`,
+            parentId: i ? `branch-${i - 1}` : null,
+            role: "user",
+            content: `Branch message ${i}`,
+            createdAt: 1700000000000 + i,
+            status: "complete",
+          }));
+          branchMessages.push({ id: "branch-hidden", parentId: "branch-248", role: "user", content: "Hidden branch unique", createdAt: 1700000000500, status: "complete" });
+          tx.objectStore("conversations").put({ id: "branch-chat", title: "Branch test", updatedAt: 2, draft: "", branchVersion: 1, activeMessageId: "branch-299", preferredBranches: {}, messages: branchMessages });
           tx.objectStore("settings").put("virtual-chat", "activeConversation");
           tx.oncomplete = () => {
             db.close();
@@ -349,39 +359,45 @@ try {
   assert.ok((await rows.count()) < 100, "rich content should remain virtualized");
   await page.getByText("notes.txt", { exact: false }).waitFor();
   await list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Preview", exact: true }).click();
-  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "false");
   await list.locator('[data-message-id="rich-397"] iframe').waitFor();
-  await pane.evaluate((el) => { el.scrollTop = 0; });
-  assert.equal(await list.locator('[data-message-id="rich-397"] iframe').count(), 1, "open preview remains mounted while reading elsewhere");
-  await page.getByRole("button", { name: "Resume virtual mode (closes open previews)" }).click();
-  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true");
+  await page.evaluate(() => { window.testPreviewFrame = document.querySelector('[data-message-id="rich-397"] iframe'); });
+  await pane.evaluate((el) => { el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true })); el.scrollTop = 0; });
+  await page.getByText("Virtual message 0.", { exact: false }).waitFor();
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
+  assert.ok((await rows.count()) < 100, "preview should pin only its message");
+  assert.equal(await page.evaluate(() => document.querySelector('[data-message-id="rich-397"] iframe') === window.testPreviewFrame), true, "open preview must stay mounted while reading elsewhere");
   await page.getByRole("button", { name: "Jump to latest" }).click();
   await list.locator(".tool-execution > summary").click();
-  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "false");
   assert.equal(await list.locator(".tool-execution").getAttribute("open"), "");
-  await page.getByRole("button", { name: "Resume virtual mode (closes open previews)" }).click();
-  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true");
+  await pane.evaluate((el) => { el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true })); el.scrollTop = 0; });
+  await page.getByText("Virtual message 0.", { exact: false }).waitFor();
+  assert.equal(await list.locator(".tool-execution").getAttribute("open"), "", "expanded tool remains mounted");
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
+  assert.ok((await rows.count()) < 100);
+  await page.getByRole("button", { name: "Release retained messages (may close previews)" }).click();
+  await page.waitForFunction(() => !document.querySelector('[data-message-id="rich-397"]'));
   await page.getByRole("button", { name: "Virtual test", exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector(".messages")?.dataset.virtualized === "true" && document.querySelector('[data-message-id="virtual-399"]'),
   );
   await rows.last().getByRole("button", { name: "Copy", exact: true }).focus();
-  await page.waitForFunction(
-    () => document.querySelector(".messages")?.dataset.virtualized === "false",
-  );
-  assert.equal(
-    await rows.count(),
-    400,
-    "focusing a message must restore full mode",
-  );
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
+  assert.ok((await rows.count()) < 100, "focusing a message must retain only that row");
   assert.equal(
     await page.evaluate(
-      () =>
-        document.activeElement?.closest("[data-message-id]")?.dataset.messageId,
+      () => document.activeElement?.closest("[data-message-id]")?.dataset.messageId,
     ),
     "virtual-399",
   );
-  await page.getByRole("button", { name: "Resume virtual mode (closes open previews)" }).click();
+  const selectionBox = await page.locator('[data-message-id="virtual-399"] .message-answer p').boundingBox();
+  await page.mouse.move(selectionBox.x + 3, selectionBox.y + selectionBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(selectionBox.x + 90, selectionBox.y + selectionBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "false");
+  assert.ok((await page.evaluate(() => getSelection().toString())).length > 0, "mouse drag selection survives the transition");
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await page.getByRole("button", { name: "Resume virtual mode" }).click();
   await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true");
   await page.evaluate(() => {
     const text = document.querySelector(
@@ -427,7 +443,7 @@ try {
   });
   assert.match(copied, /Virtual message 0\./);
   assert.match(copied, /Virtual message 399\./);
-  await page.getByRole("button", { name: "Resume virtual mode (closes open previews)" }).click();
+  await page.getByRole("button", { name: "Resume virtual mode" }).click();
   await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true");
   await page.route("http://localhost:1234/v1/**", async (route) => {
     const headers = {
@@ -476,8 +492,9 @@ try {
   assert.match(copiedConversation, /Virtual message 399\./);
   assert.match(copiedConversation, /Virtual reply/);
   assert.equal(await list.getAttribute("data-virtualized"), "true");
+  await page.evaluate(() => { window.maxVirtualRows = document.querySelectorAll(".messages > [data-message-id]").length; window.virtualObserver = new MutationObserver(() => { window.maxVirtualRows = Math.max(window.maxVirtualRows, document.querySelectorAll(".messages > [data-message-id]").length); }); window.virtualObserver.observe(document.querySelector(".conversation"), { childList: true, subtree: true }); });
   await page.getByRole("button", { name: "Search conversations" }).click();
-  await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "false");
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
   const search = page.getByRole("dialog", { name: "Search conversations" });
   await search.getByRole("searchbox", { name: "Search conversations" }).fill("Search target unique");
   await search.getByRole("button", { name: /Message match.*Search target unique/ }).first().click();
@@ -485,11 +502,33 @@ try {
   assert.equal(await page.evaluate(() => sessionStorage.getItem("luma:virtual-experiment")), "1");
   await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true", null, { timeout: 12000 });
   assert.ok(await page.locator('[data-message-id="virtual-0"]').isVisible());
+  await page.getByRole("button", { name: "Search conversations" }).click();
+  await search.getByRole("searchbox", { name: "Search conversations" }).fill("Search middle unique");
+  await search.getByRole("button", { name: /Virtual test.*Message match.*Search middle unique/ }).first().click();
+  await page.waitForFunction(() => document.activeElement?.dataset.messageId === "virtual-200");
+  assert.ok(await page.locator('[data-message-id="virtual-200"]').isVisible());
+  await page.getByRole("button", { name: "Search conversations" }).click();
+  await search.getByRole("searchbox", { name: "Search conversations" }).fill("Search middle unique");
+  await search.getByRole("button", { name: /Rich test.*Message match.*Search middle unique/ }).first().click();
+  await page.waitForFunction(() => document.activeElement?.dataset.messageId === "rich-200");
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
+  await page.getByRole("button", { name: "Search conversations" }).click();
+  await search.getByRole("searchbox", { name: "Search conversations" }).fill("Hidden branch unique");
+  await search.getByRole("button", { name: /Branch test.*Message match.*Hidden branch unique/ }).first().click();
+  await page.waitForFunction(() => document.activeElement?.dataset.messageId === "branch-hidden");
+  assert.equal(await list.getAttribute("data-virtualized"), "true");
+  assert.ok(await page.locator('[data-message-id="branch-hidden"]').isVisible());
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".conversation").getBoundingClientRect();
+    const row = document.querySelector('[data-message-id="branch-hidden"]').getBoundingClientRect();
+    return row.top < pane.bottom && row.bottom > pane.top;
+  });
+  assert.ok(await page.evaluate(() => { window.virtualObserver.disconnect(); return window.maxVirtualRows < 100; }), "search must never mount the full conversation");
   await page.reload();
   await page.locator('html[data-startup="ready"]').waitFor();
   await page.waitForFunction(() => document.querySelector(".messages")?.dataset.virtualized === "true");
   console.log(
-    "PASS: opt-in virtual window, measured heights, anchor restoration, search fallback and full-mode default",
+    "PASS: opt-in virtual window, measured heights, anchor restoration, windowed search, retained interactions and full-mode default",
   );
 } finally {
   replyGate.resolve();

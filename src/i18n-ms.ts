@@ -1,6 +1,11 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Full conversation is shown while selecting text.": "Perbualan penuh dipaparkan semasa memilih teks.",
+  "Full conversation is shown during editing or for short chats.": "Perbualan penuh dipaparkan semasa penyuntingan atau untuk sembang pendek.",
+  "Resume virtual mode": "Sambung mod maya",
+  "Release retained messages (may close previews)": "Lepaskan mesej tersimpan (mungkin menutup pratonton)",
+  "For this tab only, including reloads; starts at 200 messages. Search uses the virtual window. Interacted messages remain mounted; selecting text pauses virtual mode until resumed. Replies turn it off. Use full mode for screen readers and browser Find.": "Untuk tab ini sahaja, termasuk selepas muat semula; bermula pada 200 mesej. Carian menggunakan tetingkap maya. Mesej yang diinteraksikan kekal dimuatkan; pilihan teks menjeda mod maya sehingga disambung. Balasan mematikannya. Gunakan mod penuh untuk pembaca skrin dan carian pelayar.",
   "Experimental long conversation mode": "Mod perbualan panjang percubaan",
   "For this tab only, including reloads; starts at 200 messages. Search, selection, message interaction and replies turn it off. Unsupported content uses full mode. Screen readers, browser Find and cross-screen selection require full mode.": "Untuk tab ini sahaja, termasuk selepas muat semula; bermula pada 200 mesej. Carian, pilihan teks, interaksi mesej dan balasan mematikannya. Kandungan tidak disokong menggunakan mod penuh. Pembaca skrin, carian pelayar dan pilihan merentas skrin memerlukan mod penuh.",
   "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection.": "Mod perbualan panjang percubaan aktif. Gunakan mod penuh untuk pembaca skrin, carian pelayar atau pilihan merentas skrin.",

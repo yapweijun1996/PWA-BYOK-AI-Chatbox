@@ -18,6 +18,7 @@ export function useVirtualMessages({
   pane,
   content,
   follow,
+  searchTarget,
 }: {
   enabled: boolean;
   chatId: string;
@@ -25,6 +26,7 @@ export function useVirtualMessages({
   pane: RefObject<HTMLElement | null>;
   content: RefObject<HTMLDivElement | null>;
   follow: RefObject<boolean>;
+  searchTarget?: { messageId: string; sequence: number };
 }) {
   const [state, setState] = useState<WindowState | null>(() => {
     if (!enabled) return null;
@@ -46,7 +48,13 @@ export function useVirtualMessages({
   const lastMessages = useRef(messages);
   const anchor = useRef<Anchor | null>(null);
   const correctedScrollTop = useRef<number | null>(null);
-  const active = enabled && state?.chatId === chatId;
+  const positionedSearch = useRef(0);
+  const active = enabled;
+  const range = state?.chatId === chatId ? state.range : (() => {
+    if (!enabled) return { start: 0, end: 0, before: 0, after: 0 };
+    const viewport = pane.current?.clientHeight ?? (typeof window === "undefined" ? 800 : window.innerHeight);
+    return virtualMessageRange(messages.map(() => estimatedMessageHeight), follow.current ? Math.max(0, messages.length * estimatedMessageHeight - viewport) : 0, viewport);
+  })();
   const current = useRef({ enabled, chatId, messages, active });
   current.current = { enabled, chatId, messages, active };
 
@@ -154,7 +162,7 @@ export function useVirtualMessages({
       }
       return;
     }
-    if (!active) {
+    if (!state || state.chatId !== chatId) {
       const initialize = () => {
         if (current.current.enabled) {
           measure();
@@ -183,6 +191,21 @@ export function useVirtualMessages({
     else captureAnchor();
     if (messagesChanged) updateRange();
   }, [enabled, active, chatId, state, messages, pane, content, follow]);
+
+  useLayoutEffect(() => {
+    const el = pane.current, list = content.current;
+    if (!enabled || !searchTarget || !el || !list || positionedSearch.current === searchTarget.sequence) return;
+    const index = messages.findIndex((message) => message.id === searchTarget.messageId);
+    if (index < 0) return;
+    positionedSearch.current = searchTarget.sequence;
+    follow.current = false;
+    anchor.current = null;
+    const origin = el.scrollTop + list.getBoundingClientRect().top - el.getBoundingClientRect().top + (parseFloat(getComputedStyle(list).paddingTop) || 0);
+    const offset = messages.slice(0, index).reduce((total, message) => total + (heights.current.get(message.id) ?? estimatedMessageHeight), 0);
+    el.scrollTop = Math.max(0, origin + offset - el.clientHeight / 2);
+    correctedScrollTop.current = el.scrollTop;
+    updateRange();
+  }, [enabled, chatId, messages, searchTarget, pane, content, follow]);
 
   useEffect(() => {
     const el = pane.current,
@@ -247,5 +270,5 @@ export function useVirtualMessages({
     content,
   ]);
 
-  return active ? state.range : null;
+  return active ? { range, heights: messages.map((message) => heights.current.get(message.id) ?? estimatedMessageHeight) } : null;
 }
