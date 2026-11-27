@@ -1,6 +1,9 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Offline JavaScript": "JavaScript luar talian",
+  "Interactive": "Interaktif",
+  "Static": "Statik",
   "Errors": "Ralat",
   "Warnings": "Amaran",
   "Copy console": "Salin konsol",

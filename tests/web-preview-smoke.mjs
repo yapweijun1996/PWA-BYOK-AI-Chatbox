@@ -93,13 +93,37 @@ try {
   assert.equal(await blocks.nth(2).locator("iframe").evaluate(el => Math.round(el.getBoundingClientRect().width)), 375);
   await blocks.nth(2).getByLabel("Preview size").selectOption("desktop");
   assert.equal(await blocks.nth(2).locator("iframe").evaluate(el => Math.round(el.getBoundingClientRect().width)), 1280);
-  await blocks.nth(2).getByRole("button", { name: "Full screen" }).click();
-  const dialog = page.getByRole("dialog", { name: "Code preview" });
-  await dialog.waitFor(); await page.keyboard.press("Escape"); await dialog.waitFor({ state: "detached" });
+  for (const viewport of [{ width: 320, height: 568 }, { width: 1280, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await blocks.nth(2).getByLabel("Preview size").selectOption("responsive");
+    await blocks.nth(2).getByRole("button", { name: "Full screen" }).click();
+    const dialog = page.getByRole("dialog", { name: "Code preview" });
+    await dialog.waitFor();
+    const metrics = await dialog.evaluate(el => {
+      const panel = el.querySelector(".rich-code-preview");
+      const canvas = el.querySelector(".rich-preview-viewport");
+      const frame = el.querySelector("iframe");
+      const controls = el.querySelector(".rich-preview-controls");
+      const button = controls.querySelector("button").getBoundingClientRect();
+      const select = controls.querySelector("select").getBoundingClientRect();
+      return { width: el.clientWidth, scrollWidth: el.scrollWidth, panelWidth: panel.clientWidth, panelScroll: panel.scrollWidth, canvasHeight: canvas.clientHeight, frameHeight: frame.getBoundingClientRect().height, button, select };
+    });
+    assert.ok(metrics.scrollWidth <= metrics.width + 1 && metrics.panelScroll <= metrics.panelWidth + 1, `${viewport.width}: full screen should not overflow horizontally`);
+    assert.ok(metrics.canvasHeight >= 240 && metrics.frameHeight >= 240, `${viewport.width}: preview canvas is too short`);
+    assert.ok(metrics.button.right <= viewport.width && metrics.select.right <= viewport.width, `${viewport.width}: controls are clipped`);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "detached" });
+    assert.equal(await blocks.nth(2).getByRole("button", { name: "Full screen" }).evaluate(el => document.activeElement === el), true, "focus returns to full-screen button");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await blocks.nth(4).getByRole("button", { name: "Run offline" }).click();
-  await blocks.nth(4).getByText("Preview failure", { exact: false }).waitFor({ timeout: 15000 });
+  await blocks.nth(4).locator(".rich-preview-result").getByText("Preview failure", { exact: false }).waitFor({ timeout: 15000 });
   await blocks.nth(4).getByText("JS works 42 undefined undefined", { exact: false }).waitFor();
   await blocks.nth(4).getByText("Check the JavaScript code and try again.").waitFor();
+  await blocks.nth(4).getByRole("button", { name: "Full screen" }).click();
+  await page.getByRole("dialog", { name: "Code preview" }).getByText("Preview failure", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await blocks.nth(4).locator(".rich-preview-result").getByText("Preview failure", { exact: false }).waitFor();
   await blocks.nth(4).getByRole("button", { name: "Clear console" }).click();
   await blocks.nth(4).getByText("No console output yet.").waitFor();
   await blocks.nth(5).getByRole("button", { name: "Run offline" }).click();

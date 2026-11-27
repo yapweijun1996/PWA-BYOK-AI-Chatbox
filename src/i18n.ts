@@ -12,6 +12,9 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Offline JavaScript": "离线 JavaScript",
+  "Interactive": "交互模式",
+  "Static": "静态模式",
   "Errors": "错误",
   "Warnings": "警告",
   "Copy console": "复制控制台",
