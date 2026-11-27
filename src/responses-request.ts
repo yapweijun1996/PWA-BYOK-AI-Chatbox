@@ -1,17 +1,7 @@
-import { javascriptToolDescription, javascriptToolParameters, providerToolName } from "./javascript-tool";
-import { localToolDefinitions } from "./tool-definitions";
+import { responsesTools as tools } from "./provider-tool-encoders/responses";
 import { invalid, type ResponsesExchange } from "./responses-types";
 import { replay, validResponsesReplay } from "./responses-replay";
 import type { Message } from "./types";
-
-const tools = [
-  {
-    name: providerToolName,
-    description: javascriptToolDescription,
-    parameters: javascriptToolParameters,
-  },
-  ...localToolDefinitions,
-].map((fn) => ({ type: "function", ...fn, strict: false }));
 
 /** Builds only stateless requests; user-selected active branch must be supplied by the caller. */
 export function buildResponsesRequest(
