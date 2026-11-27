@@ -289,6 +289,7 @@
 .rich-preview-console summary { cursor: pointer; }
 .rich-preview-console ol { max-height: 160px; overflow: auto; padding-left: 24px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .rich-preview-console li[data-level="error"] { color: var(--color-danger, #b42318); }
+.rich-preview-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
 .rich-preview-dialog { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100%; max-height: none; padding: 0; border: 0; color: var(--color-text); background: var(--color-bg); }
 .rich-preview-dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .rich-preview-dialog .rich-code-preview { min-height: 100%; box-sizing: border-box; }

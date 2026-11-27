@@ -15,10 +15,9 @@ describe("web preview", () => {
     }
     expect(render("```python\nprint(1)\n```")).not.toContain(">Preview</button>");
   });
-  it("keeps script closing tags inside the isolated JavaScript source", () => {
-    const document = previewDocument("javascript", 'console.log("</script><img src=x>")');
-    expect(document).not.toContain('</script><img');
-    expect(document).toContain('\\u003c/script>');
-    expect(document).toContain("connect-src 'none'");
+  it("keeps interactive execution behind an explicit mode", () => {
+    const html = previewDocument("html", "<p>Example</p>", true);
+    expect(html).toContain("connect-src 'none'");
+    expect(html).toContain("<p>Example</p>");
   });
 });

@@ -1,17 +1,30 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { translate, type Locale } from "../i18n";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { translate, translateNotice, type Locale } from "../i18n";
+import { executeJavaScript, type ExecutionResult } from "../js-tool-runtime";
+import { previewDocument } from "../web-preview";
 
 type Entry = { level: "log" | "info" | "warn" | "error"; text: string };
-export function WebPreview({ source, locale }: { source: string; locale: Locale }) {
+export function WebPreview({ source, language, locale }: { source: string; language: string; locale: Locale }) {
   const [size, setSize] = useState("responsive");
   const [fullscreen, setFullscreen] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [result, setResult] = useState<ExecutionResult>();
+  const [running, setRunning] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const received = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null);
+  const execution = useRef<AbortController | null>(null);
+  const javascript = language === "javascript" || language === "js";
+  const statusLabel = result && ({ success: "Execution succeeded", error: "Execution failed", timeout: "Execution timed out", cancelled: "Execution cancelled", limit: "Execution limit reached" } as const)[result.status];
+  const documentSource = useMemo(() => javascript ? "" : previewDocument(language, source, interactive), [javascript, language, source, interactive]);
+  useEffect(() => {
+    setRunning(false); setResult(undefined);
+    return () => { execution.current?.abort(); execution.current = null; };
+  }, [source, language]);
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow || !event.data || event.data.__lumaPreview !== 1) return;
+      if (!interactive || event.source !== frame.current?.contentWindow || !event.data || event.data.__lumaPreview !== 1) return;
       const { level, text } = event.data;
       if (!["log", "info", "warn", "error"].includes(level) || typeof text !== "string" || received.current >= 300) return;
       received.current++;
@@ -19,27 +32,44 @@ export function WebPreview({ source, locale }: { source: string; locale: Locale 
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, []);
+  }, [interactive]);
   useLayoutEffect(() => { if (fullscreen && dialog.current && !dialog.current.open) dialog.current.showModal(); }, [fullscreen]);
   const resize = (next: boolean) => { received.current = 0; setEntries([]); setFullscreen(next); };
+  const run = async () => {
+    if (execution.current) return;
+    const controller = new AbortController();
+    execution.current = controller; setResult(undefined); setRunning(true);
+    const next = await executeJavaScript({ code: source }, controller.signal);
+    if (execution.current !== controller) return;
+    execution.current = null; setRunning(false); setResult(next);
+  };
   const panel = <section className="rich-code-preview" aria-label={translate(locale, "Code preview")}>
     <div className="rich-preview-toolbar">
-      <label>{translate(locale, "Preview size")}
+      {!javascript && <label>{translate(locale, "Preview size")}
         <select value={size} onChange={(event) => setSize(event.target.value)}>
           <option value="responsive">{translate(locale, "Responsive")}</option>
           <option value="mobile">{translate(locale, "Mobile (375 px)")}</option>
           <option value="tablet">{translate(locale, "Tablet (768 px)")}</option>
           <option value="desktop">{translate(locale, "Desktop (1280 px)")}</option>
         </select>
-      </label>
+      </label>}
       <button type="button" className="rich-code-copy" onClick={() => fullscreen ? dialog.current?.close() : resize(true)}>{translate(locale, fullscreen ? "Exit full screen" : "Full screen")}</button>
     </div>
-    <div className="rich-code-preview-note">{translate(locale, "Preview runs in isolation. External resources may be blocked.")} {translate(locale, "Full screen restarts the preview.")}</div>
-    <div className="rich-preview-viewport"><iframe ref={frame} data-size={size} title={translate(locale, "Code preview")} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={source} /></div>
-    <details className="rich-preview-console" open={entries.some((entry) => entry.level === "error")}>
-      <summary>{translate(locale, "Console")} ({entries.length})</summary>
-      {entries.length ? <ol>{entries.map((entry, index) => <li key={index} data-level={entry.level}><strong>{entry.level}</strong> {entry.text}</li>)}</ol> : <p>{translate(locale, "No console output yet.")}</p>}
-    </details>
+    {javascript ? <>
+      <p className="rich-code-preview-note">{translate(locale, "JavaScript runs offline with a time and memory limit. Browser APIs and timers are unavailable.")}</p>
+      <button type="button" className="rich-code-copy" onClick={() => running ? execution.current?.abort() : void run()}>{translate(locale, running ? "Stop execution" : "Run offline")}</button>
+      {result && <div role="status" className="rich-preview-result"><strong>{translate(locale, "Execution status")}: {statusLabel && translate(locale, statusLabel)}</strong>{result.error && <p>{translateNotice(locale, result.error.message)}</p>}{result.value && <pre>{result.value.text}</pre>}{result.console.map((entry, index) => <pre key={index}>{entry.level}: {entry.text}</pre>)}</div>}
+    </> : <>
+      <p className="rich-code-preview-note">{translate(locale, "Static preview disables scripts and removes external links. Browser resource policies still apply.")}</p>
+      <p className="rich-code-preview-note">{translate(locale, "Interactive preview can navigate to external sites and may not stop if scripts hang. Only run trusted code.")}</p>
+      <button type="button" className="rich-code-copy" aria-pressed={interactive} onClick={() => { received.current = 0; setEntries([]); setInteractive((value) => !value); }}>{translate(locale, interactive ? "Stop interactive preview" : "Enable interactive preview")}</button>
+      {interactive && <p className="rich-code-preview-note">{translate(locale, "Full screen restarts the preview.")}</p>}
+      <div className="rich-preview-viewport"><iframe ref={frame} data-size={size} title={translate(locale, "Code preview")} sandbox={interactive ? "allow-scripts" : ""} referrerPolicy="no-referrer" srcDoc={documentSource} /></div>
+      {interactive && <details className="rich-preview-console" open={entries.some((entry) => entry.level === "error")}>
+        <summary>{translate(locale, "Console")} ({entries.length})</summary>
+        {entries.length ? <ol>{entries.map((entry, index) => <li key={index} data-level={entry.level}><strong>{entry.level}</strong> {entry.text}</li>)}</ol> : <p>{translate(locale, "No console output yet.")}</p>}
+      </details>}
+    </>}
   </section>;
   return fullscreen ? <dialog className="rich-preview-dialog" ref={dialog} aria-label={translate(locale, "Code preview")} onClose={() => resize(false)}>{panel}</dialog> : panel;
 }

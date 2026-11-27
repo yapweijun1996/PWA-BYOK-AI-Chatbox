@@ -1,7 +1,8 @@
 /** Each preview is an isolated, opaque-origin iframe. External subresources are restricted by CSP. */
 export const previewLanguages = new Set(["html", "svg", "css", "javascript", "js"]);
-const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
-const prefix = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="viewport" content="width=device-width, initial-scale=1">`;
+const interactivePolicy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
+const staticPolicy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
+const prefix = (interactive: boolean) => `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${interactive ? interactivePolicy : staticPolicy}"><meta name="viewport" content="width=device-width, initial-scale=1">`;
 const bridge = `<script>
   (() => {
     let count = 0;
@@ -17,12 +18,24 @@ const bridge = `<script>
   })();
 </script>`;
 
-/** Builds an independent document from a single fenced code block. */
-export function previewDocument(language: string, source: string): string {
-  if (language === "css") return `${prefix}${bridge}<style>${source}</style><main><h1>Heading</h1><p>Preview text and <a href="#">a link</a>.</p><button type="button">Button</button><input placeholder="Input"></main>`;
-  if (language === "javascript" || language === "js") {
-    const encoded = JSON.stringify(source).replace(/</g, "\\u003c");
-    return `${prefix}${bridge}<pre id="output" data-preview-console="true"></pre><script>const script = document.createElement('script'); script.textContent = ${encoded}; document.body.appendChild(script);</script>`;
+/** Parse in an inert template before insertion into a script-disabled frame. */
+export function sanitizeStaticMarkup(source: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = source;
+  template.content.querySelectorAll("script,iframe,frame,object,embed,link,meta,base,form,animate,set,animateMotion,animateTransform").forEach((element) => element.remove());
+  for (const element of template.content.querySelectorAll("*")) {
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim();
+      if (name.startsWith("on") || name === "formaction" || name === "ping" || ((name === "href" || name === "xlink:href") && !value.startsWith("#"))) element.removeAttribute(attribute.name);
+    }
   }
-  return prefix + bridge + source;
+  return template.innerHTML;
+}
+
+/** Interactive previews are explicitly opt-in and retain browser limitations. */
+export function previewDocument(language: string, source: string, interactive = false): string {
+  const head = prefix(interactive);
+  const body = language === "css" ? `<style>${source}</style><main><h1>Heading</h1><p>Preview text and <a href="#">a link</a>.</p><button type="button">Button</button><input placeholder="Input"></main>` : source;
+  return head + (interactive ? bridge + body : sanitizeStaticMarkup(body));
 }

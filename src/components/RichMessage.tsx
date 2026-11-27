@@ -34,7 +34,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 import { interpolate, translate } from "../i18n";
 import type { Locale } from "../i18n";
 import { remarkStreamingTail, safeMessageUrl } from "../rich-markdown";
-import { previewDocument, previewLanguages } from "../web-preview";
+import { previewLanguages } from "../web-preview";
 import { WebPreview } from "./WebPreview";
 import { normalizeLatexDelimiters } from "../latex-delimiters";
 import "katex/dist/katex.min.css";
@@ -164,7 +164,6 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
   const [wrap, setWrap] = useState(false);
   const [preview, setPreview] = useState(false);
   const canPreview = previewLanguages.has(language);
-  const previewSource = useMemo(() => canPreview ? previewDocument(language, source) : "", [canPreview, language, source]);
   const { ref, overflow } = useHorizontalOverflow<HTMLPreElement>(
     `${wrap}:${source}`,
   );
@@ -220,7 +219,7 @@ function CodeBlock({ source, language }: { source: string; language: string }) {
       >
         <code>{code}</code>
       </pre>
-      {preview && <WebPreview source={previewSource} locale={locale} />}
+      {preview && <WebPreview source={source} language={language} locale={locale} />}
       {overflow && (
         <div className="rich-scroll-hint" aria-hidden="true">
           {translate(locale, "Scroll horizontally to see more")}
