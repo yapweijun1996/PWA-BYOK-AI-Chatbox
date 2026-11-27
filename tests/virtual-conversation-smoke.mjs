@@ -365,7 +365,14 @@ try {
   const previewButton = list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Preview", exact: true });
   await previewButton.scrollIntoViewIfNeeded();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await previewButton.click();
+  const beforePress = await previewButton.boundingBox();
+  await page.mouse.move(beforePress.x + beforePress.width / 2, beforePress.y + beforePress.height / 2);
+  await page.mouse.down();
+  await page.getByRole("button", { name: "Release retained messages (may close previews)" }).waitFor({ state: "visible" });
+  await page.waitForFunction(() => ![...document.querySelectorAll(".virtual-notice button")].find((button) => button.textContent.includes("Release retained messages"))?.disabled);
+  const afterPress = await previewButton.boundingBox();
+  assert.ok(Math.abs(beforePress.x - afterPress.x) < 2 && Math.abs(beforePress.y - afterPress.y) < 2, "retaining a message must not move the pressed control");
+  await page.mouse.up();
   await list.locator('[data-message-id="rich-397"]').getByRole("button", { name: "Close preview", exact: true }).waitFor({ state: "attached" });
   await list.locator('[data-message-id="rich-397"] iframe').waitFor({ state: "attached" });
   await page.evaluate(() => { window.testPreviewFrame = document.querySelector('[data-message-id="rich-397"] iframe'); });
