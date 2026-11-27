@@ -398,7 +398,7 @@ export function MessageList({
   const range = useVirtualMessages({ enabled: virtualEnabled, chatId: chat.id, messages: visibleMessages, pane: conversation, content: messagesContent, follow: followReply });
   const renderedMessages = range ? visibleMessages.slice(range.start, range.end) : visibleMessages;
   return (
-    <div className="messages" ref={messagesContent} data-virtualized={Boolean(range)} data-message-count={visibleMessages.length} onFocusCapture={(event) => { if (virtualRequested && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }} onPointerDownCapture={(event) => { if (virtualRequested && event.pointerType !== "touch" && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }}>
+    <div className="messages" ref={messagesContent} data-virtualized={Boolean(range)} data-message-count={visibleMessages.length} onFocusCapture={(event) => { const target = event.target as HTMLElement; if (virtualRequested && !target.matches("[data-message-id]") && target.closest("[data-message-id]")) onFullMode(); }} onPointerDownCapture={(event) => { if (virtualRequested && event.pointerType !== "touch" && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }} onClickCapture={(event) => { if (virtualRequested && (event.target as HTMLElement).closest("[data-message-id] button, [data-message-id] summary, [data-message-id] a, [data-message-id] input, [data-message-id] select")) onFullMode(); }}>
       <div aria-hidden="true" className="virtual-spacer" style={{ height: range?.before ?? 0 }} />
       {renderedMessages.map((message) => {
         const versions = versionGroupsMap.get(message.id);

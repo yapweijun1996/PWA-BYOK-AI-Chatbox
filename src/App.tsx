@@ -129,18 +129,25 @@ function App({
     redact,
   } = workspace;
   const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat?.id, chat?.messages, chat?.branchVersion]);
-  const virtualSupported = useMemo(() => typeof ResizeObserver !== "undefined" && visibleMessages.every((message) => !message.reasoning && !message.toolExecutions?.length && !message.attachments?.length && !/[`]|~~~|!\[|^(?: {4}|\t)/m.test(message.content)), [visibleMessages]);
-  const virtualEnabled = virtualExperiment && visibleMessages.length >= virtualMessageThreshold && virtualSupported && !activeReply && !searchMode && !searchMatch && !messageAction && !chat?.editState;
-  useEffect(() => { if ((searchMode || activeReply) && virtualExperiment) setVirtualExperiment(false); }, [searchMode, activeReply, virtualExperiment, setVirtualExperiment]);
+  const [interactionChat, setInteractionChat] = useState<string | null>(null);
+  const interactionHold = interactionChat === active;
+  const copyConversation = async () => {
+    try {
+      await navigator.clipboard.writeText(visibleMessages.map((message) => message.content).filter(Boolean).join("\n\n"));
+      setNotice("Copied.");
+    } catch { setNotice("Copy unavailable."); }
+  };
+  const virtualEnabled = virtualExperiment && visibleMessages.length >= virtualMessageThreshold && typeof ResizeObserver !== "undefined" && !activeReply && !searchMode && !searchMatch && !messageAction && !chat?.editState && !interactionHold;
+  useEffect(() => { if (activeReply && virtualExperiment) setVirtualExperiment(false); }, [activeReply, virtualExperiment, setVirtualExperiment]);
   useEffect(() => {
     if (!virtualExperiment) return;
     const selectionChanged = () => {
       const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && selection.anchorNode && conversation.current?.contains(selection.anchorNode)) setVirtualExperiment(false);
+      if (selection && !selection.isCollapsed && selection.anchorNode && conversation.current?.contains(selection.anchorNode)) setInteractionChat(active);
     };
     document.addEventListener("selectionchange", selectionChanged);
     return () => document.removeEventListener("selectionchange", selectionChanged);
-  }, [virtualExperiment, conversation, setVirtualExperiment]);
+  }, [virtualExperiment, conversation, active]);
   const focusedSearchSequence = useRef(0);
   useConversationAlignment(view, conversation);
   useEffect(() => {
@@ -280,7 +287,7 @@ function App({
         )}
         {view === "chat" && (
           <>
-            {virtualExperiment && <div className="virtual-notice"><span role="status">{t(virtualEnabled ? "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection." : "Full conversation is shown for short chats, unsupported content, search or an active reply.")}</span><button type="button" onClick={() => setVirtualExperiment(false)}>{t("Show full conversation")}</button></div>}
+            {virtualExperiment && <div className="virtual-notice"><span role="status">{t(virtualEnabled ? "Experimental long conversation mode is active. Use full mode for screen readers or browser Find." : interactionHold ? "Full conversation is shown while you interact or select text." : "Full conversation is shown during search, editing or for short chats.")}</span>{interactionHold && <button type="button" onClick={() => setInteractionChat(null)}>{t("Resume virtual mode (closes open previews)")}</button>}<button type="button" onClick={() => void copyConversation()}>{t("Copy conversation")}</button><button type="button" onClick={() => { setInteractionChat(null); setVirtualExperiment(false); }}>{t("Show full conversation")}</button></div>}
             <section
               className={`conversation${!visibleMessages.length ? " conversation-empty" : ""}`}
               data-conversation-id={active}
@@ -315,7 +322,7 @@ function App({
                   )}
                 </div>
               ) : (
-                <MessageList workspace={workspace} chat={chat} versions={messageVersions} onAction={setMessageAction} onSwitchVersion={switchMessageVersion} virtualEnabled={virtualEnabled} virtualRequested={virtualExperiment} onFullMode={() => setVirtualExperiment(false)} />
+                <MessageList workspace={workspace} chat={chat} versions={messageVersions} onAction={setMessageAction} onSwitchVersion={switchMessageVersion} virtualEnabled={virtualEnabled} virtualRequested={virtualExperiment} onFullMode={() => setInteractionChat(active)} />
               )}
               {showJumpToLatest && visibleMessages.length > 0 && <div className="conversation-jump"><button type="button" onClick={jumpToLatest}><ArrowDown size={16} aria-hidden="true" />{t("Jump to latest")}</button></div>}
             </section>

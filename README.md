@@ -61,7 +61,7 @@ When a provider supplies reasoning text in its stream, Luma Chat displays it sep
 
 The conversation follows new replies while you are at the bottom. Scroll up to read without being moved; use **Jump to latest** or scroll back to the bottom to resume following. The jump control is also available when viewing older messages in a completed conversation.
 
-An experimental long-conversation mode is available under **Settings → Appearance**. It is off by default and applies only to the current tab, including reloads. At 200 messages it renders a window of supported content; search, selection, active replies and interactive content use the full conversation. Choose **Show full conversation** for browser Find, screen readers or cross-screen selection. See the [prototype limitations and measurements](docs/LONG-CONVERSATION-PERFORMANCE.md#phase-one-prototype).
+An experimental long-conversation mode is available under **Settings → Appearance**. It is off by default and applies only to the current tab, including reloads. At 200 messages it renders a window, including code, attachments and tool cards. Search temporarily uses the full list; interaction or selection pauses windowing until resumed, and replies turn the experiment off. **Copy conversation** copies the active branch without mounting it all. Choose **Show full conversation** for browser Find or screen readers. See the [prototype limitations and measurements](docs/LONG-CONVERSATION-PERFORMANCE.md#phase-one-prototype).
 
 ## Rich messages
 
