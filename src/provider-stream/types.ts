@@ -1,4 +1,4 @@
-import type { collectToolRound } from "../provider-tools";
+import type { collectToolRound } from "../provider-tool-collector";
 
 // Provider JSON is validated at the stream boundary before dispatch.
 export type StreamChunk = Record<string, any>;

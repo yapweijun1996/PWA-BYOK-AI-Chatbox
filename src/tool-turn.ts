@@ -1,6 +1,6 @@
 import { toolTurnLimits } from "./javascript-tool";
 import type { ToolProgress } from "./javascript-tool";
-import type { ToolExchange, ToolRequest, ToolRound } from "./provider-tools";
+import type { ToolExchange, ToolRequest, ToolRound } from "./provider-tool-types";
 import type { ExecutionResult } from "./js-tool-runtime";
 import type { Attachment } from "./types";
 import { executeToolCall, type ToolExecutor } from "./tool-executors";

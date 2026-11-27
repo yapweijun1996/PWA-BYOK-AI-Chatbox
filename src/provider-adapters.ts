@@ -8,7 +8,7 @@ import { buildRequest } from "./provider-request";
 import { consumeProviderStream } from "./provider-stream";
 import { parseModelOptions, type ModelOption } from "./model-options";
 import type { ResponseSample } from "./response-telemetry";
-import type { ToolRequest, ToolRound } from "./provider-tools";
+import type { ToolRequest, ToolRound } from "./provider-tool-types";
 
 /** The shared network boundary preserves provider-specific authentication and error policy. */
 export type ProviderTransport = (config: ProviderConfig, path: string, secret: string, init?: RequestInit) => Promise<Response>;

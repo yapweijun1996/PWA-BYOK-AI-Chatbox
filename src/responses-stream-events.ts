@@ -1,7 +1,7 @@
 import { responsesStreamFailure } from "./responses-errors";
 import { toolTurnLimits } from "./javascript-tool";
 import { executionLimits } from "./js-tool-runtime/protocol";
-import { maxToolReplayChars } from "./provider-tools";
+import { maxToolReplayChars } from "./provider-tool-types";
 import { invalid, record, type OutputItem } from "./responses-types";
 
 /** The caller feeds parsed SSE data and handles aborts; no tool runs until finish succeeds. */

@@ -1,6 +1,6 @@
 import { toolTurnLimits } from "./javascript-tool";
 import { executionLimits, type ExecutionResult } from "./js-tool-runtime/protocol";
-import { maxToolReplayChars } from "./provider-tools";
+import { maxToolReplayChars } from "./provider-tool-types";
 import { invalid, record, type OutputItem, type ResponsesReplay } from "./responses-types";
 
 export function replay(

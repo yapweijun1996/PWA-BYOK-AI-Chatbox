@@ -1,7 +1,7 @@
 import { effortFor } from "./reasoning-effort";
 import { requestsStreamUsage } from "./provider-config";
-import { anthropicToolFields, geminiToolFields, openAIToolFields } from "./provider-tools";
-import type { ToolRequest } from "./provider-tools";
+import { anthropicToolFields, geminiToolFields, openAIToolFields } from "./provider-tool-encoding";
+import type { ToolRequest } from "./provider-tool-types";
 import type { Attachment, Message, ProviderConfig, ProviderId } from "./types";
 
 function textAttachment(a: Attachment): string {

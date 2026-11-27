@@ -1,6 +1,7 @@
 import { parseEventStream } from "../event-stream";
 import { normalizeResponseSample } from "../provider-telemetry";
-import { collectToolRound, maxToolReplayChars, type ToolRequest, type ToolRound } from "../provider-tools";
+import { collectToolRound } from "../provider-tool-collector";
+import { maxToolReplayChars, type ToolRequest, type ToolRound } from "../provider-tool-types";
 import type { ResponseSample } from "../response-telemetry";
 import type { ProviderId } from "../types";
 import { createAnthropicDecoder } from "./anthropic";

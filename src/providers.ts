@@ -3,7 +3,7 @@ import { request } from "./provider-transport";
 import type { Message, ProviderConfig } from "./types";
 import type { ModelOption } from "./model-options";
 import type { ResponseSample } from "./response-telemetry";
-import type { ToolRequest, ToolRound } from "./provider-tools";
+import type { ToolRequest, ToolRound } from "./provider-tool-types";
 import type { OutputItem } from "./responses-types";
 export { buildRequest, requestHistory, requiresLunaToolCompatibility } from "./provider-request";
 export { providerBaseUrl, requestsStreamUsage } from "./provider-config";
