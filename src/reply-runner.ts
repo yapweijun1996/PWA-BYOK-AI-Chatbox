@@ -1,5 +1,6 @@
 import { createResponseTracker, type ResponseTelemetry, type TokenPricing } from "./response-telemetry";
 import { runToolTurn } from "./tool-turn";
+import { createReplyPublisher } from "./reply-publisher";
 import { streamChat } from "./providers";
 import type { ToolExecution } from "./javascript-tool";
 import type { RequestSnapshot } from "./request-config";
@@ -43,14 +44,9 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
     let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
     const responsesReplay: import("./responses-types").ResponsesReplay = { exchanges: [], final: [] };
     let executions: ToolExecution[] = [];
-    let lastCheckpoint = performance.now();
-    const publish = (
-      status: NonNullable<Message["status"]>,
-      persist: boolean,
-    ) => {
-      if (!isCurrentReply(abort)) return;
-      if (status === "streaming" && session.get().reply?.phase === "finalizing") return;
-      const message: Message = {
+    const publisher = createReplyPublisher({
+      chatId, controller: abort, session, isCurrentReply, updateChat, finishReply,
+      buildMessage: (status) => ({
         ...prepared.message,
         content,
         reasoning,
@@ -59,28 +55,9 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
         telemetry: roundTelemetry ?? tracker.snapshot(),
         ...(executions.length ? { toolExecutions: executions } : {}),
         ...(prepared.target.id === "openai" && prepared.target.openaiApi === "responses" && status === "complete" ? { responsesReplay } : {}),
-      };
-      if (status !== "streaming")
-        session.setReplySave(chatId, { message, status: "pending" });
-      return updateChat(
-        chatId,
-        (c) => ({
-          ...c,
-          ...(status === "complete" ? { updatedAt: Date.now() } : {}),
-          messages: c.messages.map((m) => m.id === message.id ? message : m),
-        }),
-        persist,
-      );
-    };
-    const publishStream = () => {
-      const now = performance.now();
-      const checkpoint = now - lastCheckpoint >= 500;
-      if (checkpoint) lastCheckpoint = now;
-      publish("streaming", checkpoint);
-    };
-    const timer = window.setInterval(() => {
-      if (!abort.signal.aborted) publish("streaming", false);
-    }, 500);
+      }),
+    });
+    publisher.start();
     let terminal: "complete" | "interrupted" | "error";
     try {
       await runToolTurn(
@@ -110,14 +87,14 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
                 if (firstText && content) content += "\n\n";
                 firstText = false;
                 content += text;
-                publishStream();
+                publisher.checkpoint();
               },
               (text) => {
                 if (!isCurrentReply(abort) || abort.signal.aborted) return;
                 if (firstReasoning && reasoning) reasoning += "\n\n";
                 firstReasoning = false;
                 reasoning += text;
-                publishStream();
+                publisher.checkpoint();
               },
               (sample, receivedAt) => {
                 if (
@@ -125,7 +102,7 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
                   !abort.signal.aborted &&
                   tracker.receive(sample, receivedAt)
                 )
-                  publishStream();
+                  publisher.checkpoint();
               },
               tool,
               (items) => { responsesReplay.final = items; },
@@ -155,7 +132,7 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
                 prior.id === record.id ? record : prior,
               )
             : [...executions, record];
-          publish("streaming", true);
+          publisher.publish("streaming", true);
         },
         history.flatMap((message) => message.role === "user" ? message.attachments ?? [] : []),
         ({ round, results }) => {
@@ -170,15 +147,8 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
       }
     } finally {
       // Stop the streaming heartbeat before waiting on disk, including on Stop/error.
-      window.clearInterval(timer);
+      publisher.stop();
     }
-    const finishing = session.get().reply;
-    if (finishing?.controller !== abort) return;
-    session.update({ reply: { ...finishing, phase: "finalizing" } });
-    try {
-      await publish(terminal, true);
-    } finally {
-      finishReply(abort);
-    }
+    await publisher.finish(terminal);
   };
 }
