@@ -67,9 +67,8 @@ try {
   const reply = page.locator(".message.assistant").last();
   await reply.locator(".rich-stream-tail").waitFor();
   await page.evaluate(() => {
-    const root = document.querySelector(
-      ".message.assistant:last-child .message-answer .rich-message",
-    );
+    const root = [...document.querySelectorAll(".message.assistant")].at(-1)
+      ?.querySelector(".message-answer .rich-message");
     window.longMarkdownMutations = 0;
     window.longMarkdownObserver = new MutationObserver(() => {
       window.longMarkdownMutations++;
@@ -83,8 +82,8 @@ try {
   startChunks.resolve();
   await chunksDone.promise;
   await page.waitForFunction(() =>
-    document
-      .querySelector(".message.assistant:last-child .rich-stream-tail")
+    [...document.querySelectorAll(".message.assistant")].at(-1)
+      ?.querySelector(".rich-stream-tail")
       ?.textContent?.includes("chunk-23"),
   );
   const mutations = await page.evaluate(() => {

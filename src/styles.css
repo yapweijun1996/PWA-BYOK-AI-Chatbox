@@ -374,6 +374,8 @@ select:focus-visible {
   flex: 1;
   min-height: 0;
 }
+.virtual-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; padding: 6px 12px; color: var(--color-muted); background: var(--color-bg); font-size: var(--font-caption); }
+.virtual-notice button { color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-small); min-height: 36px; padding: 4px 10px; }
 .conversation-jump { position: sticky; bottom: 12px; z-index: 2; height: 0; display: flex; justify-content: center; pointer-events: none; }
 .conversation-jump button { transform: translateY(-100%); pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text); background: var(--color-surface); box-shadow: 0 4px 16px var(--color-shadow); }
 .conversation-jump button:hover { background: var(--color-soft); }

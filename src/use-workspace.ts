@@ -623,6 +623,7 @@ export function useWorkspace({
     importInput,
     messagesContent,
     conversation,
+    followReply,
     closeDrawer,
     create,
     choose,

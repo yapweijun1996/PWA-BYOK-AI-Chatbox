@@ -19,6 +19,7 @@ import { Reasoning } from "./Reasoning";
 import { RichMessage } from "./RichMessage";
 import { ToolExecutionCard } from "./ToolExecutionCard";
 import { ResponseInspector } from "./ResponseInspector";
+import { useVirtualMessages } from "../use-virtual-messages";
 import "../message-list.css";
 
 export type MessageAction = {
@@ -32,6 +33,8 @@ type MessageWorkspace = Pick<
   | "t"
   | "locale"
   | "messagesContent"
+  | "conversation"
+  | "followReply"
   | "visibleMessages"
   | "searchMatch"
   | "activeReply"
@@ -326,16 +329,24 @@ export function MessageList({
   versions: versionGroupsMap,
   onAction,
   onSwitchVersion,
+  virtualEnabled,
+  virtualRequested,
+  onFullMode,
 }: {
   workspace: MessageWorkspace;
   chat: Conversation;
   versions: Map<string, Message[]>;
   onAction: (action: MessageAction) => void;
   onSwitchVersion: (id: string) => Promise<void>;
+  virtualEnabled: boolean;
+  virtualRequested: boolean;
+  onFullMode: () => void;
 }) {
   const {
     locale,
     messagesContent,
+    conversation,
+    followReply,
     visibleMessages,
     searchMatch,
     activeReply,
@@ -384,9 +395,12 @@ export function MessageList({
     [],
   );
   const conflict = conflicts.has(chat.id);
+  const range = useVirtualMessages({ enabled: virtualEnabled, chatId: chat.id, messages: visibleMessages, pane: conversation, content: messagesContent, follow: followReply });
+  const renderedMessages = range ? visibleMessages.slice(range.start, range.end) : visibleMessages;
   return (
-    <div className="messages" ref={messagesContent}>
-      {visibleMessages.map((message) => {
+    <div className="messages" ref={messagesContent} data-virtualized={Boolean(range)} data-message-count={visibleMessages.length} onFocusCapture={(event) => { if (virtualRequested && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }} onPointerDownCapture={(event) => { if (virtualRequested && event.pointerType !== "touch" && (event.target as HTMLElement).closest("[data-message-id]")) onFullMode(); }}>
+      <div aria-hidden="true" className="virtual-spacer" style={{ height: range?.before ?? 0 }} />
+      {renderedMessages.map((message) => {
         const versions = versionGroupsMap.get(message.id);
         const versionIndex =
           versions?.findIndex((version) => version.id === message.id) ?? -1;
@@ -423,6 +437,7 @@ export function MessageList({
           />
         );
       })}
+      <div aria-hidden="true" className="virtual-spacer" style={{ height: range?.after ?? 0 }} />
     </div>
   );
 }

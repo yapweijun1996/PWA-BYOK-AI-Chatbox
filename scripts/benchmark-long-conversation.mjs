@@ -5,6 +5,7 @@ const counts = (process.env.MESSAGE_COUNTS || "250,500,1000,2000")
   .split(",")
   .map(Number);
 const repetitions = Number(process.env.REPETITIONS || 3);
+const virtual = process.env.VIRTUAL === "1";
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:55167/";
 const browser = await chromium.launch({
   executablePath: chromePath(),
@@ -20,12 +21,17 @@ try {
   const page = await context.newPage();
   await page.goto(baseUrl);
   await page.locator('html[data-startup="ready"]').waitFor();
+  if (virtual)
+    await page.evaluate(() =>
+      sessionStorage.setItem("luma:virtual-experiment", "1"),
+    );
   console.log(
     JSON.stringify({
       chromium: browser.version(),
       viewport: "1280x800",
       cache: "warm browser shell; service worker blocked",
       repetitions,
+      virtual,
     }),
   );
   for (const count of counts) {
@@ -76,16 +82,41 @@ try {
         .locator(".message")
         .last()
         .waitFor({ state: "attached", timeout: 90000 });
+      await page.waitForFunction(
+        (lastId) =>
+          document
+            .querySelector(".messages .message:last-of-type")
+            ?.getAttribute("data-message-id") === lastId,
+        `m-${count - 1}`,
+        { timeout: 90000 },
+      );
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
       const stats = await page.evaluate(() => ({
         interactiveMs: Math.round(
           performance.getEntriesByName("luma:startup:interactive")[0].duration,
         ),
         observedMs: Math.round(performance.now()),
         messages: document.querySelectorAll(".message").length,
+        totalMessages: Number(
+          document.querySelector(".messages")?.dataset.messageCount,
+        ),
+        virtualized:
+          document.querySelector(".messages")?.dataset.virtualized === "true",
         domNodes: document.querySelectorAll(".messages *").length,
       }));
-      if (stats.messages !== count)
-        throw new Error(`Expected ${count} messages, got ${stats.messages}`);
+      if (
+        stats.totalMessages !== count ||
+        (!virtual && stats.messages !== count) ||
+        (virtual && count >= 200 && !stats.virtualized)
+      )
+        throw new Error(
+          `Expected ${count} messages in ${virtual ? "virtual" : "full"} mode: ${JSON.stringify(stats)}`,
+        );
       samples.push(stats);
     }
     console.log(JSON.stringify({ count, samples }));

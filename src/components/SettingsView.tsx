@@ -12,7 +12,7 @@ import { MemorySettings } from "./MemorySettings";
 import { PreferenceFields } from "./Preferences";
 
 type SettingsWorkspace = Pick<ReturnType<typeof useWorkspace>, "locale" | "t" | "threads" | "view" | "working" | "processingFiles" | "navigating" | "clearing" | "settings" | "settingsHeading" | "importInput" | "saveSettings" | "remove" | "chat" | "config" | "selectModel" | "setView" | "reasoningLabel" | "setReasoning" | "browseProvider" | "toggleConversationConfig" | "updateConfig" | "models" | "showKey" | "keyInput" | "setKeyInput" | "setShowKey" | "saveKey" | "setSaveKey" | "storeKey" | "deleteKey" | "hasSessionCredential" | "hasVault" | "hasLegacyVault" | "testConnection" | "usage" | "requestPersistence" | "exportData" | "exportPlan" | "importFile" | "importPreferences" | "setImportPreferences" | "importPreview" | "importDestination" | "finishImport" | "discardImport" | "clearData" | "preferences">;
-export function SettingsView({ workspace }: { workspace: SettingsWorkspace }) {
+export function SettingsView({ workspace, virtualExperiment, onVirtualExperiment }: { workspace: SettingsWorkspace; virtualExperiment: boolean; onVirtualExperiment: (value: boolean) => void }) {
   const { locale, t, threads, view, working, processingFiles, navigating, clearing, settings, settingsHeading, importInput, saveSettings, remove, chat, config, selectModel, setView, reasoningLabel, setReasoning, browseProvider, toggleConversationConfig, updateConfig, models, showKey, keyInput, setKeyInput, setShowKey, saveKey, setSaveKey, storeKey, deleteKey, hasSessionCredential, hasVault, hasLegacyVault, testConnection, usage, requestPersistence, exportData, exportPlan, importFile, importPreferences, setImportPreferences, importPreview, importDestination, finishImport, discardImport, clearData, preferences } = workspace;
   return (
           <section
@@ -533,6 +533,8 @@ export function SettingsView({ workspace }: { workspace: SettingsWorkspace }) {
                 </p>
                 <div className="card">
                   <PreferenceFields {...preferences} fieldClassName="field" />
+                  <label className="check"><input type="checkbox" checked={virtualExperiment} disabled={working} onChange={(event) => onVirtualExperiment(event.target.checked)} /> {t("Experimental long conversation mode")}</label>
+                  <p className="hint">{t("For this tab only, including reloads; starts at 200 messages. Search, selection, message interaction and replies turn it off. Unsupported content uses full mode. Screen readers, browser Find and cross-screen selection require full mode.")}</p>
                 </div>
               </section>
             )}

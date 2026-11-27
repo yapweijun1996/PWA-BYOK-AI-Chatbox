@@ -17,7 +17,23 @@ The sample is intentionally Markdown- and math-heavy; other content, devices, fo
 
 The current implementation memoizes active paths and message rows but mounts the whole active path. It improves draft and streaming updates; it does not cap initial Markdown parsing, layout cost, or DOM size. For a single long streaming response, display updates after 8,192 characters are coalesced to at most one per 120 ms while data continues to accumulate and persist normally. Terminal states display their full raw source immediately. A local 24-chunk/18 ms experiment produced 24 Markdown DOM update batches before coalescing and 4 afterward; these values depend on scheduling and are not a device-independent speedup.
 
-## Proposed virtualization (design only)
+## Phase-one prototype
+
+The experimental setting is in **Settings → Appearance**, off by default and limited to the current tab (including reloads). It activates at 200 messages. The full conversation remains the source of truth; only a window and height spacers are mounted. The prototype measures mounted rows, overscans two screens and maintains a visible-message anchor as rows or viewport dimensions change. Offscreen heights from an earlier width or font remain estimates until remeasured.
+
+This phase deliberately falls back to full rendering while a reply is running, when search or selection starts, and for conversations containing reasoning, tool executions, attachments, images or code. Focusing or clicking a message with a fine pointer also returns to full mode. Search, selection, message interaction and replies turn the experiment off for that tab until re-enabled; unsupported rich content uses full mode while present. Browser Find and screen-reader traversal require full mode. Use **Show full conversation** to leave the experiment. Rich-content state retention, virtualized search/selection and mobile assistive-technology validation remain future work; this is not a default-on implementation.
+
+A local comparison used the same synthetic fixture and environment described above, with separate three-reload runs for each mode. The virtual run pre-enabled the per-tab switch; the full run used the default. Measurements are illustrative, not release budgets:
+
+| Messages | Full median interactive (ms) | Prototype median interactive (ms) | Full / prototype DOM descendants |
+| ---: | ---: | ---: | ---: |
+| 500 | 1,935 | 329 | 44,502 / 661 |
+| 1,000 | 2,905 | 312 | 89,002 / 661 |
+| 2,000 | 5,697 | 312 | 178,002 / 661 |
+
+The prototype measurements were taken near the end of the synthetic conversation after two animation frames; mounted counts and timings vary with content and viewport. Run `VIRTUAL=1 node scripts/benchmark-long-conversation.mjs` for the opt-in case. The comparison does not establish performance on real phones or for conversations that deliberately fall back to full mode.
+
+## Later virtualization work (design only)
 
 **Goal:** bound mounted message DOM for large active branches while retaining branch isolation, reliable scroll anchoring and explicit access to every message. Do not change the persisted conversation schema or provider request history.
 

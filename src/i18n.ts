@@ -12,6 +12,11 @@ export function resolveLanguage(
     : preference;
 }
 export const zh: Record<string, string> = {
+  "Experimental long conversation mode": "实验性长对话模式",
+  "For this tab only, including reloads; starts at 200 messages. Search, selection, message interaction and replies turn it off. Unsupported content uses full mode. Screen readers, browser Find and cross-screen selection require full mode.": "仅在当前标签页生效（包括刷新后），200 条消息起启用。搜索、选择、消息交互和生成回复会关闭此模式；不支持的内容会显示完整会话。屏幕阅读器、浏览器查找和跨屏选择需要完整模式。",
+  "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection.": "实验性长对话模式已启用。屏幕阅读器、浏览器查找或跨屏选择请使用完整模式。",
+  "Full conversation is shown for short chats, unsupported content, search or an active reply.": "短会话、暂不支持的内容、搜索或生成回复期间会显示完整会话。",
+  "Show full conversation": "显示完整会话",
   "Jump to latest": "跳转到最新消息",
   "Resize source panel": "调整源代码面板宽度",
   "Download result": "下载运行结果",

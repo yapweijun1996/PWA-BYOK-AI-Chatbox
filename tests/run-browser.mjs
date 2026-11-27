@@ -80,6 +80,7 @@ try {
     "tests/local-tools-smoke.mjs",
     "tests/rich-message-smoke.mjs",
     "tests/long-conversation-smoke.mjs",
+    "tests/virtual-conversation-smoke.mjs",
     "tests/long-markdown-stream-smoke.mjs",
     "tests/web-preview-smoke.mjs",
     "tests/composer-smoke.mjs",

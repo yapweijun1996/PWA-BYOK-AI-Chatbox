@@ -1,5 +1,5 @@
 import { effortFor, effortOptions } from "./reasoning-effort";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles,
   Brain,
@@ -18,6 +18,8 @@ import { requiresLunaToolCompatibility } from "./provider-request";
 import { Topbar } from "./components/Topbar";
 import { MessageList, type MessageAction } from "./components/MessageList";
 import { useConversationAlignment } from "./use-conversation-alignment";
+import { virtualMessageThreshold } from "./virtual-message-layout";
+import { sidebarPreferencesCleared } from "./sidebar-preferences";
 import { branchDescendants, versionGroups } from "./branches";
 import type { InitialAppState } from "./startup";
 
@@ -42,6 +44,14 @@ function App({
   const workspace = useWorkspace({ initial, onInitialCommit });
   const toolsHelpId = useId();
   const [messageAction, setMessageAction] = useState<MessageAction>();
+  const [virtualExperiment, setVirtualExperimentState] = useState(() => {
+    try { return sessionStorage.getItem("luma:virtual-experiment") === "1"; } catch { return false; }
+  });
+  const setVirtualExperiment = useCallback((value: boolean) => {
+    setVirtualExperimentState(value);
+    try { if (value) sessionStorage.setItem("luma:virtual-experiment", "1"); else sessionStorage.removeItem("luma:virtual-experiment"); } catch { /* The experiment still works for this page. */ }
+  }, []);
+  useEffect(() => { const clear = () => setVirtualExperiment(false); window.addEventListener(sidebarPreferencesCleared, clear); return () => window.removeEventListener(sidebarPreferencesCleared, clear); }, [setVirtualExperiment]);
   const {
     locale,
     t,
@@ -118,6 +128,18 @@ function App({
     redact,
   } = workspace;
   const messageVersions = useMemo<Map<string, Message[]>>(() => chat ? versionGroups(chat) : new Map(), [chat?.id, chat?.messages, chat?.branchVersion]);
+  const virtualSupported = useMemo(() => typeof ResizeObserver !== "undefined" && visibleMessages.every((message) => !message.reasoning && !message.toolExecutions?.length && !message.attachments?.length && !/[`]|~~~|!\[|^(?: {4}|\t)/m.test(message.content)), [visibleMessages]);
+  const virtualEnabled = virtualExperiment && visibleMessages.length >= virtualMessageThreshold && virtualSupported && !activeReply && !searchMode && !searchMatch && !messageAction && !chat?.editState;
+  useEffect(() => { if ((searchMode || activeReply) && virtualExperiment) setVirtualExperiment(false); }, [searchMode, activeReply, virtualExperiment, setVirtualExperiment]);
+  useEffect(() => {
+    if (!virtualExperiment) return;
+    const selectionChanged = () => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.anchorNode && conversation.current?.contains(selection.anchorNode)) setVirtualExperiment(false);
+    };
+    document.addEventListener("selectionchange", selectionChanged);
+    return () => document.removeEventListener("selectionchange", selectionChanged);
+  }, [virtualExperiment, conversation, setVirtualExperiment]);
   const focusedSearchSequence = useRef(0);
   useConversationAlignment(view, conversation);
   useEffect(() => {
@@ -257,6 +279,7 @@ function App({
         )}
         {view === "chat" && (
           <>
+            {virtualExperiment && <div className="virtual-notice"><span role="status">{t(virtualEnabled ? "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection." : "Full conversation is shown for short chats, unsupported content, search or an active reply.")}</span><button type="button" onClick={() => setVirtualExperiment(false)}>{t("Show full conversation")}</button></div>}
             <section
               className={`conversation${!visibleMessages.length ? " conversation-empty" : ""}`}
               data-conversation-id={active}
@@ -286,7 +309,7 @@ function App({
                   )}
                 </div>
               ) : (
-                <MessageList workspace={workspace} chat={chat} versions={messageVersions} onAction={setMessageAction} onSwitchVersion={switchMessageVersion} />
+                <MessageList workspace={workspace} chat={chat} versions={messageVersions} onAction={setMessageAction} onSwitchVersion={switchMessageVersion} virtualEnabled={virtualEnabled} virtualRequested={virtualExperiment} onFullMode={() => setVirtualExperiment(false)} />
               )}
               {showJumpToLatest && visibleMessages.length > 0 && <div className="conversation-jump"><button type="button" onClick={jumpToLatest}><ArrowDown size={16} aria-hidden="true" />{t("Jump to latest")}</button></div>}
             </section>
@@ -379,7 +402,7 @@ function App({
             />
           </>
         )}
-        {showingSettings && <SettingsView workspace={workspace} />}
+        {showingSettings && <SettingsView workspace={workspace} virtualExperiment={virtualExperiment} onVirtualExperiment={setVirtualExperiment} />}
       </main>
       {messageAction && messageAction.chatId === chat?.id && (
         <MessageActionDialog locale={locale} kind={messageAction.kind} current={effective.config} original={messageAction.message.request} branchCount={branchDescendants(chat, messageAction.message.id).size} onClose={() => closeMessageAction(true)} onConfirm={(original) => {

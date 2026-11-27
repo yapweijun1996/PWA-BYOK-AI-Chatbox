@@ -1,6 +1,11 @@
 import { msExtra } from "./i18n-ms-extra";
 // Browser-local Malay translations. Unknown entries fall back to the English source.
 export const ms: Record<string, string> = {
+  "Experimental long conversation mode": "Mod perbualan panjang percubaan",
+  "For this tab only, including reloads; starts at 200 messages. Search, selection, message interaction and replies turn it off. Unsupported content uses full mode. Screen readers, browser Find and cross-screen selection require full mode.": "Untuk tab ini sahaja, termasuk selepas muat semula; bermula pada 200 mesej. Carian, pilihan teks, interaksi mesej dan balasan mematikannya. Kandungan tidak disokong menggunakan mod penuh. Pembaca skrin, carian pelayar dan pilihan merentas skrin memerlukan mod penuh.",
+  "Experimental long conversation mode is active. Use full mode for screen readers, browser Find or cross-screen selection.": "Mod perbualan panjang percubaan aktif. Gunakan mod penuh untuk pembaca skrin, carian pelayar atau pilihan merentas skrin.",
+  "Full conversation is shown for short chats, unsupported content, search or an active reply.": "Perbualan penuh dipaparkan untuk perbualan pendek, kandungan yang tidak disokong, carian atau balasan aktif.",
+  "Show full conversation": "Tunjukkan perbualan penuh",
   "Jump to latest": "Pergi ke mesej terkini",
   "Resize source panel": "Ubah lebar panel kod sumber",
   "Download result": "Muat turun hasil",
