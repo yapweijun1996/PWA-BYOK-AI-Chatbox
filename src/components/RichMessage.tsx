@@ -37,6 +37,7 @@ import { remarkStreamingTail, safeMessageUrl } from "../rich-markdown";
 import { previewLanguages } from "../web-preview";
 import { WebPreview } from "./WebPreview";
 import { normalizeLatexDelimiters } from "../latex-delimiters";
+import { useLongStreamingText } from "../use-long-streaming-text";
 import "katex/dist/katex.min.css";
 import "../rich-message.css";
 
@@ -393,8 +394,9 @@ export const RichMessage = memo(function RichMessage({
   onNotice?: (text: string) => void;
 }) {
   const deferred = useDeferredValue(text);
+  const throttled = useLongStreamingText(deferred, streaming);
   const context = useMemo(() => ({ locale, onNotice }), [locale, onNotice]);
-  const shown = streaming ? deferred : text;
+  const shown = streaming ? throttled : text;
   const plugins = streaming ? streamingPlugins : preserveLineBreaks ? userMessagePlugins : markdownPlugins;
   const renderedText = useMemo(() => streaming ? shown : normalizeLatexDelimiters(shown), [shown, streaming]);
   const markdown = useMemo(
