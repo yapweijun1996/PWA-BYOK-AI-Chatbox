@@ -120,6 +120,7 @@ try {
   assert.equal(await other.locator(".message").count(), 400);
   await other.close();
   await pane.evaluate((el) => {
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
     el.scrollTop = 0;
   });
   await page.getByText("Virtual message 0.", { exact: false }).waitFor();
@@ -128,6 +129,7 @@ try {
   await page.getByText("Virtual message 399.", { exact: false }).waitFor();
   assert.equal(await list.getAttribute("data-virtualized"), "true");
   await pane.evaluate((el) => {
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
     el.scrollTop = el.scrollHeight / 2;
   });
   await page.waitForFunction(() => {
@@ -151,6 +153,7 @@ try {
   );
   const previousScroll = await pane.evaluate((el) => el.scrollTop);
   await pane.evaluate((el) => {
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
     el.scrollTop -= 60;
   });
   await page.waitForFunction(

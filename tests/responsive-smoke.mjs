@@ -173,6 +173,7 @@ try {
       await conversation.evaluate((el) => el.scrollHeight > el.clientHeight),
     );
     await conversation.evaluate((el) => {
+      el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       el.scrollTop = 0;
     });
     assert.equal(await conversation.evaluate((el) => el.scrollTop), 0);

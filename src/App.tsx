@@ -89,6 +89,7 @@ function App({
     setInspecting,
     setNotice,
     onMessageScroll,
+    markScrollIntent,
     showJumpToLatest,
     jumpToLatest,
     retry,
@@ -287,6 +288,11 @@ function App({
               tabIndex={-1}
               ref={conversation}
               onScroll={onMessageScroll}
+              onWheelCapture={markScrollIntent}
+              onTouchStartCapture={markScrollIntent}
+              onPointerDownCapture={(event) => { if (event.pointerType !== "mouse" || event.target === event.currentTarget) markScrollIntent(); }}
+              onPointerMoveCapture={(event) => { if (event.buttons) markScrollIntent(); }}
+              onKeyDownCapture={(event) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) markScrollIntent(); }}
             >
               {!chat || visibleMessages.length === 0 ? (
                 <div className="welcome">

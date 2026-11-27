@@ -310,7 +310,7 @@ export function useWorkspace({
       ? imageSupportNotice
       : undefined);
   const hasMessages = Boolean(visibleMessages.length);
-  const { messagesContent, conversation, followReply, onMessageScroll, showJumpToLatest, jumpToLatest } = useConversationScroll(active, view, hasMessages);
+  const { messagesContent, conversation, followReply, onMessageScroll, markScrollIntent, showJumpToLatest, jumpToLatest } = useConversationScroll(active, view, hasMessages, activeReply?.conversationId === active);
   useLayoutEffect(onInitialCommit, [onInitialCommit]);
   useEffect(() => {
     const copy = (event: ClipboardEvent) => {
@@ -656,6 +656,7 @@ export function useWorkspace({
     noticeRevision: noticeState.revision,
     setNotice,
     onMessageScroll,
+    markScrollIntent,
     showJumpToLatest,
     jumpToLatest,
     retry,

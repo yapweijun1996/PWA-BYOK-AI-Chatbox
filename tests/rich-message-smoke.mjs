@@ -139,7 +139,22 @@ try {
     el.querySelector("[data-test-scroll-spacer]").remove();
   });
   await atBottom();
+  // Layout can also report an upward correction without any user input.
+  await pane.evaluate((el) => {
+    const spacer = document.createElement("div");
+    spacer.dataset.testScrollSpacer = "true";
+    spacer.style.height = "300px";
+    el.querySelector(".messages").append(spacer);
+    el.scrollTop -= 20;
+    el.dispatchEvent(new Event("scroll"));
+    el.scrollTop -= 20;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await atBottom();
+  await pane.evaluate((el) => { el.querySelector("[data-test-scroll-spacer]").remove(); });
+  await atBottom();
   const readingPosition = await pane.evaluate(async (el) => {
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -36, bubbles: true }));
     el.scrollTop = el.scrollHeight - el.clientHeight - 36;
     await new Promise((done) =>
       requestAnimationFrame(() => requestAnimationFrame(done)),
@@ -181,6 +196,12 @@ try {
     "const",
   );
   await atBottom();
+  const paneBox = await pane.boundingBox();
+  await page.mouse.move(paneBox.x + paneBox.width / 2, paneBox.y + paneBox.height / 2);
+  await page.mouse.wheel(0, -180);
+  await jump.waitFor();
+  await jump.click();
+  await atBottom();
   await copy.click();
   await page.getByText("Code copied.").waitFor();
   assert.equal(await page.evaluate(() => window.testClipboard), code);
@@ -217,14 +238,14 @@ try {
   await page.setViewportSize({ width: 320, height: 675 });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.waitForFunction(() => getComputedStyle(document.querySelector(".sidebar")).visibility === "hidden");
-  await pane.evaluate((el) => { el.scrollTop = 0; });
+  await pane.evaluate((el) => { el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true })); el.scrollTop = 0; });
   await jump.waitFor();
   const jumpBounds = await jump.boundingBox();
   const paneBounds = await pane.boundingBox();
   assert.ok(jumpBounds.width >= 44 && jumpBounds.height >= 44 && jumpBounds.x >= 0 && jumpBounds.x + jumpBounds.width <= 320 && jumpBounds.y >= paneBounds.y && jumpBounds.y + jumpBounds.height <= paneBounds.y + paneBounds.height);
   await pane.evaluate((el) => { el.scrollTop = el.scrollHeight; });
   await jump.waitFor({ state: "detached" });
-  await pane.evaluate((el) => { el.scrollTop = 0; });
+  await pane.evaluate((el) => { el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true })); el.scrollTop = 0; });
   await jump.waitFor();
   await jump.click();
   await atBottom();
