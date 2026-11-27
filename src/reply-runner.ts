@@ -1,17 +1,15 @@
-import { createResponseTracker, type ResponseTelemetry, type TokenPricing } from "./response-telemetry";
+import { type ResponseTelemetry, type TokenPricing } from "./response-telemetry";
 import { runToolTurn } from "./tool-turn";
 import { createReplyPublisher } from "./reply-publisher";
 import { streamChat } from "./providers";
-import type { ToolExecution } from "./javascript-tool";
+import { createReplyStreamState } from "./reply-stream-state";
+import { observeProviderRound, type ProviderObservation } from "./provider-observation";
+export type { ProviderObservation } from "./provider-observation";
 import type { RequestSnapshot } from "./request-config";
-import type { Message, ProviderConfig, ProviderId } from "./types";
+import type { Message, ProviderConfig } from "./types";
 import type { createWorkspaceSession } from "./workspace-session";
 import type { useConversationPersistence } from "./use-conversation-persistence";
 
-export type ProviderObservation = {
-  id: ProviderId; endpoint: string; model: string; credentialRevision: number;
-  state: "connecting" | "succeeded" | "catalog" | "failed";
-};
 export type PreparedReply = {
   message: Message; request: RequestSnapshot; telemetry: ResponseTelemetry;
   target: Readonly<ProviderConfig>; pricing?: TokenPricing; secret: string; credentialRevision: number;
@@ -25,7 +23,6 @@ type ReplyRunnerDependencies = {
   setProviderObservation: (value: ProviderObservation | undefined) => void;
   finishReply: (controller: AbortController) => void;
 };
-const errorText = (error: unknown) => error instanceof Error ? error.message : "Something went wrong.";
 export function createReplyRunner({ session, setNotice, isCurrentReply, updateChat, providerObservationSequence, setProviderObservation, finishReply }: ReplyRunnerDependencies) {
   return async (
     chatId: string,
@@ -37,113 +34,39 @@ export function createReplyRunner({ session, setNotice, isCurrentReply, updateCh
     if (current?.controller !== abort) return;
     session.update({ reply: { ...current, phase: "streaming", draft: null } });
     setNotice("");
-    let content = "";
-    let reasoning = "";
-    let failureReason: string | undefined;
-    let tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
-    let roundTelemetry: ReturnType<typeof tracker.snapshot> | undefined;
-    const responsesReplay: import("./responses-types").ResponsesReplay = { exchanges: [], final: [] };
-    let executions: ToolExecution[] = [];
+    const state = createReplyStreamState(prepared.message, prepared.target, prepared.telemetry, prepared.pricing, () => isCurrentReply(abort) && !abort.signal.aborted, () => publisher.checkpoint());
     const publisher = createReplyPublisher({
       chatId, controller: abort, session, isCurrentReply, updateChat, finishReply,
-      buildMessage: (status) => ({
-        ...prepared.message,
-        content,
-        reasoning,
-        status,
-        ...(status === "error" && failureReason ? { error: failureReason } : {}),
-        telemetry: roundTelemetry ?? tracker.snapshot(),
-        ...(executions.length ? { toolExecutions: executions } : {}),
-        ...(prepared.target.id === "openai" && prepared.target.openaiApi === "responses" && status === "complete" ? { responsesReplay } : {}),
-      }),
+      buildMessage: state.message,
     });
     publisher.start();
     let terminal: "complete" | "interrupted" | "error";
     try {
       await runToolTurn(
         async (tool) => {
-          tracker = createResponseTracker(prepared.telemetry, prepared.pricing);
-          roundTelemetry = undefined;
-          let firstText = true;
-          let firstReasoning = true;
-          const observation = {
-            id: prepared.target.id,
-            endpoint: prepared.target.endpoint,
-            model: prepared.target.model,
-            credentialRevision: prepared.credentialRevision,
-          };
-          const observationSequence = ++providerObservationSequence.current;
-          setProviderObservation({ ...observation, state: "connecting" });
-          let round: Awaited<ReturnType<typeof streamChat>>;
-          try {
-            round = await streamChat(
-              prepared.target,
-              prepared.secret,
-              history,
-              abort.signal,
-              (text) => {
-                if (!isCurrentReply(abort) || abort.signal.aborted) return;
-                tracker.visible(text);
-                if (firstText && content) content += "\n\n";
-                firstText = false;
-                content += text;
-                publisher.checkpoint();
-              },
-              (text) => {
-                if (!isCurrentReply(abort) || abort.signal.aborted) return;
-                if (firstReasoning && reasoning) reasoning += "\n\n";
-                firstReasoning = false;
-                reasoning += text;
-                publisher.checkpoint();
-              },
-              (sample, receivedAt) => {
-                if (
-                  isCurrentReply(abort) &&
-                  !abort.signal.aborted &&
-                  tracker.receive(sample, receivedAt)
-                )
-                  publisher.checkpoint();
-              },
-              tool,
-              (items) => { responsesReplay.final = items; },
-            );
-            if (
-              !abort.signal.aborted &&
-              providerObservationSequence.current === observationSequence
-            )
-              setProviderObservation({ ...observation, state: "succeeded" });
-          } catch (error) {
-            if (providerObservationSequence.current === observationSequence) {
-              if (!abort.signal.aborted)
-                setProviderObservation({ ...observation, state: "failed" });
-              else setProviderObservation(undefined);
-            }
-            throw error;
-          }
-          roundTelemetry = tracker.snapshot();
-          return round;
+          const round = state.beginRound();
+          const result = await observeProviderRound(prepared.target, prepared.credentialRevision, abort.signal, providerObservationSequence, setProviderObservation, () => streamChat(
+            prepared.target, prepared.secret, history, abort.signal,
+            round.onText, round.onReasoning, round.onSample, tool, round.onResponsesOutput,
+          ));
+          round.complete();
+          return result;
         },
         prepared.request.javascript === true,
         abort.signal,
         (record) => {
           if (!isCurrentReply(abort)) return;
-          executions = executions.some(({ id }) => id === record.id)
-            ? executions.map((prior) =>
-                prior.id === record.id ? record : prior,
-              )
-            : [...executions, record];
+          state.progress(record);
           publisher.publish("streaming", true);
         },
         history.flatMap((message) => message.role === "user" ? message.attachments ?? [] : []),
-        ({ round, results }) => {
-          if (round.responsesItems) { responsesReplay.exchanges.push({ items: round.responsesItems, results }); responsesReplay.final = []; }
-        },
+        state.exchange,
       );
       terminal = abort.signal.aborted ? "interrupted" : "complete";
     } catch (e) {
       terminal = abort.signal.aborted ? "interrupted" : "error";
       if (isCurrentReply(abort) && terminal === "error") {
-        failureReason = errorText(e);
+        state.fail(e);
       }
     } finally {
       // Stop the streaming heartbeat before waiting on disk, including on Stop/error.
